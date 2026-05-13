@@ -1,4 +1,6 @@
+import base64
 import os
+import zlib
 from datetime import timedelta
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -56,19 +58,30 @@ if _SESSION_TYPE == "filesystem":
 # MSAL token cache helpers
 # ---------------------------------------------------------------------------
 
+def _compress(text: str) -> str:
+    return base64.b64encode(zlib.compress(text.encode(), level=9)).decode()
+
+
+def _decompress(data: str) -> str:
+    return zlib.decompress(base64.b64decode(data)).decode()
+
+
 def _load_cache() -> msal.SerializableTokenCache:
-    """Deserialize the MSAL token cache stored in the server-side session."""
     cache = msal.SerializableTokenCache()
-    serialized = session.get("msal_token_cache")
-    if serialized:
-        cache.deserialize(serialized)
+    raw = session.get("msal_token_cache")
+    if raw:
+        try:
+            # Compressed format written by _save_cache
+            cache.deserialize(_decompress(raw))
+        except Exception:
+            # Legacy uncompressed format — still readable
+            cache.deserialize(raw)
     return cache
 
 
 def _save_cache(cache: msal.SerializableTokenCache) -> None:
-    """Persist the MSAL cache back to the session if it changed."""
     if cache.has_state_changed:
-        session["msal_token_cache"] = cache.serialize()
+        session["msal_token_cache"] = _compress(cache.serialize())
 
 
 def _build_msal_app(cache: msal.SerializableTokenCache) -> msal.ConfidentialClientApplication:
