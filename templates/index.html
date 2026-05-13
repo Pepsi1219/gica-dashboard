@@ -6,13 +6,13 @@
   <title>New Operator Monitoring</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=7" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=8" />
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-brand">
       <h1 data-i18n="appTitle">New Operator Monitoring</h1>
-      <p data-i18n="appSubtitle">SharePoint Excel Monitoring System</p>
+      <p data-i18n="appSubtitle">New employee tracking system</p>
     </div>
     <div class="topbar-right">
       <select id="langSelect" class="lang-select">
@@ -71,7 +71,7 @@
           <div id="dueDateText" class="hint"></div>
         </div>
         <div class="form-grid">
-          <label><span data-i18n="employeeId">Employee ID</span><input name="Employee ID" /></label>
+          <label><span data-i18n="employeeId">Employee ID</span><input name="Employee ID" readonly /></label>
           <label><span data-i18n="employeeName">Employee Name</span><input name="Employee Name" /></label>
           <label>
             <span data-i18n="grade">Grade</span>
@@ -186,22 +186,17 @@
             <input id="searchEmployeeId" data-i18n-placeholder="employeeIdPlaceholder" placeholder="Employee ID" />
             <button id="searchBtn" data-i18n="search">Search</button>
           </div>
-          <div class="filter-row">
-            <select id="yearFilter">
-              <option value="" data-i18n="filterAllYears">ทุกปี</option>
-            </select>
-            <select id="statusFilter">
-              <option value="" data-i18n="filterAll">ทั้งหมด</option>
-              <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
-              <option value="completed-overdue" data-i18n="statusCompletedOverdue">ฝึกเสร็จ (เกินกำหนด)</option>
-              <option value="under-operation" data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</option>
-              <option value="under-basic" data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</option>
-              <option value="resign-operation" data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</option>
-              <option value="resign-basic" data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</option>
-              <option value="transfer-operation" data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</option>
-              <option value="transfer-basic" data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
-            </select>
-          </div>
+          <select id="statusFilter">
+            <option value="" data-i18n="filterAll">ทั้งหมด</option>
+            <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
+            <option value="completed-overdue" data-i18n="statusCompletedOverdue">ฝึกเสร็จ (เกินกำหนด)</option>
+            <option value="under-operation" data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</option>
+            <option value="under-basic" data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</option>
+            <option value="resign-operation" data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</option>
+            <option value="resign-basic" data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</option>
+            <option value="transfer-operation" data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</option>
+            <option value="transfer-basic" data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
+          </select>
         </div>
         <div class="table-wrap">
           <table>
@@ -230,6 +225,6 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=7"></script>
+  <script src="/static/js/app.js?v=8"></script>
 </body>
 </html>

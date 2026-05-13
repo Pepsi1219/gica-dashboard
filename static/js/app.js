@@ -2,12 +2,11 @@
 const TRANSLATIONS = {
   th: {
     appTitle:               'New Operator Monitoring',
-    appSubtitle:            'ระบบติดตามพนักงานใหม่',
+    appSubtitle:            'ระบบติดตามข้อมูลพนักงานใหม่',
     loginTitle:             'เข้าสู่ระบบด้วย Microsoft Account',
     loginDesc:              'ระบบนี้ใช้ Microsoft Graph เพื่ออ่าน/เขียน Excel บน SharePoint ขององค์กร',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'เลือก Business Unit',
-    filterAllYears:         'ทุกปี',
+    selectDept:             'เลือกหน่วยงาน',
     adminTitle:             'ตั้งค่าผู้ดูแลระบบ',
     holidaySection:         'กำหนดวันหยุดพิเศษ',
     addHoliday:             'เพิ่มวันหยุด',
@@ -77,12 +76,11 @@ const TRANSLATIONS = {
   },
   en: {
     appTitle:               'New Operator Monitoring',
-    appSubtitle:            'New Employee Tracking System',
+    appSubtitle:            'New employee tracking system',
     loginTitle:             'Sign in with Microsoft Account',
     loginDesc:              'This system uses Microsoft Graph to read/write Excel files on SharePoint.',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'Select Business Unit',
-    filterAllYears:         'All Years',
+    selectDept:             'Select Department',
     adminTitle:             'Admin Settings',
     holidaySection:         'Configure Special Holidays',
     addHoliday:             'Add Holiday',
@@ -156,8 +154,7 @@ const TRANSLATIONS = {
     loginTitle:             'ເຂົ້າສູ່ລະບົບດ້ວຍ Microsoft Account',
     loginDesc:              'ລະບົບນີ້ໃຊ້ Microsoft Graph ເພື່ອອ່ານ/ຂຽນ Excel ເທິງ SharePoint ຂອງອົງກອນ',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'ເລືອກ Business Unit',
-    filterAllYears:         'ທຸກປີ',
+    selectDept:             'ເລືອກພະແນກ',
     adminTitle:             'ຕັ້ງຄ່າຜູ້ດູແລລະບົບ',
     holidaySection:         'ກຳນົດວັນຫຍຸດພິເສດ',
     addHoliday:             'ເພີ່ມວັນຫຍຸດ',
@@ -231,8 +228,7 @@ const TRANSLATIONS = {
     loginTitle:             'Đăng nhập bằng tài khoản Microsoft',
     loginDesc:              'Hệ thống này sử dụng Microsoft Graph để đọc/ghi Excel trên SharePoint của tổ chức.',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'Chọn Business Unit',
-    filterAllYears:         'Tất cả các năm',
+    selectDept:             'Chọn bộ phận',
     adminTitle:             'Cài đặt Admin',
     holidaySection:         'Cấu hình ngày nghỉ đặc biệt',
     addHoliday:             'Thêm ngày nghỉ',
@@ -306,7 +302,6 @@ const TRANSLATIONS = {
 let currentDepartment = null;
 let currentEmployeeId = null;
 let currentFilter     = '';
-let currentYear       = '';
 let departments       = [];
 let holidays          = JSON.parse(localStorage.getItem('specialHolidays') || '[]');
 let lastEmployees     = [];
@@ -425,16 +420,6 @@ function closeEditModal() { $('editModal').classList.add('hidden'); }
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 function showMessage(text, isError = false) {
   const box = $('messageBox');
   box.textContent = text;
@@ -541,55 +526,28 @@ function computeActualStatus(emp, calc) {
   return 'under-basic';
 }
 
-// ===== YEAR FILTER =====
-function extractYear(dateVal) {
-  const n = normalizeDateForInput(dateVal);
-  return n ? n.slice(0, 4) : null;
-}
-
-function populateYearFilter(employees) {
-  const years = new Set();
-  employees.forEach(emp => {
-    const y = extractYear(emp['CSA Start Date']);
-    if (y) years.add(y);
-  });
-  const sel = $('yearFilter');
-  const prev = sel.value;
-  sel.innerHTML = `<option value="">${t('filterAllYears')}</option>`;
-  [...years].sort().reverse().forEach(y => {
-    const opt = document.createElement('option');
-    opt.value = y;
-    opt.textContent = y;
-    sel.appendChild(opt);
-  });
-  // Restore previous selection if the year still exists in new data
-  if ([...years].includes(prev)) sel.value = prev;
-  else currentYear = '';
-}
-
 // ===== EMPLOYEE TABLE =====
 function buildRowHTML(emp, calc, actualKey) {
-  const nd  = (v) => escapeHtml(normalizeDateForInput(v) || '');
-  const esc = (v) => escapeHtml(v);
+  const nd = (v) => normalizeDateForInput(v) || '';
   const gradEff = (emp['Graduate Eff'] !== undefined && emp['Graduate Eff'] !== '') ? emp['Graduate Eff'] : '';
-  const badgeClass  = statusBadgeClass(actualKey);
-  const statusLabel = escapeHtml(t(STATUS_KEY_MAP[actualKey] || actualKey));
-  const empId = escapeHtml(String(emp['Employee ID'] || ''));
+  const badgeClass = statusBadgeClass(actualKey);
+  const statusLabel = t(STATUS_KEY_MAP[actualKey] || actualKey);
+  const empId = String(emp['Employee ID'] || '').replace(/"/g, '&quot;');
 
   return `
     <td><button class="btn-row-edit" data-id="${empId}" title="Edit">✏</button></td>
-    <td>${esc(emp['Employee ID'])}</td>
-    <td>${esc(emp['Employee Name'])}</td>
-    <td>${esc(emp['Grade'])}</td>
+    <td>${emp['Employee ID']   || ''}</td>
+    <td>${emp['Employee Name'] || ''}</td>
+    <td>${emp['Grade']         || ''}</td>
     <td>${nd(emp['CSA Start Date'])}</td>
-    <td>${escapeHtml(calc.due_date || '')}</td>
+    <td>${calc.due_date        || ''}</td>
     <td>${nd(emp['Basic Start'])}</td>
     <td>${nd(emp['Basic End'])}</td>
     <td>${nd(emp['Operation Start'])}</td>
     <td>${nd(emp['Operation End'])}</td>
     <td>${nd(emp['Resign Date'])}</td>
     <td>${nd(emp['Transfers Date'])}</td>
-    <td>${escapeHtml(String(gradEff))}</td>
+    <td>${gradEff}</td>
     <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
   `;
 }
@@ -611,9 +569,7 @@ function renderEmployeeTable(employees) {
     else if (actualKey === 'resign-operation') resignOp++;
     else if (actualKey === 'resign-basic')     resignBasic++;
 
-    // Apply year filter
-    if (currentYear && extractYear(emp['CSA Start Date']) !== currentYear) return;
-    // Apply status filter
+    // Apply filter
     if (currentFilter && actualKey !== currentFilter) return;
 
     const tr = document.createElement('tr');
@@ -641,7 +597,6 @@ async function loadDashboard() {
     const query = getHolidayQuery();
     const data = await api(`/api/${currentDepartment}/employees${query ? '?' + query : ''}`);
     lastEmployees = data.employees || [];
-    populateYearFilter(lastEmployees);
     renderEmployeeTable(lastEmployees);
     showMessage(t('loadedCount', { n: lastEmployees.length }));
   } catch (err) {
@@ -752,12 +707,6 @@ async function init() {
   initAdmin();
   initRegisterModal();
   initEditModal();
-
-  // Year filter
-  $('yearFilter').onchange = () => {
-    currentYear = $('yearFilter').value;
-    renderEmployeeTable(lastEmployees);
-  };
 
   // Status filter
   $('statusFilter').onchange = () => {
