@@ -1,0 +1,26 @@
+# Secrets — never commit
+.env
+
+# IDE / tool configs
+.claude/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Flask session files (local dev only)
+.flask_session/
+
+# Logs
+*.log
+flask_output.log
+
+# OS
+.DS_Store
+Thumbs.db
