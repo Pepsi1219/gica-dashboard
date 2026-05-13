@@ -254,7 +254,6 @@ def auth_callback():
         "name":  claims.get("name") or claims.get("preferred_username") or "User",
         "email": claims.get("preferred_username") or claims.get("upn") or "",
         "oid":   claims.get("oid") or claims.get("sub") or "unknown",
-        **claims,
     }
     session.permanent = True        # 30-day persistent cookie
 
