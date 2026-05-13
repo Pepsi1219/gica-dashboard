@@ -337,11 +337,21 @@ button:active { transform: scale(.97); }
   overflow: hidden;
   background: var(--border-light);
   width: 100%;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.12);
 }
-.ratio-seg { height: 100%; transition: width .35s ease; }
-.ratio-seg.ratio-completed { background: var(--ok); }
-.ratio-seg.ratio-training  { background: var(--warn); }
-.ratio-seg.ratio-resign    { background: var(--danger); }
+.ratio-seg {
+  height: 100%;
+  transition: width .4s cubic-bezier(.4,0,.2,1);
+}
+.ratio-seg.ratio-completed {
+  background: linear-gradient(90deg, rgba(34,197,94,.85), rgba(16,185,129,.9));
+}
+.ratio-seg.ratio-training  {
+  background: linear-gradient(90deg, rgba(59,130,246,.82), rgba(99,102,241,.88));
+}
+.ratio-seg.ratio-resign    {
+  background: linear-gradient(90deg, rgba(239,68,68,.80), rgba(220,38,38,.85));
+}
 
 /* ===== PERCENTAGE LABEL ===== */
 .num-cell .pct {

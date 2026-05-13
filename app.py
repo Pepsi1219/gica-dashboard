@@ -1,8 +1,11 @@
 import base64
+import json
 import os
+import time
 import zlib
 from datetime import timedelta
 
+import requests as _requests
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from flask_session import Session
 import msal
@@ -31,20 +34,17 @@ from graph_excel import (
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
 
-# Vercel serverless: each invocation may land on a different container, so /tmp
-# is NOT shared — use Flask's built-in cookie session (MSAL cache is compressed
-# to ~300 bytes, well under the 4 KB browser limit).
-# Local dev: filesystem sessions avoid any cookie-size concern.
 _IS_VERCEL = os.getenv("VERCEL", "") == "1"
 
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",       # required for OAuth redirect flow
-    SESSION_COOKIE_SECURE=_IS_VERCEL,    # HTTPS-only on Vercel
+    SESSION_COOKIE_SAMESITE="Lax",    # required for OAuth cross-site redirect
+    SESSION_COOKIE_SECURE=_IS_VERCEL, # HTTPS-only on Vercel
 )
 
 if not _IS_VERCEL:
+    # Filesystem sessions for local dev — no cookie size concern
     _SESSION_DIR = os.path.join(os.path.dirname(__file__), ".flask_session")
     os.makedirs(_SESSION_DIR, exist_ok=True)
     app.config.update(
@@ -53,11 +53,13 @@ if not _IS_VERCEL:
         SESSION_FILE_THRESHOLD=500,
     )
     Session(app)
-# On Vercel: Flask built-in signed-cookie session (compressed MSAL cache ~300 B)
+# On Vercel: Flask built-in signed-cookie session.
+# Cookie contains only the compressed auth blob (~1.5 KB) + user dict (~200 B),
+# well within the 4 KB browser cookie limit.
 
 
 # ---------------------------------------------------------------------------
-# MSAL token cache helpers
+# Compression helpers
 # ---------------------------------------------------------------------------
 
 def _compress(text: str) -> str:
@@ -68,63 +70,91 @@ def _decompress(data: str) -> str:
     return zlib.decompress(base64.b64decode(data)).decode()
 
 
-def _load_cache() -> msal.SerializableTokenCache:
-    cache = msal.SerializableTokenCache()
-    raw = session.get("msal_token_cache")
-    if raw:
-        try:
-            # Compressed format written by _save_cache
-            cache.deserialize(_decompress(raw))
-        except Exception:
-            # Legacy uncompressed format — still readable
-            cache.deserialize(raw)
-    return cache
+# ---------------------------------------------------------------------------
+# Token storage — minimal, no MSAL cache
+#
+# WHY: MSAL's SerializableTokenCache stores access token + refresh token +
+# ID token + account metadata (total ~4 KB uncompressed, ~2–3 KB compressed).
+# Flask's signed cookie adds its own overhead, pushing the total over the
+# browser's 4 KB cookie limit.  When the browser silently drops an oversized
+# cookie, the session is lost after every login — which was the Vercel bug.
+#
+# FIX: Skip MSAL's cache entirely.  After the initial auth-code exchange we
+# pull the tokens out of MSAL's result dict and store only:
+#   { "at": <access_token>, "rt": <refresh_token>, "exp": <unix_expiry> }
+# After compression the auth blob is ~1.5 KB — no overflow possible.
+# ---------------------------------------------------------------------------
 
-
-def _save_cache(cache: msal.SerializableTokenCache) -> None:
-    if cache.has_state_changed:
-        session["msal_token_cache"] = _compress(cache.serialize())
-
-
-def _build_msal_app(cache: msal.SerializableTokenCache) -> msal.ConfidentialClientApplication:
+def _build_msal_app() -> msal.ConfidentialClientApplication:
+    """MSAL app used ONLY for the initial auth-code exchange and auth URL."""
     return msal.ConfidentialClientApplication(
         CLIENT_ID,
         authority=AUTHORITY,
         client_credential=CLIENT_SECRET,
-        token_cache=cache,
     )
+
+
+def _do_token_refresh(refresh_token: str) -> dict | None:
+    """Call Azure AD token endpoint directly to refresh the access token."""
+    try:
+        r = _requests.post(
+            f"{AUTHORITY}/oauth2/v2.0/token",
+            data={
+                "client_id":     CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "grant_type":    "refresh_token",
+                "scope":         " ".join(SCOPES),
+            },
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return r.json()
+        print(f"[TOKEN] Refresh HTTP {r.status_code}: {r.text[:300]}")
+    except Exception as exc:
+        print(f"[TOKEN] Refresh exception: {exc}")
+    return None
 
 
 def get_valid_token(force_refresh: bool = False) -> str | None:
     """
-    Return a valid access token using MSAL's silent flow.
-
-    - If the cached access token is still valid, returns it immediately.
-    - If it is expired, MSAL automatically uses the refresh token to get
-      a new one (no user interaction needed).
-    - force_refresh=True bypasses the cache and always calls Azure AD
-      using the refresh token — used after an unexpected 401 from Graph.
-    - Returns None when there is no account in the cache (user must log in).
+    Return a valid access token.
+    - Returns the cached access token if still valid (5-min buffer).
+    - force_refresh=True or an expired token triggers a refresh via the
+      stored refresh token (direct call to Azure AD, no MSAL cache).
+    - Returns None if not authenticated or if the refresh token is invalid.
     """
-    cache = _load_cache()
-    msal_app = _build_msal_app(cache)
-
-    accounts = msal_app.get_accounts()
-    if not accounts:
+    raw = session.get("auth")
+    if not raw:
         return None
 
-    result = msal_app.acquire_token_silent(
-        SCOPES,
-        account=accounts[0],
-        force_refresh=force_refresh,
-    )
-    _save_cache(cache)
+    try:
+        auth = json.loads(_decompress(raw))
+    except Exception:
+        return None
 
-    if result and "access_token" in result:
-        return result["access_token"]
+    # Return cached access token if still fresh
+    if not force_refresh and auth.get("at") and time.time() < auth.get("exp", 0) - 300:
+        return auth["at"]
 
-    # Refresh token is missing or also expired — user must log in again.
-    return None
+    # Need a fresh access token — use the refresh token
+    rt = auth.get("rt")
+    if not rt:
+        return None
+
+    result = _do_token_refresh(rt)
+    if not result or "access_token" not in result:
+        print("[TOKEN] Refresh failed — clearing auth session")
+        session.pop("auth", None)
+        return None
+
+    auth["at"]  = result["access_token"]
+    auth["exp"] = time.time() + result.get("expires_in", 3600)
+    if "refresh_token" in result:           # refresh tokens may rotate
+        auth["rt"] = result["refresh_token"]
+    session["auth"] = _compress(json.dumps(auth))
+
+    return auth["at"]
 
 
 # ---------------------------------------------------------------------------
@@ -132,29 +162,17 @@ def get_valid_token(force_refresh: bool = False) -> str | None:
 # ---------------------------------------------------------------------------
 
 class AuthError(Exception):
-    """Raised when a valid token cannot be obtained."""
     pass
 
 
 def call_graph(graph_func, *args, **kwargs):
-    """
-    Execute graph_func(token, *args, **kwargs) with one automatic retry
-    on TokenExpiredError.
-
-    MSAL's acquire_token_silent() normally prevents 401s by refreshing
-    the access token before it expires.  The retry with force_refresh=True
-    handles the rare edge cases: clock skew between server and Azure AD,
-    or a token that was revoked server-side mid-session.
-    """
     token = get_valid_token()
     if not token:
         raise AuthError("Not authenticated")
 
     try:
         return graph_func(token, *args, **kwargs)
-
     except TokenExpiredError:
-        # Graph rejected the token — force a hard refresh via the refresh token.
         token = get_valid_token(force_refresh=True)
         if not token:
             raise AuthError("Session expired. Please log in again.")
@@ -166,7 +184,6 @@ def call_graph(graph_func, *args, **kwargs):
 # ---------------------------------------------------------------------------
 
 def require_token():
-    """Return (token, None) or (None, error_response)."""
     token = get_valid_token()
     if not token:
         return None, (jsonify({"error": "Not authenticated", "login_required": True}), 401)
@@ -195,9 +212,8 @@ def index():
 
 @app.route("/login")
 def login():
-    # Make the session permanent so the cookie survives browser restarts.
     session.permanent = True
-    auth_url = _build_msal_app(_load_cache()).get_authorization_request_url(
+    auth_url = _build_msal_app().get_authorization_request_url(
         SCOPES,
         redirect_uri=REDIRECT_URI,
         prompt="select_account",
@@ -207,11 +223,11 @@ def login():
 
 @app.route("/auth/callback")
 def auth_callback():
-    # ── Step 1: check for Azure AD error in the redirect ──────────────────
+    # ── Step 1: check for Azure AD error ──────────────────────────────────
     error = request.args.get("error")
     if error:
         desc = request.args.get("error_description", "No description provided")
-        print(f"[AUTH] Azure AD returned error: {error} | {desc}")
+        print(f"[AUTH] Azure AD error: {error} | {desc}")
         return (
             f"<h2>Authentication Error</h2>"
             f"<p><b>{error}</b></p><p>{desc}</p>"
@@ -220,15 +236,12 @@ def auth_callback():
 
     code = request.args.get("code")
     if not code:
-        print(f"[AUTH] Callback hit with no code. Query args: {dict(request.args)}")
         return "<h2>Missing authorization code</h2><a href='/login'>Try again</a>", 400
 
     # ── Step 2: exchange auth-code for tokens ──────────────────────────────
-    print(f"[AUTH] Code received. Exchanging for token (redirect_uri={REDIRECT_URI})...")
+    print(f"[AUTH] Code received. Exchanging for token...")
     try:
-        cache    = _load_cache()
-        msal_app = _build_msal_app(cache)
-        result   = msal_app.acquire_token_by_authorization_code(
+        result = _build_msal_app().acquire_token_by_authorization_code(
             code,
             scopes=SCOPES,
             redirect_uri=REDIRECT_URI,
@@ -247,26 +260,33 @@ def auth_callback():
             f"<a href='/login'>Try again</a>"
         ), 400
 
-    # ── Step 3: persist cache + session ────────────────────────────────────
-    _save_cache(cache)
+    # ── Step 3: persist session ────────────────────────────────────────────
+    # Store ONLY access token + refresh token + expiry (not the full MSAL cache).
+    # This keeps session["auth"] ~1.5 KB after compression — safe for cookies.
+    auth_data = {
+        "at":  result["access_token"],
+        "rt":  result.get("refresh_token", ""),
+        "exp": time.time() + result.get("expires_in", 3600),
+    }
+    session["auth"] = _compress(json.dumps(auth_data))
 
-    # id_token_claims can be None/{} — guarantee session["user"] is always truthy.
     claims = result.get("id_token_claims") or {}
     session["user"] = {
         "name":  claims.get("name") or claims.get("preferred_username") or "User",
         "email": claims.get("preferred_username") or claims.get("upn") or "",
         "oid":   claims.get("oid") or claims.get("sub") or "unknown",
     }
-    session.permanent = True        # 30-day persistent cookie
+    session.permanent = True
 
     user_name = session["user"].get("name", "?")
-    print(f"[AUTH] Login successful. User: {user_name}. Returning 200 with JS redirect.")
+    print(f"[AUTH] Login OK — {user_name}")
 
     # Return 200 HTML instead of 302 redirect.
-    # Vercel's CDN/edge layer strips Set-Cookie from 302 responses, so the
-    # session cookie never reaches the browser. A 200 response bypasses this.
+    # Some CDN/edge layers (including Vercel's) strip Set-Cookie headers from
+    # 302 responses, so the session cookie never reaches the browser.
+    # A 200 response with a JS redirect bypasses this reliably.
     return """<!doctype html>
-<html><head>
+<html><head><meta charset="utf-8">
 <meta http-equiv="refresh" content="0;url=/">
 </head><body>
 <script>window.location.replace('/');</script>
@@ -286,14 +306,11 @@ def logout():
 
 @app.route("/api/me")
 def api_me():
-    # Primary auth check: does the MSAL cache contain a valid account?
-    # More reliable than checking session["user"] which can be falsy if
-    # Azure AD returns empty id_token_claims.
-    print(f"[API/ME] Session keys present: {list(session.keys())}")
+    print(f"[API/ME] Session keys: {list(session.keys())}")
     token = get_valid_token()
     user  = session.get("user")
     authenticated = bool(token) or bool(user)
-    print(f"[API/ME] authenticated={authenticated}  has_token={bool(token)}  has_user={bool(user)}")
+    print(f"[API/ME] authenticated={authenticated}  token={bool(token)}  user={bool(user)}")
     return jsonify({"authenticated": authenticated, "user": user})
 
 
@@ -405,6 +422,4 @@ def api_update_employee(department_key, employee_id):
 
 
 if __name__ == "__main__":
-    # use_reloader=False prevents the Werkzeug reloader from spawning a second
-    # process that can cause session-file conflicts on Windows.
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
