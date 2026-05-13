@@ -7,6 +7,9 @@ const TRANSLATIONS = {
     loginDesc:              'ระบบนี้ใช้ Microsoft Graph เพื่ออ่าน/เขียน Excel บน SharePoint ขององค์กร',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'เลือกหน่วยงาน',
+    overallDashboard:       'ภาพรวมทั้งหมด',
+    allYears:               'ทุกปี',
+    department:             'หน่วยงาน',
     adminTitle:             'ตั้งค่าผู้ดูแลระบบ',
     holidaySection:         'กำหนดวันหยุดพิเศษ',
     addHoliday:             'เพิ่มวันหยุด',
@@ -81,6 +84,9 @@ const TRANSLATIONS = {
     loginDesc:              'This system uses Microsoft Graph to read/write Excel files on SharePoint.',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'Select Department',
+    overallDashboard:       'Overall Dashboard',
+    allYears:               'All Years',
+    department:             'Department',
     adminTitle:             'Admin Settings',
     holidaySection:         'Configure Special Holidays',
     addHoliday:             'Add Holiday',
@@ -155,6 +161,9 @@ const TRANSLATIONS = {
     loginDesc:              'ລະບົບນີ້ໃຊ້ Microsoft Graph ເພື່ອອ່ານ/ຂຽນ Excel ເທິງ SharePoint ຂອງອົງກອນ',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'ເລືອກພະແນກ',
+    overallDashboard:       'ພາບລວມທັງໝົດ',
+    allYears:               'ທຸກປີ',
+    department:             'ພະແນກ',
     adminTitle:             'ຕັ້ງຄ່າຜູ້ດູແລລະບົບ',
     holidaySection:         'ກຳນົດວັນຫຍຸດພິເສດ',
     addHoliday:             'ເພີ່ມວັນຫຍຸດ',
@@ -229,6 +238,9 @@ const TRANSLATIONS = {
     loginDesc:              'Hệ thống này sử dụng Microsoft Graph để đọc/ghi Excel trên SharePoint của tổ chức.',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'Chọn bộ phận',
+    overallDashboard:       'Tổng quan',
+    allYears:               'Tất cả năm',
+    department:             'Bộ phận',
     adminTitle:             'Cài đặt Admin',
     holidaySection:         'Cấu hình ngày nghỉ đặc biệt',
     addHoliday:             'Thêm ngày nghỉ',
@@ -305,6 +317,7 @@ let currentFilter     = '';
 let departments       = [];
 let holidays          = JSON.parse(localStorage.getItem('specialHolidays') || '[]');
 let lastEmployees     = [];
+let allDeptData       = {};   // home dashboard cache: { deptKey: [employees] }
 let currentUser       = null;
 let lastCalc          = null;
 let currentLang       = localStorage.getItem('lang')  || 'th';
@@ -387,6 +400,7 @@ function initLang() {
     if (lastCalc) {
       $('dueDateText').textContent = `${t('dueDate')}: ${lastCalc.due_date || '-'}`;
     }
+    renderHomeDashboard($('homeDashYearFilter').value);
   };
 }
 
@@ -407,7 +421,7 @@ function initRegisterModal() {
 }
 function closeRegisterModal() { $('registerModal').classList.add('hidden'); }
 
-// ===== EDIT MODAL =====
+// ===== EDIT MODAL (used for search results) =====
 function initEditModal() {
   $('closeEditModalBtn').onclick = closeEditModal;
   $('closeEditBtn').onclick      = closeEditModal;
@@ -441,11 +455,20 @@ async function api(path, options = {}) {
   return data;
 }
 
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function normalizeDateForInput(value) {
   if (value === null || value === undefined || value === '' || value === 0) return '';
   if (typeof value === 'number') {
     if (value <= 0) return '';
-    // Excel serial date: days since Dec 30, 1899
     const d = new Date(Date.UTC(1899, 11, 30) + Math.round(value) * 86400000);
     return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
   }
@@ -489,7 +512,7 @@ function renderDepartmentButtons() {
   departments.forEach(dep => {
     const btn = document.createElement('button');
     btn.className = 'department-btn';
-    btn.innerHTML = `${dep.label}<small>${dep.workbook_name}</small>`;
+    btn.textContent = dep.label;
     btn.onclick = () => {
       currentDepartment = dep.key;
       $('dashboardTitle').textContent = `${dep.label} ${t('dashboard')}`;
@@ -526,32 +549,110 @@ function computeActualStatus(emp, calc) {
   return 'under-basic';
 }
 
-// ===== EMPLOYEE TABLE =====
+// ===== EMPLOYEE TABLE — VIEW ROW =====
 function buildRowHTML(emp, calc, actualKey) {
-  const nd = (v) => normalizeDateForInput(v) || '';
+  const nd  = (v) => escapeHtml(normalizeDateForInput(v) || '');
+  const esc = escapeHtml;
   const gradEff = (emp['Graduate Eff'] !== undefined && emp['Graduate Eff'] !== '') ? emp['Graduate Eff'] : '';
   const badgeClass = statusBadgeClass(actualKey);
   const statusLabel = t(STATUS_KEY_MAP[actualKey] || actualKey);
-  const empId = String(emp['Employee ID'] || '').replace(/"/g, '&quot;');
+  const empId = esc(String(emp['Employee ID'] || ''));
 
   return `
-    <td><button class="btn-row-edit" data-id="${empId}" title="Edit">✏</button></td>
-    <td>${emp['Employee ID']   || ''}</td>
-    <td>${emp['Employee Name'] || ''}</td>
-    <td>${emp['Grade']         || ''}</td>
+    <td class="td-actions"><button class="btn-row-edit" data-id="${empId}" title="Edit">✏</button></td>
+    <td>${esc(emp['Employee ID']   || '')}</td>
+    <td>${esc(emp['Employee Name'] || '')}</td>
+    <td>${esc(emp['Grade']         || '')}</td>
     <td>${nd(emp['CSA Start Date'])}</td>
-    <td>${calc.due_date        || ''}</td>
+    <td>${esc(calc.due_date        || '')}</td>
     <td>${nd(emp['Basic Start'])}</td>
     <td>${nd(emp['Basic End'])}</td>
     <td>${nd(emp['Operation Start'])}</td>
     <td>${nd(emp['Operation End'])}</td>
     <td>${nd(emp['Resign Date'])}</td>
     <td>${nd(emp['Transfers Date'])}</td>
-    <td>${gradEff}</td>
-    <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
+    <td>${esc(String(gradEff))}</td>
+    <td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td>
   `;
 }
 
+// ===== INLINE EDIT — ENTER EDIT MODE =====
+function startInlineEdit(tr, emp, calc, actualKey) {
+  tr.classList.add('editing');
+  const nd    = (v) => normalizeDateForInput(v) || '';
+  const esc   = escapeHtml;
+  const grade = emp['Grade'] || '';
+
+  tr.innerHTML = `
+    <td class="td-actions">
+      <button class="btn-confirm-inline" title="ยืนยัน">✓</button>
+      <button class="btn-cancel-inline"  title="ยกเลิก">✗</button>
+    </td>
+    <td>${esc(emp['Employee ID'] || '')}</td>
+    <td><input class="inline-edit" name="Employee Name" value="${esc(emp['Employee Name'] || '')}"></td>
+    <td>
+      <select class="inline-edit" name="Grade">
+        <option value="">--</option>
+        <option value="B"${grade === 'B' ? ' selected' : ''}>B</option>
+        <option value="C"${grade === 'C' ? ' selected' : ''}>C</option>
+        <option value="D"${grade === 'D' ? ' selected' : ''}>D</option>
+        <option value="E"${grade === 'E' ? ' selected' : ''}>E</option>
+      </select>
+    </td>
+    <td><input class="inline-edit" type="date" name="CSA Start Date"   value="${nd(emp['CSA Start Date'])}"></td>
+    <td>${esc(calc.due_date || '')}</td>
+    <td><input class="inline-edit" type="date" name="Basic Start"      value="${nd(emp['Basic Start'])}"></td>
+    <td><input class="inline-edit" type="date" name="Basic End"        value="${nd(emp['Basic End'])}"></td>
+    <td><input class="inline-edit" type="date" name="Operation Start"  value="${nd(emp['Operation Start'])}"></td>
+    <td><input class="inline-edit" type="date" name="Operation End"    value="${nd(emp['Operation End'])}"></td>
+    <td><input class="inline-edit" type="date" name="Resign Date"      value="${nd(emp['Resign Date'])}"></td>
+    <td><input class="inline-edit" type="date" name="Transfers Date"   value="${nd(emp['Transfers Date'])}"></td>
+    <td><input class="inline-edit" type="number" name="Graduate Eff"   value="${esc(String(emp['Graduate Eff'] ?? ''))}" min="0" max="100" step="0.01"></td>
+    <td><span class="badge ${statusBadgeClass(actualKey)}">${esc(t(STATUS_KEY_MAP[actualKey] || actualKey))}</span></td>
+  `;
+}
+
+// ===== INLINE EDIT — CANCEL =====
+function cancelInlineEdit(tr, emp, calc, actualKey) {
+  tr.classList.remove('editing');
+  tr.innerHTML = buildRowHTML(emp, calc, actualKey);
+}
+
+// ===== INLINE EDIT — CONFIRM & SAVE =====
+async function confirmInlineEdit(tr, employeeId) {
+  const confirmBtn = tr.querySelector('.btn-confirm-inline');
+  if (confirmBtn) confirmBtn.disabled = true;
+
+  const payload = {};
+  tr.querySelectorAll('.inline-edit').forEach(input => {
+    payload[input.name] = input.value;
+  });
+
+  // Preserve Comment from cached data (not shown inline)
+  const cachedEmp = lastEmployees.find(e => String(e['Employee ID']) === String(employeeId));
+  if (cachedEmp && cachedEmp['Comment'] !== undefined) {
+    payload['Comment'] = cachedEmp['Comment'];
+  }
+
+  payload._holidays = holidays;
+
+  try {
+    const data = await api(
+      `/api/${currentDepartment}/employees/${encodeURIComponent(employeeId)}`,
+      { method: 'PATCH', body: JSON.stringify(payload) }
+    );
+    // Update cache
+    const idx = lastEmployees.findIndex(e => String(e['Employee ID']) === String(employeeId));
+    if (idx >= 0) lastEmployees[idx] = data.employee;
+    showMessage(t('updated'));
+    renderEmployeeTable(lastEmployees);
+  } catch (err) {
+    if (confirmBtn) confirmBtn.disabled = false;
+    showMessage(err.message, true);
+  }
+}
+
+// ===== RENDER EMPLOYEE TABLE =====
 function renderEmployeeTable(employees) {
   const body = $('employeeTableBody');
   body.innerHTML = '';
@@ -569,7 +670,6 @@ function renderEmployeeTable(employees) {
     else if (actualKey === 'resign-operation') resignOp++;
     else if (actualKey === 'resign-basic')     resignBasic++;
 
-    // Apply filter
     if (currentFilter && actualKey !== currentFilter) return;
 
     const tr = document.createElement('tr');
@@ -579,17 +679,17 @@ function renderEmployeeTable(employees) {
     body.appendChild(tr);
   });
 
-  $('totalCount').textContent      = total;
-  $('onTrackCount').textContent    = completed;
-  $('trainingCount').textContent   = underOp + underBasic;
-  $('underOpCount').textContent    = underOp;
-  $('underBasicCount').textContent = underBasic;
-  $('overdueCount').textContent    = resignOp + resignBasic;
-  $('resignOpCount').textContent   = resignOp;
+  $('totalCount').textContent       = total;
+  $('onTrackCount').textContent     = completed;
+  $('trainingCount').textContent    = underOp + underBasic;
+  $('underOpCount').textContent     = underOp;
+  $('underBasicCount').textContent  = underBasic;
+  $('overdueCount').textContent     = resignOp + resignBasic;
+  $('resignOpCount').textContent    = resignOp;
   $('resignBasicCount').textContent = resignBasic;
 }
 
-// ===== DASHBOARD =====
+// ===== DASHBOARD PAGE =====
 async function loadDashboard() {
   if (!currentDepartment) return;
   showMessage(t('loading'));
@@ -609,7 +709,140 @@ async function loadDashboard() {
   }
 }
 
-// ===== OPEN EDIT MODAL =====
+// ===== HOME DASHBOARD =====
+async function loadHomeDashboard() {
+  const loadingEl = $('homeDashLoading');
+  const gridEl    = $('homeDashGrid');
+  show(loadingEl);
+  hide(gridEl);
+
+  const query = getHolidayQuery();
+  const results = await Promise.allSettled(
+    departments.map(dep =>
+      api(`/api/${dep.key}/employees${query ? '?' + query : ''}`)
+        .then(data => ({ key: dep.key, employees: data.employees || [] }))
+    )
+  );
+
+  results.forEach(r => {
+    if (r.status === 'fulfilled') allDeptData[r.value.key] = r.value.employees;
+  });
+
+  // Build year options from CSA Start Date across all departments
+  const years = new Set();
+  Object.values(allDeptData).forEach(emps => {
+    emps.forEach(emp => {
+      const d = normalizeDateForInput(emp['CSA Start Date']);
+      if (d) years.add(d.slice(0, 4));
+    });
+  });
+
+  const sel = $('homeDashYearFilter');
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">${t('allYears')}</option>`;
+  [...years].sort().reverse().forEach(yr => {
+    const opt = document.createElement('option');
+    opt.value = yr;
+    opt.textContent = yr;
+    if (yr === prev) opt.selected = true;
+    sel.appendChild(opt);
+  });
+
+  hide(loadingEl);
+  show(gridEl);
+  renderHomeDashboard(sel.value);
+}
+
+function renderHomeDashboard(yearFilter) {
+  const gridEl = $('homeDashGrid');
+  if (!gridEl) return;
+  gridEl.innerHTML = '';
+
+  if (!Object.keys(allDeptData).length) return;
+
+  let grandTotal = 0, grandCompleted = 0, grandTraining = 0, grandResign = 0;
+
+  const table = document.createElement('table');
+  table.className = 'home-dash-table';
+
+  const thead = table.createTHead();
+  const hrow  = thead.insertRow();
+  [t('department'), t('total'), t('congratulations'), t('training'), t('resignation')]
+    .forEach(text => {
+      const th = document.createElement('th');
+      th.textContent = text;
+      hrow.appendChild(th);
+    });
+
+  const tbody = table.createTBody();
+
+  departments.forEach(dep => {
+    const employees = allDeptData[dep.key] || [];
+    const filtered  = yearFilter
+      ? employees.filter(emp => {
+          const d = normalizeDateForInput(emp['CSA Start Date']);
+          return d && d.slice(0, 4) === yearFilter;
+        })
+      : employees;
+
+    let total = filtered.length, completed = 0, training = 0, resign = 0;
+
+    filtered.forEach(emp => {
+      const key = computeActualStatus(emp, emp.calculated || {});
+      if (key === 'completed' || key === 'completed-overdue')   completed++;
+      else if (key === 'under-operation' || key === 'under-basic') training++;
+      else if (key === 'resign-operation' || key === 'resign-basic') resign++;
+    });
+
+    grandTotal += total;
+    grandCompleted += completed;
+    grandTraining += training;
+    grandResign += resign;
+
+    const tr = tbody.insertRow();
+    tr.style.cursor = 'pointer';
+    tr.title = dep.label;
+    tr.onclick = () => {
+      currentDepartment = dep.key;
+      $('dashboardTitle').textContent = `${dep.label} ${t('dashboard')}`;
+      setPage('dashboard');
+      loadDashboard();
+    };
+
+    const cells = [
+      { text: dep.label,              cls: 'dept-label' },
+      { text: total,                  cls: 'num-cell' },
+      { text: completed,              cls: 'num-cell ok' },
+      { text: training,               cls: 'num-cell warn' },
+      { text: resign,                 cls: 'num-cell danger' },
+    ];
+    cells.forEach(({ text, cls }) => {
+      const td = tr.insertCell();
+      td.textContent = text;
+      if (cls) td.className = cls;
+    });
+  });
+
+  // Footer totals
+  const tfoot = table.createTFoot();
+  const frow  = tfoot.insertRow();
+  frow.className = 'dash-total-row';
+  [
+    { text: t('total'),  cls: 'dept-label' },
+    { text: grandTotal,      cls: 'num-cell' },
+    { text: grandCompleted,  cls: 'num-cell ok' },
+    { text: grandTraining,   cls: 'num-cell warn' },
+    { text: grandResign,     cls: 'num-cell danger' },
+  ].forEach(({ text, cls }) => {
+    const td = frow.insertCell();
+    td.textContent = text;
+    if (cls) td.className = cls;
+  });
+
+  gridEl.appendChild(table);
+}
+
+// ===== OPEN EDIT MODAL (search) =====
 async function openEditModal(employeeId) {
   currentEmployeeId = employeeId;
   try {
@@ -655,7 +888,7 @@ async function searchEmployee() {
   await openEditModal(empId);
 }
 
-// ===== EDIT FORM =====
+// ===== EDIT FORM (modal) =====
 function fillEditForm(emp) {
   const form   = $('editForm');
   const fields = [
@@ -693,8 +926,11 @@ async function saveEditForm(event) {
       { method: 'PATCH', body: JSON.stringify(payload) }
     );
     fillEditForm(data.employee);
+    // Update cache
+    const idx = lastEmployees.findIndex(e => String(e['Employee ID']) === String(currentEmployeeId));
+    if (idx >= 0) lastEmployees[idx] = data.employee;
     showMessage(t('updated'));
-    loadDashboard();
+    renderEmployeeTable(lastEmployees);
   } catch (err) {
     showMessage(err.message, true);
   }
@@ -714,6 +950,11 @@ async function init() {
     renderEmployeeTable(lastEmployees);
   };
 
+  // Home dashboard year filter
+  $('homeDashYearFilter').onchange = () => {
+    renderHomeDashboard($('homeDashYearFilter').value);
+  };
+
   // Holiday add button
   $('addHolidayBtn').onclick = () => {
     const value = $('holidayInput').value;
@@ -723,6 +964,7 @@ async function init() {
       localStorage.setItem('specialHolidays', JSON.stringify(holidays));
       $('holidayInput').value = '';
       renderHolidays();
+      if (currentDepartment) loadDashboard();
     }
   };
 
@@ -731,12 +973,41 @@ async function init() {
   $('refreshBtn').onclick  = loadDashboard;
   $('searchBtn').onclick   = searchEmployee;
 
-  // Row edit button (event delegation)
-  $('employeeTableBody').addEventListener('click', (e) => {
-    const btn = e.target.closest('.btn-row-edit');
-    if (!btn) return;
-    const empId = btn.dataset.id;
-    if (empId) openEditModal(empId);
+  // Table event delegation: edit, confirm, cancel
+  $('employeeTableBody').addEventListener('click', async (e) => {
+    // Inline edit — start
+    const editBtn = e.target.closest('.btn-row-edit');
+    if (editBtn) {
+      const empId = editBtn.dataset.id;
+      const tr    = editBtn.closest('tr');
+      const emp   = lastEmployees.find(em => String(em['Employee ID']) === String(empId));
+      if (emp && tr) {
+        const calc = emp.calculated || {};
+        startInlineEdit(tr, emp, calc, computeActualStatus(emp, calc));
+      }
+      return;
+    }
+
+    // Inline edit — confirm
+    const confirmBtn = e.target.closest('.btn-confirm-inline');
+    if (confirmBtn) {
+      const tr = confirmBtn.closest('tr');
+      await confirmInlineEdit(tr, tr.dataset.employeeId);
+      return;
+    }
+
+    // Inline edit — cancel
+    const cancelBtn = e.target.closest('.btn-cancel-inline');
+    if (cancelBtn) {
+      const tr    = cancelBtn.closest('tr');
+      const empId = tr.dataset.employeeId;
+      const emp   = lastEmployees.find(em => String(em['Employee ID']) === String(empId));
+      if (emp && tr) {
+        const calc = emp.calculated || {};
+        cancelInlineEdit(tr, emp, calc, computeActualStatus(emp, calc));
+      }
+      return;
+    }
   });
 
   // Check auth
@@ -755,6 +1026,9 @@ async function init() {
   renderDepartmentButtons();
   renderHolidays();
   setPage('home');
+
+  // Load home dashboard in background
+  loadHomeDashboard();
 }
 
 init().catch(err => {

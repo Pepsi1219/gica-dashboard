@@ -18,14 +18,7 @@ ONEDRIVE_FOLDER = os.getenv(
     "Documents/1. Project/CSA (Center of Skill Acquisition)/New Operator Monitoring",
 )
 
-# IMPORTANT: Please verify that each SharePoint link matches the correct workbook.
-# The mapping below follows the order provided in the conversation: EA, G1, G2, G3, G4, TRM.
 DEPARTMENTS = {
-    "EA": {
-        "label": "EA",
-        "workbook_name": "CSA Monitoring Report_EA_for App.xlsx",
-        "share_url": "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/pongsathon_s_nanyangtextile_com/IQCT8Ik6tm_rSJ74kTZpfy5nAVos858uy90ZcKh2ajlWPB4?e=CwjthY",
-    },
     "G1": {
         "label": "G1",
         "workbook_name": "CSA Monitoring Report_G1_for App.xlsx",
@@ -50,6 +43,11 @@ DEPARTMENTS = {
         "label": "TRM",
         "workbook_name": "CSA Monitoring Report_TRM_for App.xlsx",
         "share_url": "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/pongsathon_s_nanyangtextile_com/IQA9cQHFhe21QJTuQoaPl6bSAX5x_EwSQixheBTD3KlQBD8?e=guj06d",
+    },
+    "EA": {
+        "label": "EA",
+        "workbook_name": "CSA Monitoring Report_EA_for App.xlsx",
+        "share_url": "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/pongsathon_s_nanyangtextile_com/IQCT8Ik6tm_rSJ74kTZpfy5nAVos858uy90ZcKh2ajlWPB4?e=CwjthY",
     },
 }
 
