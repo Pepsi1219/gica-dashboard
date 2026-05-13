@@ -1,8 +1,5 @@
-import base64
-import json
 import os
 import time
-import zlib
 from datetime import timedelta
 
 import requests as _requests
@@ -39,12 +36,11 @@ _IS_VERCEL = os.getenv("VERCEL", "") == "1"
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",    # required for OAuth cross-site redirect
-    SESSION_COOKIE_SECURE=_IS_VERCEL, # HTTPS-only on Vercel
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=_IS_VERCEL,
 )
 
 if not _IS_VERCEL:
-    # Filesystem sessions for local dev — no cookie size concern
     _SESSION_DIR = os.path.join(os.path.dirname(__file__), ".flask_session")
     os.makedirs(_SESSION_DIR, exist_ok=True)
     app.config.update(
@@ -53,40 +49,28 @@ if not _IS_VERCEL:
         SESSION_FILE_THRESHOLD=500,
     )
     Session(app)
-# On Vercel: Flask built-in signed-cookie session.
-# Cookie contains only the compressed auth blob (~1.5 KB) + user dict (~200 B),
-# well within the 4 KB browser cookie limit.
 
 
 # ---------------------------------------------------------------------------
-# Compression helpers
-# ---------------------------------------------------------------------------
-
-def _compress(text: str) -> str:
-    return base64.b64encode(zlib.compress(text.encode(), level=9)).decode()
-
-
-def _decompress(data: str) -> str:
-    return zlib.decompress(base64.b64decode(data)).decode()
-
-
-# ---------------------------------------------------------------------------
-# Token storage — minimal, no MSAL cache
+# Token storage
 #
-# WHY: MSAL's SerializableTokenCache stores access token + refresh token +
-# ID token + account metadata (total ~4 KB uncompressed, ~2–3 KB compressed).
-# Flask's signed cookie adds its own overhead, pushing the total over the
-# browser's 4 KB cookie limit.  When the browser silently drops an oversized
-# cookie, the session is lost after every login — which was the Vercel bug.
+# WHY cookie overflow happened:
+#   Microsoft access tokens are large JWTs (~1.5 KB of base64, already
+#   high-entropy — zlib barely helps).  Refresh tokens add another ~0.8 KB.
+#   Combined blob after compress+sign = 4226 B > 4093 B browser limit.
+#   Browser silently drops the cookie → session lost every login.
 #
-# FIX: Skip MSAL's cache entirely.  After the initial auth-code exchange we
-# pull the tokens out of MSAL's result dict and store only:
-#   { "at": <access_token>, "rt": <refresh_token>, "exp": <unix_expiry> }
-# After compression the auth blob is ~1.5 KB — no overflow possible.
+# FIX:
+#   Session cookie stores ONLY the refresh token (~0.8 KB raw).
+#   Access token lives in a module-level dict (_AT_CACHE) keyed by user OID.
+#   On warm Vercel container reuse the AT is already in memory.
+#   On cold starts one extra refresh call is made (~200 ms) — acceptable.
 # ---------------------------------------------------------------------------
+
+_AT_CACHE: dict = {}   # oid -> {"at": str, "exp": float}
+
 
 def _build_msal_app() -> msal.ConfidentialClientApplication:
-    """MSAL app used ONLY for the initial auth-code exchange and auth URL."""
     return msal.ConfidentialClientApplication(
         CLIENT_ID,
         authority=AUTHORITY,
@@ -95,7 +79,6 @@ def _build_msal_app() -> msal.ConfidentialClientApplication:
 
 
 def _do_token_refresh(refresh_token: str) -> dict | None:
-    """Call Azure AD token endpoint directly to refresh the access token."""
     try:
         r = _requests.post(
             f"{AUTHORITY}/oauth2/v2.0/token",
@@ -119,42 +102,36 @@ def _do_token_refresh(refresh_token: str) -> dict | None:
 def get_valid_token(force_refresh: bool = False) -> str | None:
     """
     Return a valid access token.
-    - Returns the cached access token if still valid (5-min buffer).
-    - force_refresh=True or an expired token triggers a refresh via the
-      stored refresh token (direct call to Azure AD, no MSAL cache).
-    - Returns None if not authenticated or if the refresh token is invalid.
+    - Checks in-process _AT_CACHE first (fast, works on warm Vercel containers).
+    - Falls back to refresh token stored in session cookie.
+    - Returns None if not authenticated or refresh token is invalid/expired.
     """
-    raw = session.get("auth")
-    if not raw:
-        return None
-
-    try:
-        auth = json.loads(_decompress(raw))
-    except Exception:
-        return None
-
-    # Return cached access token if still fresh
-    if not force_refresh and auth.get("at") and time.time() < auth.get("exp", 0) - 300:
-        return auth["at"]
-
-    # Need a fresh access token — use the refresh token
-    rt = auth.get("rt")
+    rt = session.get("rt")
     if not rt:
         return None
 
+    oid = (session.get("user") or {}).get("oid", "")
+
+    if not force_refresh and oid:
+        cached = _AT_CACHE.get(oid)
+        if cached and time.time() < cached.get("exp", 0) - 300:
+            return cached["at"]
+
     result = _do_token_refresh(rt)
     if not result or "access_token" not in result:
-        print("[TOKEN] Refresh failed — clearing auth session")
-        session.pop("auth", None)
+        print("[TOKEN] Refresh failed — clearing session")
+        session.pop("rt", None)
         return None
 
-    auth["at"]  = result["access_token"]
-    auth["exp"] = time.time() + result.get("expires_in", 3600)
-    if "refresh_token" in result:           # refresh tokens may rotate
-        auth["rt"] = result["refresh_token"]
-    session["auth"] = _compress(json.dumps(auth))
+    at  = result["access_token"]
+    exp = time.time() + result.get("expires_in", 3600)
 
-    return auth["at"]
+    if oid:
+        _AT_CACHE[oid] = {"at": at, "exp": exp}
+    if "refresh_token" in result:   # refresh tokens may rotate
+        session["rt"] = result["refresh_token"]
+
+    return at
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +200,6 @@ def login():
 
 @app.route("/auth/callback")
 def auth_callback():
-    # ── Step 1: check for Azure AD error ──────────────────────────────────
     error = request.args.get("error")
     if error:
         desc = request.args.get("error_description", "No description provided")
@@ -238,8 +214,7 @@ def auth_callback():
     if not code:
         return "<h2>Missing authorization code</h2><a href='/login'>Try again</a>", 400
 
-    # ── Step 2: exchange auth-code for tokens ──────────────────────────────
-    print(f"[AUTH] Code received. Exchanging for token...")
+    print("[AUTH] Code received. Exchanging for token...")
     try:
         result = _build_msal_app().acquire_token_by_authorization_code(
             code,
@@ -260,31 +235,29 @@ def auth_callback():
             f"<a href='/login'>Try again</a>"
         ), 400
 
-    # ── Step 3: persist session ────────────────────────────────────────────
-    # Store ONLY access token + refresh token + expiry (not the full MSAL cache).
-    # This keeps session["auth"] ~1.5 KB after compression — safe for cookies.
-    auth_data = {
-        "at":  result["access_token"],
-        "rt":  result.get("refresh_token", ""),
-        "exp": time.time() + result.get("expires_in", 3600),
-    }
-    session["auth"] = _compress(json.dumps(auth_data))
-
+    # ── Persist session ───────────────────────────────────────────────────────
+    # Store ONLY the refresh token in the cookie (~0.8 KB).
+    # Cache the access token in process memory to avoid cookie overflow.
     claims = result.get("id_token_claims") or {}
+    oid = claims.get("oid") or claims.get("sub") or "unknown"
+
+    session["rt"] = result.get("refresh_token", "")
     session["user"] = {
         "name":  claims.get("name") or claims.get("preferred_username") or "User",
         "email": claims.get("preferred_username") or claims.get("upn") or "",
-        "oid":   claims.get("oid") or claims.get("sub") or "unknown",
+        "oid":   oid,
     }
     session.permanent = True
 
-    user_name = session["user"].get("name", "?")
-    print(f"[AUTH] Login OK — {user_name}")
+    _AT_CACHE[oid] = {
+        "at":  result["access_token"],
+        "exp": time.time() + result.get("expires_in", 3600),
+    }
 
-    # Return 200 HTML instead of 302 redirect.
-    # Some CDN/edge layers (including Vercel's) strip Set-Cookie headers from
-    # 302 responses, so the session cookie never reaches the browser.
-    # A 200 response with a JS redirect bypasses this reliably.
+    print(f"[AUTH] Login OK — {session['user']['name']}")
+
+    # Return 200 + JS redirect instead of 302.
+    # Some CDN/edge layers strip Set-Cookie from 302 responses.
     return """<!doctype html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="refresh" content="0;url=/">
@@ -296,6 +269,8 @@ def auth_callback():
 
 @app.route("/logout")
 def logout():
+    oid = (session.get("user") or {}).get("oid", "")
+    _AT_CACHE.pop(oid, None)
     session.clear()
     return redirect(url_for("index"))
 
