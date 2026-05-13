@@ -31,27 +31,25 @@ from graph_excel import (
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
 
-# Session backend: "filesystem" for local dev, cookie-based on Vercel/serverless.
-# Set SESSION_TYPE=filesystem in .env for local dev; leave unset for Vercel.
-_SESSION_TYPE = os.getenv("SESSION_TYPE", "cookie")
+# Use filesystem sessions on both local dev and Vercel (/tmp is writable on Vercel).
+_IS_VERCEL = os.getenv("VERCEL", "") == "1"
+_SESSION_DIR = (
+    "/tmp/.flask_session"
+    if _IS_VERCEL
+    else os.path.join(os.path.dirname(__file__), ".flask_session")
+)
+os.makedirs(_SESSION_DIR, exist_ok=True)
 
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",       # required for OAuth redirect flow
-    SESSION_COOKIE_SECURE=os.getenv("VERCEL", "") == "1",  # HTTPS-only on Vercel
+    SESSION_COOKIE_SECURE=_IS_VERCEL,    # HTTPS-only on Vercel
+    SESSION_TYPE="filesystem",
+    SESSION_FILE_DIR=_SESSION_DIR,
+    SESSION_FILE_THRESHOLD=500,
 )
-
-if _SESSION_TYPE == "filesystem":
-    _SESSION_DIR = os.path.join(os.path.dirname(__file__), ".flask_session")
-    os.makedirs(_SESSION_DIR, exist_ok=True)
-    app.config.update(
-        SESSION_TYPE="filesystem",
-        SESSION_FILE_DIR=_SESSION_DIR,
-        SESSION_FILE_THRESHOLD=500,
-    )
-    Session(app)
-# else: Flask's built-in signed-cookie session (works on Vercel serverless)
+Session(app)
 
 
 # ---------------------------------------------------------------------------
