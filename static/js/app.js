@@ -76,6 +76,7 @@ const TRANSLATIONS = {
     statusResignBasic:      'ลาออกระหว่างฝึกพื้นฐาน',
     statusTransferOperation:'โอนย้ายระหว่างฝึกขั้นตอน',
     statusTransferBasic:    'โอนย้ายระหว่างฝึกพื้นฐาน',
+    ratio:                  'สัดส่วน',
   },
   en: {
     appTitle:               'New Operator Monitoring',
@@ -153,6 +154,7 @@ const TRANSLATIONS = {
     statusResignBasic:      'Resigned (Basic Training)',
     statusTransferOperation:'Transferred (Op Training)',
     statusTransferBasic:    'Transferred (Basic Training)',
+    ratio:                  'Ratio',
   },
   lo: {
     appTitle:               'New Operator Monitoring',
@@ -230,6 +232,7 @@ const TRANSLATIONS = {
     statusResignBasic:      'ລາອອກລະຫວ່າງຝຶກພື້ນຖານ',
     statusTransferOperation:'ໂອນຍ້າຍລະຫວ່າງຝຶກຂັ້ນຕອນ',
     statusTransferBasic:    'ໂອນຍ້າຍລະຫວ່າງຝຶກພື້ນຖານ',
+    ratio:                  'ອັດຕາສ່ວນ',
   },
   vi: {
     appTitle:               'New Operator Monitoring',
@@ -307,6 +310,7 @@ const TRANSLATIONS = {
     statusResignBasic:      'Nghỉ việc (Đào tạo cơ bản)',
     statusTransferOperation:'Chuyển bộ phận (Vận hành)',
     statusTransferBasic:    'Chuyển bộ phận (Cơ bản)',
+    ratio:                  'Tỷ lệ',
   },
 };
 
@@ -753,6 +757,36 @@ async function loadHomeDashboard() {
   renderHomeDashboard(sel.value);
 }
 
+function buildDashRow(tr, label, total, completed, training, resign) {
+  const pct = (n) => {
+    if (total === 0) return '';
+    return `<small class="pct">(${Math.round(n / total * 100)}%)</small>`;
+  };
+
+  const cPct = total > 0 ? (completed / total * 100).toFixed(1) : 0;
+  const tPct = total > 0 ? (training  / total * 100).toFixed(1) : 0;
+  const rPct = total > 0 ? (resign    / total * 100).toFixed(1) : 0;
+
+  const bar = `<div class="ratio-bar">
+    <div class="ratio-seg ratio-completed" style="width:${cPct}%" title="${escapeHtml(t('congratulations'))}: ${cPct}%"></div>
+    <div class="ratio-seg ratio-training"  style="width:${tPct}%" title="${escapeHtml(t('training'))}: ${tPct}%"></div>
+    <div class="ratio-seg ratio-resign"    style="width:${rPct}%" title="${escapeHtml(t('resignation'))}: ${rPct}%"></div>
+  </div>`;
+
+  [
+    { html: escapeHtml(label),                        cls: 'dept-label' },
+    { html: `${total}`,                               cls: 'num-cell' },
+    { html: `${completed} ${pct(completed)}`,         cls: 'num-cell ok' },
+    { html: `${training} ${pct(training)}`,           cls: 'num-cell warn' },
+    { html: `${resign} ${pct(resign)}`,               cls: 'num-cell danger' },
+    { html: bar,                                      cls: 'bar-cell' },
+  ].forEach(({ html, cls }) => {
+    const td = tr.insertCell();
+    td.innerHTML = html;
+    if (cls) td.className = cls;
+  });
+}
+
 function renderHomeDashboard(yearFilter) {
   const gridEl = $('homeDashGrid');
   if (!gridEl) return;
@@ -767,7 +801,7 @@ function renderHomeDashboard(yearFilter) {
 
   const thead = table.createTHead();
   const hrow  = thead.insertRow();
-  [t('department'), t('total'), t('congratulations'), t('training'), t('resignation')]
+  [t('department'), t('total'), t('congratulations'), t('training'), t('resignation'), t('ratio')]
     .forEach(text => {
       const th = document.createElement('th');
       th.textContent = text;
@@ -789,19 +823,18 @@ function renderHomeDashboard(yearFilter) {
 
     filtered.forEach(emp => {
       const key = computeActualStatus(emp, emp.calculated || {});
-      if (key === 'completed' || key === 'completed-overdue')   completed++;
-      else if (key === 'under-operation' || key === 'under-basic') training++;
+      if (key === 'completed' || key === 'completed-overdue')        completed++;
+      else if (key === 'under-operation' || key === 'under-basic')   training++;
       else if (key === 'resign-operation' || key === 'resign-basic') resign++;
     });
 
-    grandTotal += total;
+    grandTotal     += total;
     grandCompleted += completed;
-    grandTraining += training;
-    grandResign += resign;
+    grandTraining  += training;
+    grandResign    += resign;
 
     const tr = tbody.insertRow();
     tr.style.cursor = 'pointer';
-    tr.title = dep.label;
     tr.onclick = () => {
       currentDepartment = dep.key;
       $('dashboardTitle').textContent = `${dep.label} ${t('dashboard')}`;
@@ -809,35 +842,14 @@ function renderHomeDashboard(yearFilter) {
       loadDashboard();
     };
 
-    const cells = [
-      { text: dep.label,              cls: 'dept-label' },
-      { text: total,                  cls: 'num-cell' },
-      { text: completed,              cls: 'num-cell ok' },
-      { text: training,               cls: 'num-cell warn' },
-      { text: resign,                 cls: 'num-cell danger' },
-    ];
-    cells.forEach(({ text, cls }) => {
-      const td = tr.insertCell();
-      td.textContent = text;
-      if (cls) td.className = cls;
-    });
+    buildDashRow(tr, dep.label, total, completed, training, resign);
   });
 
-  // Footer totals
+  // Footer totals row
   const tfoot = table.createTFoot();
   const frow  = tfoot.insertRow();
   frow.className = 'dash-total-row';
-  [
-    { text: t('total'),  cls: 'dept-label' },
-    { text: grandTotal,      cls: 'num-cell' },
-    { text: grandCompleted,  cls: 'num-cell ok' },
-    { text: grandTraining,   cls: 'num-cell warn' },
-    { text: grandResign,     cls: 'num-cell danger' },
-  ].forEach(({ text, cls }) => {
-    const td = frow.insertCell();
-    td.textContent = text;
-    if (cls) td.className = cls;
-  });
+  buildDashRow(frow, t('total'), grandTotal, grandCompleted, grandTraining, grandResign);
 
   gridEl.appendChild(table);
 }
@@ -950,9 +962,13 @@ async function init() {
     renderEmployeeTable(lastEmployees);
   };
 
-  // Home dashboard year filter
+  // Home dashboard year filter + refresh
   $('homeDashYearFilter').onchange = () => {
     renderHomeDashboard($('homeDashYearFilter').value);
+  };
+  $('homeDashRefreshBtn').onclick = () => {
+    allDeptData = {};
+    loadHomeDashboard();
   };
 
   // Holiday add button

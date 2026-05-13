@@ -135,7 +135,10 @@
       <section class="card home-dash-card">
         <div class="home-dash-header">
           <h2 data-i18n="overallDashboard">ภาพรวมทั้งหมด</h2>
-          <select id="homeDashYearFilter" class="year-select"></select>
+          <div class="home-dash-controls">
+            <select id="homeDashYearFilter" class="year-select"></select>
+            <button id="homeDashRefreshBtn" class="small" data-i18n="refresh">โหลดใหม่</button>
+          </div>
         </div>
         <p id="homeDashLoading" class="hint" data-i18n="loading">กำลังโหลด...</p>
         <div id="homeDashGrid" class="hidden"></div>

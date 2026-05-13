@@ -321,6 +321,35 @@ button:active { transform: scale(.97); }
   font-weight: 800;
   border-top: 2px solid var(--border);
 }
+.home-dash-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ===== RATIO BAR ===== */
+.bar-cell { min-width: 140px; vertical-align: middle; }
+.ratio-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--border-light);
+  width: 100%;
+}
+.ratio-seg { height: 100%; transition: width .35s ease; }
+.ratio-seg.ratio-completed { background: var(--ok); }
+.ratio-seg.ratio-training  { background: var(--warn); }
+.ratio-seg.ratio-resign    { background: var(--danger); }
+
+/* ===== PERCENTAGE LABEL ===== */
+.num-cell .pct {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.55;
+  margin-left: 3px;
+}
 
 /* ===== FORMS ===== */
 .row { display: flex; gap: 10px; align-items: center; }

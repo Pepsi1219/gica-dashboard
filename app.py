@@ -260,8 +260,18 @@ def auth_callback():
     session.permanent = True        # 30-day persistent cookie
 
     user_name = session["user"].get("name", "?")
-    print(f"[AUTH] Login successful. User: {user_name}. Redirecting to index.")
-    return redirect(url_for("index"))
+    print(f"[AUTH] Login successful. User: {user_name}. Returning 200 with JS redirect.")
+
+    # Return 200 HTML instead of 302 redirect.
+    # Vercel's CDN/edge layer strips Set-Cookie from 302 responses, so the
+    # session cookie never reaches the browser. A 200 response bypasses this.
+    return """<!doctype html>
+<html><head>
+<meta http-equiv="refresh" content="0;url=/">
+</head><body>
+<script>window.location.replace('/');</script>
+<p>Redirecting&hellip;</p>
+</body></html>"""
 
 
 @app.route("/logout")
