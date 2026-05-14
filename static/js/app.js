@@ -314,6 +314,7 @@ const TRANSLATIONS = {
 let currentDepartment = null;
 let currentEmployeeId = null;
 let currentFilter     = '';
+let currentYearFilter = '';
 let departments       = [];
 let holidays          = JSON.parse(localStorage.getItem('specialHolidays') || '[]');
 let lastEmployees     = [];
@@ -515,6 +516,10 @@ function renderDepartmentButtons() {
     btn.textContent = dep.label;
     btn.onclick = () => {
       currentDepartment = dep.key;
+      currentFilter = '';
+      currentYearFilter = '';
+      if ($('statusFilter'))  $('statusFilter').value  = '';
+      if ($('empYearFilter')) $('empYearFilter').value = '';
       $('dashboardTitle').textContent = `${dep.label} ${t('dashboard')}`;
       setPage('dashboard');
       loadDashboard();
@@ -652,6 +657,28 @@ async function confirmInlineEdit(tr, employeeId) {
   }
 }
 
+// ===== POPULATE EMPLOYEE YEAR FILTER =====
+function populateEmpYearFilter(employees) {
+  const sel = $('empYearFilter');
+  if (!sel) return;
+  const prev = sel.value;
+  const years = [...new Set(
+    employees
+      .map(e => normalizeDateForInput(e['CSA Start Date']))
+      .filter(Boolean)
+      .map(d => d.slice(0, 4))
+  )].sort((a, b) => b - a);
+
+  sel.innerHTML = `<option value="" data-i18n="allYears">${t('allYears')}</option>`;
+  years.forEach(yr => {
+    const opt = document.createElement('option');
+    opt.value = yr;
+    opt.textContent = yr;
+    sel.appendChild(opt);
+  });
+  if (years.includes(prev)) sel.value = prev;
+}
+
 // ===== RENDER EMPLOYEE TABLE =====
 function renderEmployeeTable(employees) {
   const body = $('employeeTableBody');
@@ -671,6 +698,10 @@ function renderEmployeeTable(employees) {
     else if (actualKey === 'resign-basic')     resignBasic++;
 
     if (currentFilter && actualKey !== currentFilter) return;
+    if (currentYearFilter) {
+      const d = normalizeDateForInput(emp['CSA Start Date']);
+      if (!d || d.slice(0, 4) !== currentYearFilter) return;
+    }
 
     const tr = document.createElement('tr');
     tr.className = `actual-${actualKey}`;
@@ -697,6 +728,7 @@ async function loadDashboard() {
     const query = getHolidayQuery();
     const data = await api(`/api/${currentDepartment}/employees${query ? '?' + query : ''}`);
     lastEmployees = data.employees || [];
+    populateEmpYearFilter(lastEmployees);
     renderEmployeeTable(lastEmployees);
     showMessage(t('loadedCount', { n: lastEmployees.length }));
   } catch (err) {
@@ -773,7 +805,7 @@ function buildDashRow(tr, label, total, completed, training, resign) {
     { html: escapeHtml(label),                        cls: 'dept-label' },
     { html: `${total}`,                               cls: 'num-cell' },
     { html: `${completed} ${pct(completed)}`,         cls: 'num-cell ok' },
-    { html: `${training} ${pct(training)}`,           cls: 'num-cell warn' },
+    { html: `${training} ${pct(training)}`,           cls: 'num-cell blue' },
     { html: `${resign} ${pct(resign)}`,               cls: 'num-cell danger' },
     { html: bar,                                      cls: 'bar-cell' },
   ].forEach(({ html, cls }) => {
@@ -833,6 +865,10 @@ function renderHomeDashboard(yearFilter) {
     tr.style.cursor = 'pointer';
     tr.onclick = () => {
       currentDepartment = dep.key;
+      currentFilter = '';
+      currentYearFilter = '';
+      if ($('statusFilter'))  $('statusFilter').value  = '';
+      if ($('empYearFilter')) $('empYearFilter').value = '';
       $('dashboardTitle').textContent = `${dep.label} ${t('dashboard')}`;
       setPage('dashboard');
       loadDashboard();
@@ -955,6 +991,12 @@ async function init() {
   // Status filter
   $('statusFilter').onchange = () => {
     currentFilter = $('statusFilter').value;
+    renderEmployeeTable(lastEmployees);
+  };
+
+  // Employee year filter
+  $('empYearFilter').onchange = () => {
+    currentYearFilter = $('empYearFilter').value;
     renderEmployeeTable(lastEmployees);
   };
 

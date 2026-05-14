@@ -295,6 +295,7 @@ button:active { transform: scale(.97); }
 }
 .home-dash-table {
   width: 100%;
+  table-layout: fixed;        /* 2.3 equal column widths */
   border-collapse: collapse;
   font-size: 14px;
 }
@@ -302,18 +303,21 @@ button:active { transform: scale(.97); }
   background: var(--blue);
   color: white;
   padding: 12px 16px;
-  text-align: left;
+  text-align: center;         /* 2.1 center headers */
   font-weight: 700;
+  width: calc(100% / 6);     /* 2.3 equal widths across 6 columns */
 }
 .home-dash-table td {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-light);
+  text-align: center;         /* 2.1 center cell data */
 }
 .home-dash-table tbody tr { cursor: pointer; transition: background .12s; }
 .home-dash-table tbody tr:hover { background: var(--btn-bg); }
 .home-dash-table .dept-label { font-weight: 700; font-size: 15px; }
 .home-dash-table .num-cell { font-weight: 700; font-size: 15px; }
 .home-dash-table .num-cell.ok     { color: var(--ok); }
+.home-dash-table .num-cell.blue   { color: var(--blue2); }  /* 2.2 blue for training */
 .home-dash-table .num-cell.warn   { color: var(--warn); }
 .home-dash-table .num-cell.danger { color: var(--danger); }
 .home-dash-table tfoot .dash-total-row td {
@@ -535,10 +539,11 @@ textarea { min-height: 92px; resize: vertical; }
 .search-row {
   display: flex;
   gap: 8px;
-  flex: 1;
-  min-width: 220px;
+  flex: 0 0 auto;             /* 3.2 don't stretch to fill all space */
 }
-.search-row input { flex: 1; }
+.search-row input {
+  width: 160px;               /* 3.2 fixed reasonable width */
+}
 .filter-row {
   display: flex;
   gap: 8px;

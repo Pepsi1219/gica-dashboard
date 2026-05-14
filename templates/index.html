@@ -6,7 +6,7 @@
   <title>New Operator Monitoring</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=9" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=10" />
 </head>
 <body>
   <header class="topbar">
@@ -198,6 +198,9 @@
             <input id="searchEmployeeId" data-i18n-placeholder="employeeIdPlaceholder" placeholder="Employee ID" />
             <button id="searchBtn" data-i18n="search">Search</button>
           </div>
+          <select id="empYearFilter">
+            <option value="" data-i18n="allYears">ทุกปี</option>
+          </select>
           <select id="statusFilter">
             <option value="" data-i18n="filterAll">ทั้งหมด</option>
             <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
@@ -237,6 +240,6 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=9"></script>
+  <script src="/static/js/app.js?v=10"></script>
 </body>
 </html>
