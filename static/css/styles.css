@@ -303,14 +303,14 @@ button:active { transform: scale(.97); }
   background: var(--blue);
   color: white;
   padding: 12px 16px;
-  text-align: center;         /* 2.1 center headers */
+  text-align: left;         /* 2.1 center headers */
   font-weight: 700;
   width: calc(100% / 6);     /* 2.3 equal widths across 6 columns */
 }
 .home-dash-table td {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-light);
-  text-align: center;         /* 2.1 center cell data */
+  text-align: left;         /* 2.1 center cell data */
 }
 .home-dash-table tbody tr { cursor: pointer; transition: background .12s; }
 .home-dash-table tbody tr:hover { background: var(--btn-bg); }
