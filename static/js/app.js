@@ -106,6 +106,11 @@ const TRANSLATIONS = {
     colEmployeesLeave:      'วันลา',
     workMode5d:             'ทำงาน 5 วัน',
     workMode6d:             'ทำงาน 6 วัน',
+    adminBtn:               'Admin',
+    tooltipEdit:            'แก้ไข',
+    tooltipConfirm:         'ยืนยัน',
+    tooltipCancel:          'ยกเลิก',
+    themeToggleTitle:       'เปลี่ยนธีม',
   },
   en: {
     appTitle:               'New Operator Monitoring',
@@ -213,6 +218,11 @@ const TRANSLATIONS = {
     colEmployeesLeave:      'Leave Days',
     workMode5d:             '5-day Week',
     workMode6d:             '6-day Week',
+    adminBtn:               'Admin',
+    tooltipEdit:            'Edit',
+    tooltipConfirm:         'Confirm',
+    tooltipCancel:          'Cancel',
+    themeToggleTitle:       'Toggle theme',
   },
   lo: {
     appTitle:               'New Operator Monitoring',
@@ -320,6 +330,11 @@ const TRANSLATIONS = {
     colEmployeesLeave:      'ວັນລາ',
     workMode5d:             'ເຮັດວຽກ 5 ວັນ',
     workMode6d:             'ເຮັດວຽກ 6 ວັນ',
+    adminBtn:               'Admin',
+    tooltipEdit:            'ແກ້ໄຂ',
+    tooltipConfirm:         'ຢືນຢັນ',
+    tooltipCancel:          'ຍົກເລີກ',
+    themeToggleTitle:       'ປ່ຽນຮູບແບບ',
   },
   vi: {
     appTitle:               'New Operator Monitoring',
@@ -427,6 +442,11 @@ const TRANSLATIONS = {
     colEmployeesLeave:      'Ngày nghỉ',
     workMode5d:             'Tuần 5 ngày',
     workMode6d:             'Tuần 6 ngày',
+    adminBtn:               'Admin',
+    tooltipEdit:            'Chỉnh sửa',
+    tooltipConfirm:         'Xác nhận',
+    tooltipCancel:          'Hủy',
+    themeToggleTitle:       'Đổi giao diện',
   },
 };
 
@@ -464,6 +484,9 @@ function applyTranslations() {
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.title = t(el.dataset.i18nTitle);
   });
   document.documentElement.lang = currentLang;
 }
@@ -700,7 +723,7 @@ function buildRowHTML(emp, calc, actualKey) {
   const leave = parseInt(emp['Employees Leave'], 10) || 0;
 
   return `
-    <td class="td-actions"><button class="btn-row-edit" data-id="${empId}" title="Edit">✏</button></td>
+    <td class="td-actions"><button class="btn-row-edit" data-id="${empId}" title="${t('tooltipEdit')}">✏</button></td>
     <td>${esc(emp['Employee ID']   || '')}</td>
     <td>${esc(emp['Employee Name'] || '')}</td>
     <td>${esc(emp['Grade']         || '')}</td>
@@ -729,8 +752,8 @@ function startInlineEdit(tr, emp, calc, actualKey) {
 
   tr.innerHTML = `
     <td class="td-actions">
-      <button class="btn-confirm-inline" title="ยืนยัน">✓</button>
-      <button class="btn-cancel-inline"  title="ยกเลิก">✗</button>
+      <button class="btn-confirm-inline" title="${t('tooltipConfirm')}">✓</button>
+      <button class="btn-cancel-inline"  title="${t('tooltipCancel')}">✗</button>
     </td>
     <td>${esc(emp['Employee ID'] || '')}</td>
     <td><input class="inline-edit" name="Employee Name" value="${esc(emp['Employee Name'] || '')}"></td>
@@ -833,17 +856,19 @@ function renderEmployeeTable(employees) {
     : employees;
 
   let total = yearScoped.length;
-  let completed = 0, underOp = 0, underBasic = 0, resignOp = 0, resignBasic = 0;
+  let completedOnTime = 0, completedOverdue = 0;
+  let underOp = 0, underBasic = 0, resignOp = 0, resignBasic = 0;
 
   yearScoped.forEach(emp => {
     const calc = emp.calculated || {};
     const actualKey = computeActualStatus(emp, calc);
 
-    if (actualKey === 'completed' || actualKey === 'completed-overdue') completed++;
-    else if (actualKey === 'under-operation')  underOp++;
-    else if (actualKey === 'under-basic')      underBasic++;
-    else if (actualKey === 'resign-operation') resignOp++;
-    else if (actualKey === 'resign-basic')     resignBasic++;
+    if      (actualKey === 'completed')          completedOnTime++;
+    else if (actualKey === 'completed-overdue')  completedOverdue++;
+    else if (actualKey === 'under-operation')    underOp++;
+    else if (actualKey === 'under-basic')        underBasic++;
+    else if (actualKey === 'resign-operation')   resignOp++;
+    else if (actualKey === 'resign-basic')       resignBasic++;
 
     if (currentFilter && actualKey !== currentFilter) return;
 
@@ -854,14 +879,16 @@ function renderEmployeeTable(employees) {
     body.appendChild(tr);
   });
 
-  $('totalCount').textContent       = total;
-  $('onTrackCount').textContent     = completed;
-  $('trainingCount').textContent    = underOp + underBasic;
-  $('underOpCount').textContent     = underOp;
-  $('underBasicCount').textContent  = underBasic;
-  $('overdueCount').textContent     = resignOp + resignBasic;
-  $('resignOpCount').textContent    = resignOp;
-  $('resignBasicCount').textContent = resignBasic;
+  $('totalCount').textContent             = total;
+  $('onTrackCount').textContent           = completedOnTime + completedOverdue;
+  $('completedOnTimeCount').textContent   = completedOnTime;
+  $('completedOverdueCount').textContent  = completedOverdue;
+  $('trainingCount').textContent          = underOp + underBasic;
+  $('underOpCount').textContent           = underOp;
+  $('underBasicCount').textContent        = underBasic;
+  $('overdueCount').textContent           = resignOp + resignBasic;
+  $('resignOpCount').textContent          = resignOp;
+  $('resignBasicCount').textContent       = resignBasic;
 }
 
 // ===== DASHBOARD PAGE =====
@@ -917,7 +944,7 @@ async function loadHomeDashboard() {
 
   const sel = $('homeDashYearFilter');
   const prev = sel.value;
-  sel.innerHTML = `<option value="">${t('allYears')}</option>`;
+  sel.innerHTML = `<option value="" data-i18n="allYears">${t('allYears')}</option>`;
   [...years].sort().reverse().forEach(yr => {
     const opt = document.createElement('option');
     opt.value = yr;

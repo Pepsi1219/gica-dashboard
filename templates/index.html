@@ -6,7 +6,7 @@
   <title>New Operator Monitoring</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=21" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=24" />
 </head>
 <body>
   <header class="topbar">
@@ -15,15 +15,17 @@
       <p data-i18n="appSubtitle">New employee tracking system</p>
     </div>
     <div class="topbar-right">
-      <select id="langSelect" class="lang-select">
-        <option value="th">🇹🇭 ไทย</option>
-        <option value="en">🇬🇧 English</option>
-        <option value="lo">🇱🇦 ລາວ</option>
-        <option value="vi">🇻🇳 Tiếng Việt</option>
-      </select>
-      <button id="themeToggle" class="theme-toggle" title="Toggle theme">🌙</button>
+      <div class="topbar-controls">
+        <select id="langSelect" class="lang-select">
+          <option value="th">🇹🇭</option>
+          <option value="en">🇺🇸</option>
+          <option value="lo">🇱🇦</option>
+          <option value="vi">🇻🇳</option>
+        </select>
+        <button id="themeToggle" class="theme-toggle" data-i18n-title="themeToggleTitle" title="Toggle theme">🌙</button>
+        <button id="adminBtn" class="admin-topbar-btn hidden" data-i18n-title="adminBtn" title="Admin">⚙</button>
+      </div>
       <div id="authBox" class="auth-box"></div>
-      <button id="adminBtn" class="admin-topbar-btn hidden" title="Admin">⚙ Admin</button>
     </div>
   </header>
 
@@ -155,7 +157,20 @@
 
       <section class="stats">
         <div class="stat"><strong id="totalCount">0</strong><span data-i18n="total">Total</span></div>
-        <div class="stat ok"><strong id="onTrackCount">0</strong><span data-i18n="congratulations">สำเร็จการฝึก</span></div>
+        <div class="stat ok">
+          <strong id="onTrackCount">0</strong>
+          <span data-i18n="congratulations">สำเร็จการฝึก</span>
+          <div class="stat-sub">
+            <div class="stat-sub-row ok">
+              <strong id="completedOnTimeCount">0</strong>
+              <span data-i18n="statusOnTime">ตรงเวลา</span>
+            </div>
+            <div class="stat-sub-row ok">
+              <strong id="completedOverdueCount">0</strong>
+              <span data-i18n="statusOverdue">เกินกำหนด</span>
+            </div>
+          </div>
+        </div>
         <div class="stat training">
           <strong id="trainingCount">0</strong>
           <span data-i18n="training">กำลังฝึก</span>
@@ -240,6 +255,6 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=21"></script>
+  <script src="/static/js/app.js?v=24"></script>
 </body>
 </html>
