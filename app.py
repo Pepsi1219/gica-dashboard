@@ -381,12 +381,11 @@ def api_update_employee(department_key, employee_id):
     payload = request.json or {}
     holidays = payload.pop("_holidays", [])
     try:
+        # Note: Excel-managed columns (Due date, Remaining days, On time,
+        # Actual Status, Total Training Days) are NOT overwritten — they keep
+        # whatever value/formula Excel has. calc is still computed and returned
+        # so the UI can show status badges (completed-overdue, etc.).
         calc = calculate_status(payload, holidays)
-        payload["Due date"]                     = calc["due_date"]
-        payload["Remaining days (working days)"] = calc["remaining_days"] if calc["remaining_days"] is not None else ""
-        payload["On time"]                      = calc["on_time"]
-        payload["Actual Status"]                = calc["status"]
-        payload["Total Training Days"]          = calc["allowed_days"] if calc["allowed_days"] is not None else ""
         updated = call_graph(update_employee, department, employee_id, payload)
         updated["calculated"] = calc
         return jsonify({"message": "Updated", "employee": updated})

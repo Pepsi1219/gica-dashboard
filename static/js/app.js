@@ -76,6 +76,36 @@ const TRANSLATIONS = {
     statusTransferOperation:'โอนย้ายระหว่างฝึกขั้นตอน',
     statusTransferBasic:    'โอนย้ายระหว่างฝึกพื้นฐาน',
     ratio:                  'สัดส่วน',
+    analyticsTitle:         'สถิติเชิงลึก',
+    analyticsTotalTraining: 'ระยะเวลาฝึกรวม',
+    analyticsBasicTraining: 'ระยะเวลาฝึกพื้นฐาน',
+    analyticsOpTraining:    'ระยะเวลาฝึกขั้นตอนงาน',
+    analyticsResignDur:     'ระยะเวลาก่อนลาออก',
+    analyticsResignRatio:   'สัดส่วนการลาออก',
+    analyticsAvg:           'ค่าเฉลี่ย',
+    analyticsMin:           'ต่ำสุด',
+    analyticsMax:           'สูงสุด',
+    analyticsDays:          'วัน',
+    analyticsEmployees:     'คน',
+    analyticsResignTotal:   'ลาออกทั้งหมด',
+    analyticsResignOp:      'ระหว่างฝึกขั้นตอน',
+    analyticsResignBasic:   'ระหว่างฝึกพื้นฐาน',
+    analyticsNoData:        'ไม่มีข้อมูล',
+    analyticsAllDept:       'ทุกหน่วยงาน',
+    dayModeTotal:           'รวมทุกวัน',
+    dayMode5d:              'ทำงาน 5 วัน',
+    dayMode6d:              'ทำงาน 6 วัน',
+    chartsTitle:            'ภาพรวมสถานะ',
+    chartOverall:           'สถานะรวม',
+    chartGradBreakdown:     'การฝึกเสร็จ',
+    chartTrainingBreakdown: 'กำลังฝึก',
+    chartResignBreakdown:   'การลาออก',
+    statusOnTime:           'ตรงเวลา',
+    statusOverdue:          'เกินกำหนด',
+    statusTransfer:         'โอนย้าย',
+    colEmployeesLeave:      'วันลา',
+    workMode5d:             'ทำงาน 5 วัน',
+    workMode6d:             'ทำงาน 6 วัน',
   },
   en: {
     appTitle:               'New Operator Monitoring',
@@ -153,6 +183,36 @@ const TRANSLATIONS = {
     statusTransferOperation:'Transferred (Op Training)',
     statusTransferBasic:    'Transferred (Basic Training)',
     ratio:                  'Ratio',
+    analyticsTitle:         'Deep Analytics',
+    analyticsTotalTraining: 'Total Training Duration',
+    analyticsBasicTraining: 'Basic Training Duration',
+    analyticsOpTraining:    'Operation Training Duration',
+    analyticsResignDur:     'Duration Before Resign',
+    analyticsResignRatio:   'Resign Breakdown',
+    analyticsAvg:           'Average',
+    analyticsMin:           'Min',
+    analyticsMax:           'Max',
+    analyticsDays:          'days',
+    analyticsEmployees:     'employees',
+    analyticsResignTotal:   'Total Resigned',
+    analyticsResignOp:      'During Op Training',
+    analyticsResignBasic:   'During Basic Training',
+    analyticsNoData:        'No data',
+    analyticsAllDept:       'All departments',
+    dayModeTotal:           'Total',
+    dayMode5d:              '5-day Week',
+    dayMode6d:              '6-day Week',
+    chartsTitle:            'Status Overview',
+    chartOverall:           'Overall',
+    chartGradBreakdown:     'Graduation',
+    chartTrainingBreakdown: 'In Training',
+    chartResignBreakdown:   'Resignation',
+    statusOnTime:           'On time',
+    statusOverdue:          'Overdue',
+    statusTransfer:         'Transfer',
+    colEmployeesLeave:      'Leave Days',
+    workMode5d:             '5-day Week',
+    workMode6d:             '6-day Week',
   },
   lo: {
     appTitle:               'New Operator Monitoring',
@@ -230,6 +290,36 @@ const TRANSLATIONS = {
     statusTransferOperation:'ໂອນຍ້າຍລະຫວ່າງຝຶກຂັ້ນຕອນ',
     statusTransferBasic:    'ໂອນຍ້າຍລະຫວ່າງຝຶກພື້ນຖານ',
     ratio:                  'ອັດຕາສ່ວນ',
+    analyticsTitle:         'ສະຖິຕິຍ່ອຍ',
+    analyticsTotalTraining: 'ໄລຍະເວລາຝຶກທັງໝົດ',
+    analyticsBasicTraining: 'ໄລຍະເວລາຝຶກພື້ນຖານ',
+    analyticsOpTraining:    'ໄລຍະເວລາຝຶກຂັ້ນຕອນ',
+    analyticsResignDur:     'ໄລຍະເວລາກ່ອນລາອອກ',
+    analyticsResignRatio:   'ອັດຕາການລາອອກ',
+    analyticsAvg:           'ຄ່າສະເລ່ຍ',
+    analyticsMin:           'ຕ່ຳສຸດ',
+    analyticsMax:           'ສູງສຸດ',
+    analyticsDays:          'ວັນ',
+    analyticsEmployees:     'ຄົນ',
+    analyticsResignTotal:   'ລາອອກທັງໝົດ',
+    analyticsResignOp:      'ລະຫວ່າງຝຶກຂັ້ນຕອນ',
+    analyticsResignBasic:   'ລະຫວ່າງຝຶກພື້ນຖານ',
+    analyticsNoData:        'ບໍ່ມີຂໍ້ມູນ',
+    analyticsAllDept:       'ທຸກພະແນກ',
+    dayModeTotal:           'ທັງໝົດ',
+    dayMode5d:              'ເຮັດວຽກ 5 ວັນ',
+    dayMode6d:              'ເຮັດວຽກ 6 ວັນ',
+    chartsTitle:            'ພາບລວມສະຖານະ',
+    chartOverall:           'ສະຖານະລວມ',
+    chartGradBreakdown:     'ສຳເລັດການຝຶກ',
+    chartTrainingBreakdown: 'ກຳລັງຝຶກ',
+    chartResignBreakdown:   'ການລາອອກ',
+    statusOnTime:           'ຕົງເວລາ',
+    statusOverdue:          'ເກີນກຳນົດ',
+    statusTransfer:         'ໂອນຍ້າຍ',
+    colEmployeesLeave:      'ວັນລາ',
+    workMode5d:             'ເຮັດວຽກ 5 ວັນ',
+    workMode6d:             'ເຮັດວຽກ 6 ວັນ',
   },
   vi: {
     appTitle:               'New Operator Monitoring',
@@ -307,6 +397,36 @@ const TRANSLATIONS = {
     statusTransferOperation:'Chuyển bộ phận (Vận hành)',
     statusTransferBasic:    'Chuyển bộ phận (Cơ bản)',
     ratio:                  'Tỷ lệ',
+    analyticsTitle:         'Phân tích chuyên sâu',
+    analyticsTotalTraining: 'Thời gian đào tạo tổng',
+    analyticsBasicTraining: 'Thời gian đào tạo cơ bản',
+    analyticsOpTraining:    'Thời gian đào tạo vận hành',
+    analyticsResignDur:     'Thời gian trước khi nghỉ việc',
+    analyticsResignRatio:   'Phân tích nghỉ việc',
+    analyticsAvg:           'Trung bình',
+    analyticsMin:           'Min',
+    analyticsMax:           'Max',
+    analyticsDays:          'ngày',
+    analyticsEmployees:     'nhân viên',
+    analyticsResignTotal:   'Tổng nghỉ việc',
+    analyticsResignOp:      'Trong khi đào tạo vận hành',
+    analyticsResignBasic:   'Trong khi đào tạo cơ bản',
+    analyticsNoData:        'Không có dữ liệu',
+    analyticsAllDept:       'Tất cả bộ phận',
+    dayModeTotal:           'Tổng',
+    dayMode5d:              'Tuần 5 ngày',
+    dayMode6d:              'Tuần 6 ngày',
+    chartsTitle:            'Tổng quan trạng thái',
+    chartOverall:           'Trạng thái tổng',
+    chartGradBreakdown:     'Hoàn thành',
+    chartTrainingBreakdown: 'Đang đào tạo',
+    chartResignBreakdown:   'Nghỉ việc',
+    statusOnTime:           'Đúng hạn',
+    statusOverdue:          'Trễ hạn',
+    statusTransfer:         'Chuyển',
+    colEmployeesLeave:      'Ngày nghỉ',
+    workMode5d:             'Tuần 5 ngày',
+    workMode6d:             'Tuần 6 ngày',
   },
 };
 
@@ -319,6 +439,8 @@ let departments       = [];
 let holidays          = JSON.parse(localStorage.getItem('specialHolidays') || '[]');
 let lastEmployees     = [];
 let allDeptData       = {};   // home dashboard cache: { deptKey: [employees] }
+let currentAnalyticsDept = '';  // '' = all departments
+let currentDayMode    = 'total'; // 'total' | '5d' | '6d'  (Deep Analytics)
 let currentUser       = null;
 let lastCalc          = null;
 let currentLang       = localStorage.getItem('lang')  || 'th';
@@ -538,10 +660,14 @@ function computeActualStatus(emp, calc) {
   const basicStart = emp['Basic Start'];
   const resignDate = emp['Resign Date'];
   const transferDate = emp['Transfers Date'];
-  const dueDate    = (calc && calc.due_date) ? calc.due_date : '';
+  // Use the SAME Due date that the table displays (raw from Excel),
+  // normalized to YYYY-MM-DD so string-compare is reliable.
+  const dueDate = normalizeDateForInput(emp['Due date']) || '';
 
   if (hasData(opEnd)) {
     const opEndNorm = normalizeDateForInput(opEnd);
+    // Completed-overdue ONLY when Op End strictly later than Due date.
+    // Op End <= Due date → Completed (on time).
     if (dueDate && opEndNorm && opEndNorm > dueDate) return 'completed-overdue';
     return 'completed';
   }
@@ -555,13 +681,23 @@ function computeActualStatus(emp, calc) {
 }
 
 // ===== EMPLOYEE TABLE — VIEW ROW =====
+function fmtEff(val) {
+  if (val === '' || val === null || val === undefined) return '';
+  const n = parseFloat(val);
+  if (isNaN(n)) return '';
+  // stored as decimal ratio (0–1) → multiply to get percent
+  const pct = n <= 1 ? n * 100 : n;
+  return pct % 1 === 0 ? pct + '%' : pct.toFixed(1) + '%';
+}
+
 function buildRowHTML(emp, calc, actualKey) {
   const nd  = (v) => escapeHtml(normalizeDateForInput(v) || '');
   const esc = escapeHtml;
-  const gradEff = (emp['Graduate Eff'] !== undefined && emp['Graduate Eff'] !== '') ? emp['Graduate Eff'] : '';
   const badgeClass = statusBadgeClass(actualKey);
   const statusLabel = t(STATUS_KEY_MAP[actualKey] || actualKey);
   const empId = esc(String(emp['Employee ID'] || ''));
+
+  const leave = parseInt(emp['Employees Leave'], 10) || 0;
 
   return `
     <td class="td-actions"><button class="btn-row-edit" data-id="${empId}" title="Edit">✏</button></td>
@@ -569,15 +705,16 @@ function buildRowHTML(emp, calc, actualKey) {
     <td>${esc(emp['Employee Name'] || '')}</td>
     <td>${esc(emp['Grade']         || '')}</td>
     <td>${nd(emp['CSA Start Date'])}</td>
-    <td>${esc(calc.due_date        || '')}</td>
+    <td>${nd(emp['Due date'])}</td>
     <td>${nd(emp['Basic Start'])}</td>
     <td>${nd(emp['Basic End'])}</td>
     <td>${nd(emp['Operation Start'])}</td>
     <td>${nd(emp['Operation End'])}</td>
     <td>${nd(emp['Resign Date'])}</td>
     <td>${nd(emp['Transfers Date'])}</td>
-    <td>${esc(String(gradEff))}</td>
+    <td>${esc(fmtEff(emp['Graduate Eff']))}</td>
     <td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td>
+    <td class="leave-cell">${leave}</td>
   `;
 }
 
@@ -587,6 +724,8 @@ function startInlineEdit(tr, emp, calc, actualKey) {
   const nd    = (v) => normalizeDateForInput(v) || '';
   const esc   = escapeHtml;
   const grade = emp['Grade'] || '';
+
+  const leave = parseInt(emp['Employees Leave'], 10) || 0;
 
   tr.innerHTML = `
     <td class="td-actions">
@@ -605,7 +744,7 @@ function startInlineEdit(tr, emp, calc, actualKey) {
       </select>
     </td>
     <td><input class="inline-edit" type="date" name="CSA Start Date"   value="${nd(emp['CSA Start Date'])}"></td>
-    <td>${esc(calc.due_date || '')}</td>
+    <td>${nd(emp['Due date'])}</td>
     <td><input class="inline-edit" type="date" name="Basic Start"      value="${nd(emp['Basic Start'])}"></td>
     <td><input class="inline-edit" type="date" name="Basic End"        value="${nd(emp['Basic End'])}"></td>
     <td><input class="inline-edit" type="date" name="Operation Start"  value="${nd(emp['Operation Start'])}"></td>
@@ -614,6 +753,7 @@ function startInlineEdit(tr, emp, calc, actualKey) {
     <td><input class="inline-edit" type="date" name="Transfers Date"   value="${nd(emp['Transfers Date'])}"></td>
     <td><input class="inline-edit" type="number" name="Graduate Eff"   value="${esc(String(emp['Graduate Eff'] ?? ''))}" min="0" max="100" step="0.01"></td>
     <td><span class="badge ${statusBadgeClass(actualKey)}">${esc(t(STATUS_KEY_MAP[actualKey] || actualKey))}</span></td>
+    <td><input class="inline-edit" type="number" name="Employees Leave" value="${leave}" min="0" step="1"></td>
   `;
 }
 
@@ -684,10 +824,18 @@ function renderEmployeeTable(employees) {
   const body = $('employeeTableBody');
   body.innerHTML = '';
 
-  let total = employees.length;
+  // #1 stats follow the year filter
+  const yearScoped = currentYearFilter
+    ? employees.filter(emp => {
+        const d = normalizeDateForInput(emp['CSA Start Date']);
+        return d && d.slice(0, 4) === currentYearFilter;
+      })
+    : employees;
+
+  let total = yearScoped.length;
   let completed = 0, underOp = 0, underBasic = 0, resignOp = 0, resignBasic = 0;
 
-  employees.forEach(emp => {
+  yearScoped.forEach(emp => {
     const calc = emp.calculated || {};
     const actualKey = computeActualStatus(emp, calc);
 
@@ -698,10 +846,6 @@ function renderEmployeeTable(employees) {
     else if (actualKey === 'resign-basic')     resignBasic++;
 
     if (currentFilter && actualKey !== currentFilter) return;
-    if (currentYearFilter) {
-      const d = normalizeDateForInput(emp['CSA Start Date']);
-      if (!d || d.slice(0, 4) !== currentYearFilter) return;
-    }
 
     const tr = document.createElement('tr');
     tr.className = `actual-${actualKey}`;
@@ -743,10 +887,12 @@ async function loadDashboard() {
 
 // ===== HOME DASHBOARD =====
 async function loadHomeDashboard() {
-  const loadingEl = $('homeDashLoading');
-  const gridEl    = $('homeDashGrid');
+  const loadingEl    = $('homeDashLoading');
+  const gridEl       = $('homeDashGrid');
+  const analyticsEl  = $('homeDashAnalytics');
   show(loadingEl);
   hide(gridEl);
+  hide(analyticsEl);
 
   const query = getHolidayQuery();
   const results = await Promise.allSettled(
@@ -783,6 +929,329 @@ async function loadHomeDashboard() {
   hide(loadingEl);
   show(gridEl);
   renderHomeDashboard(sel.value);
+}
+
+// ===== ANALYTICS HELPERS =====
+// mode: 'total' = calendar-day diff (b - a)
+//       '5d'    = count weekdays (Mon-Fri) in [a..b] inclusive
+//       '6d'    = count non-Sundays in [a..b] inclusive
+function dateDiffDays(rawA, rawB, mode) {
+  const a = normalizeDateForInput(rawA);
+  const b = normalizeDateForInput(rawB);
+  if (!a || !b) return null;
+  const dA = new Date(a);
+  const dB = new Date(b);
+  if (isNaN(dA) || isNaN(dB) || dB < dA) return null;
+
+  if (!mode || mode === 'total') {
+    return Math.round((dB - dA) / 86400000);
+  }
+  // Inclusive count between dA and dB
+  let count = 0;
+  const cur = new Date(dA);
+  while (cur <= dB) {
+    const dow = cur.getDay();  // 0=Sun, 6=Sat
+    if (mode === '5d' && dow !== 0 && dow !== 6) count++;
+    else if (mode === '6d' && dow !== 0)         count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+// SVG donut chart. segments = [{value, color, label}]
+function donutSVG(segments, size) {
+  size = size || 130;
+  const total = segments.reduce((s, seg) => s + (seg.value || 0), 0);
+  const cx = size / 2, cy = size / 2;
+  const r  = size / 2 - 12;
+  const sw = 22;
+  const C  = 2 * Math.PI * r;
+
+  if (total === 0) {
+    return `<svg viewBox="0 0 ${size} ${size}" class="donut-svg">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"/>
+      <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" fill="var(--text-muted)">${escapeHtml(t('analyticsNoData'))}</text>
+    </svg>`;
+  }
+
+  let offset = 0;
+  const paths = segments.filter(s => s.value > 0).map(seg => {
+    const len = (seg.value / total) * C;
+    const dash = `${len} ${C - len}`;
+    const html = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${sw}" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    offset += len;
+    return html;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${size} ${size}" class="donut-svg">
+    ${paths}
+    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="22" font-weight="800" fill="currentColor">${total}</text>
+    <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${escapeHtml(t('analyticsEmployees'))}</text>
+  </svg>`;
+}
+
+// Build a chart card (donut + legend)
+function chartCard(title, segments) {
+  const total = segments.reduce((s, seg) => s + (seg.value || 0), 0);
+  const legend = segments.map(seg => {
+    const pct = total > 0 ? (seg.value / total * 100).toFixed(1) : 0;
+    return `
+      <div class="legend-row">
+        <span class="legend-dot" style="background:${seg.color}"></span>
+        <span class="legend-label">${escapeHtml(seg.label)}</span>
+        <span class="legend-count">${seg.value} <span class="pct-sm">(${pct}%)</span></span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="chart-card">
+      <div class="chart-title">${escapeHtml(title)}</div>
+      <div class="chart-svg-wrap">${donutSVG(segments)}</div>
+      <div class="chart-legend">${legend}</div>
+    </div>`;
+}
+
+function statSummary(values) {
+  if (!values.length) return null;
+  const avg = values.reduce((s, v) => s + v, 0) / values.length;
+  return {
+    avg: Math.round(avg * 10) / 10,
+    min: Math.min(...values),
+    max: Math.max(...values),
+    n:   values.length,
+  };
+}
+
+function computeAnalytics(yearFilter, deptFilter, dayMode) {
+  // 1.3 if deptFilter is set, only use that department's data; else aggregate all
+  const all = deptFilter
+    ? (allDeptData[deptFilter] || [])
+    : Object.values(allDeptData).flat();
+  const filtered = yearFilter
+    ? all.filter(emp => {
+        const d = normalizeDateForInput(emp['CSA Start Date']);
+        return d && d.slice(0, 4) === yearFilter;
+      })
+    : all;
+
+  const totalDays = [], basicDays = [], opDays = [], resignDays = [];
+  // status counts for chart visualization
+  const sc = {
+    completed: 0, completedOverdue: 0,
+    underOp: 0, underBasic: 0,
+    resignOp: 0, resignBasic: 0,
+    transferOp: 0, transferBasic: 0,
+  };
+
+  filtered.forEach(emp => {
+    const status = computeActualStatus(emp, emp.calculated || {});
+
+    // Status tallies for charts
+    if      (status === 'completed')           sc.completed++;
+    else if (status === 'completed-overdue')   sc.completedOverdue++;
+    else if (status === 'under-operation')     sc.underOp++;
+    else if (status === 'under-basic')         sc.underBasic++;
+    else if (status === 'resign-operation')    sc.resignOp++;
+    else if (status === 'resign-basic')        sc.resignBasic++;
+    else if (status === 'transfer-operation')  sc.transferOp++;
+    else if (status === 'transfer-basic')      sc.transferBasic++;
+
+    // 1.1 Total training: Operation End - CSA Start Date
+    const d11 = dateDiffDays(emp['CSA Start Date'], emp['Operation End'], dayMode);
+    if (d11 !== null) totalDays.push(d11);
+
+    // 1.2 Basic training: Basic End - Basic Start
+    const d12 = dateDiffDays(emp['Basic Start'], emp['Basic End'], dayMode);
+    if (d12 !== null) basicDays.push(d12);
+
+    // 1.3 Operation training: Operation End - Operation Start
+    const d13 = dateDiffDays(emp['Operation Start'], emp['Operation End'], dayMode);
+    if (d13 !== null) opDays.push(d13);
+
+    // 1.4 Resign duration
+    if (status === 'resign-operation' || status === 'resign-basic') {
+      const d14 = dateDiffDays(emp['CSA Start Date'], emp['Resign Date'], dayMode);
+      if (d14 !== null) resignDays.push(d14);
+    }
+  });
+
+  return {
+    total:      statSummary(totalDays),
+    basic:      statSummary(basicDays),
+    operation:  statSummary(opDays),
+    resign:     statSummary(resignDays),
+    resignOp:   sc.resignOp,
+    resignBasic: sc.resignBasic,
+    resignTotal: sc.resignOp + sc.resignBasic,
+    statusCounts: sc,
+  };
+}
+
+function renderAnalytics(yearFilter) {
+  const el = $('homeDashAnalytics');
+  if (!el) return;
+  if (!Object.keys(allDeptData).length) { hide(el); return; }
+
+  const s = computeAnalytics(yearFilter, currentAnalyticsDept, currentDayMode);
+  const sc = s.statusCounts;
+
+  // ── Chart palette ──────────────────────────────────────────────────────
+  const C = {
+    grad:      'rgba(34,197,94,.88)',      // green (graduation)
+    gradLight: 'rgba(167,243,208,.95)',    // light green (overdue grad)
+    train:     'rgba(59,130,246,.88)',     // blue (training)
+    trainLight:'rgba(147,197,253,.95)',    // light blue (basic)
+    resign:    'rgba(220,38,38,.92)',      // red (resign)
+    resignLight:'rgba(252,165,165,.95)',   // light red (resign basic)
+    transfer:  'rgba(168,85,247,.85)',     // purple (transfer)
+  };
+
+  // Build the 4 chart datasets
+  const gradTotal     = sc.completed + sc.completedOverdue;
+  const trainingTotal = sc.underOp + sc.underBasic;
+  const resignTotalC  = sc.resignOp + sc.resignBasic;
+  const transferTotal = sc.transferOp + sc.transferBasic;
+
+  const chartOverall = chartCard(t('chartOverall'), [
+    { value: gradTotal,     color: C.grad,     label: t('congratulations') },
+    { value: trainingTotal, color: C.train,    label: t('training') },
+    { value: resignTotalC,  color: C.resign,   label: t('resignation') },
+    { value: transferTotal, color: C.transfer, label: t('statusTransfer') },
+  ]);
+  const chartGrad = chartCard(t('chartGradBreakdown'), [
+    { value: sc.completed,        color: C.grad,      label: t('statusOnTime') },
+    { value: sc.completedOverdue, color: C.gradLight, label: t('statusOverdue') },
+  ]);
+  const chartTraining = chartCard(t('chartTrainingBreakdown'), [
+    { value: sc.underOp,    color: C.train,      label: t('statusUnderOperation') },
+    { value: sc.underBasic, color: C.trainLight, label: t('statusUnderBasic') },
+  ]);
+  const chartResign = chartCard(t('chartResignBreakdown'), [
+    { value: sc.resignOp,    color: C.resign,      label: t('statusResignOperation') },
+    { value: sc.resignBasic, color: C.resignLight, label: t('statusResignBasic') },
+  ]);
+
+  const fmtStatCard = (stat) => {
+    if (!stat) return `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
+    const avgFmt = stat.avg % 1 === 0 ? stat.avg : stat.avg.toFixed(1);
+    return `
+      <div class="ac-avg-label">${t('analyticsAvg')}</div>
+      <div class="ac-avg-value">${avgFmt} <span class="ac-unit">${t('analyticsDays')}</span></div>
+      <div class="ac-minmax">
+        <div class="ac-minmax-item">
+          <span class="ac-minmax-label">${t('analyticsMin')}</span>
+          <span class="ac-minmax-value">${stat.min} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+        </div>
+        <div class="ac-minmax-item">
+          <span class="ac-minmax-label">${t('analyticsMax')}</span>
+          <span class="ac-minmax-value">${stat.max} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+        </div>
+      </div>`;
+  };
+
+  const rTotal = s.resignTotal;
+  const rOpPct = rTotal > 0 ? (s.resignOp  / rTotal * 100).toFixed(1) : 0;
+  const rBaPct = rTotal > 0 ? (s.resignBasic / rTotal * 100).toFixed(1) : 0;
+
+  // 1.2b colors: resign-op = solid red, resign-basic = light red
+  const COLOR_OP    = 'rgba(220,38,38,.92)';
+  const COLOR_BASIC = 'rgba(252,165,165,.95)';
+
+  const resignRatioCard = rTotal > 0 ? `
+    <div class="ac-resign-total-label">${t('analyticsResignTotal')}</div>
+    <div class="ac-resign-total-value">${rTotal}</div>
+    <div class="ac-resign-types">
+      <div class="ac-resign-type">
+        <div class="ac-resign-dot" style="background:${COLOR_OP}"></div>
+        <span class="ac-resign-label">${t('analyticsResignOp')}</span>
+        <span class="ac-resign-count">${s.resignOp} <span class="pct-sm">(${rOpPct}%)</span></span>
+      </div>
+      <div class="ac-resign-type">
+        <div class="ac-resign-dot" style="background:${COLOR_BASIC}"></div>
+        <span class="ac-resign-label">${t('analyticsResignBasic')}</span>
+        <span class="ac-resign-count">${s.resignBasic} <span class="pct-sm">(${rBaPct}%)</span></span>
+      </div>
+    </div>
+    <div class="ratio-bar ac-resign-bar">
+      <div class="ratio-seg" style="width:${rOpPct}%;background:${COLOR_OP}"></div>
+      <div class="ratio-seg" style="width:${rBaPct}%;background:${COLOR_BASIC}"></div>
+    </div>`
+    : `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
+
+  // 1.3 Department filter dropdown
+  const deptOptions = [`<option value="">${escapeHtml(t('analyticsAllDept'))}</option>`]
+    .concat(departments.map(d =>
+      `<option value="${escapeHtml(d.key)}"${d.key === currentAnalyticsDept ? ' selected' : ''}>${escapeHtml(d.label)}</option>`
+    )).join('');
+
+  // Day-mode button group
+  const dayBtn = (mode, label) =>
+    `<button type="button" class="day-mode-btn${currentDayMode === mode ? ' active' : ''}" data-mode="${mode}">${escapeHtml(label)}</button>`;
+
+  el.innerHTML = `
+    <div class="analytics-section-hdr">
+      <h3>${t('analyticsTitle')}</h3>
+      <div class="day-mode-btn-group" id="dayModeBtnGroup">
+        ${dayBtn('total', t('dayModeTotal'))}
+        ${dayBtn('5d',    t('dayMode5d'))}
+        ${dayBtn('6d',    t('dayMode6d'))}
+      </div>
+      <select id="analyticsDeptFilter" class="year-select analytics-dept-select">
+        ${deptOptions}
+      </select>
+    </div>
+
+    <div class="charts-grid">
+      ${chartOverall}
+      ${chartGrad}
+      ${chartTraining}
+      ${chartResign}
+    </div>
+
+    <div class="analytics-grid">
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsTotalTraining')}</span></div>
+        ${fmtStatCard(s.total)}
+      </div>
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsBasicTraining')}</span></div>
+        ${fmtStatCard(s.basic)}
+      </div>
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsOpTraining')}</span></div>
+        ${fmtStatCard(s.operation)}
+      </div>
+      <div class="analytic-card ac-danger">
+        <div class="ac-header"><span class="ac-title">${t('analyticsResignDur')}</span></div>
+        ${fmtStatCard(s.resign)}
+      </div>
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsResignRatio')}</span></div>
+        ${resignRatioCard}
+      </div>
+    </div>`;
+
+  // wire dept-filter change → re-render analytics (table stays as-is)
+  const deptSel = $('analyticsDeptFilter');
+  if (deptSel) {
+    deptSel.onchange = () => {
+      currentAnalyticsDept = deptSel.value;
+      renderAnalytics(yearFilter);
+    };
+  }
+
+  // wire day-mode buttons
+  const btnGroup = $('dayModeBtnGroup');
+  if (btnGroup) {
+    btnGroup.querySelectorAll('.day-mode-btn').forEach(btn => {
+      btn.onclick = () => {
+        currentDayMode = btn.dataset.mode;
+        renderAnalytics(yearFilter);
+      };
+    });
+  }
+
+  show(el);
 }
 
 function buildDashRow(tr, label, total, completed, training, resign) {
@@ -883,7 +1352,12 @@ function renderHomeDashboard(yearFilter) {
   frow.className = 'dash-total-row';
   buildDashRow(frow, t('total'), grandTotal, grandCompleted, grandTraining, grandResign);
 
-  gridEl.appendChild(table);
+  // 1.4 wrap in scrollable container so it doesn't overflow on small screens
+  const wrap = document.createElement('div');
+  wrap.className = 'home-dash-table-wrap';
+  wrap.appendChild(table);
+  gridEl.appendChild(wrap);
+  renderAnalytics(yearFilter);
 }
 
 // ===== OPEN EDIT MODAL (search) =====
@@ -953,7 +1427,7 @@ function fillEditForm(emp) {
   $('statusBadge').className     = `badge ${statusBadgeClass(computeActualStatus(emp, calc))}`;
   $('remainingDays').textContent = calc.remaining_days ?? '-';
   $('progressBar').style.width   = `${calc.progress || 0}%`;
-  $('dueDateText').textContent   = `${t('dueDate')}: ${calc.due_date || '-'}`;
+  $('dueDateText').textContent   = `${t('dueDate')}: ${normalizeDateForInput(emp['Due date']) || calc.due_date || '-'}`;
 }
 
 async function saveEditForm(event) {

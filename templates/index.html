@@ -6,7 +6,7 @@
   <title>New Operator Monitoring</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=10" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=21" />
 </head>
 <body>
   <header class="topbar">
@@ -23,11 +23,9 @@
       </select>
       <button id="themeToggle" class="theme-toggle" title="Toggle theme">🌙</button>
       <div id="authBox" class="auth-box"></div>
+      <button id="adminBtn" class="admin-topbar-btn hidden" title="Admin">⚙ Admin</button>
     </div>
   </header>
-
-  <!-- Admin Floating Action Button -->
-  <button id="adminBtn" class="admin-fab hidden" title="Admin">⚙</button>
 
   <!-- Register Modal -->
   <div id="registerModal" class="modal-overlay hidden">
@@ -141,6 +139,7 @@
         </div>
         <p id="homeDashLoading" class="hint" data-i18n="loading">กำลังโหลด...</p>
         <div id="homeDashGrid" class="hidden"></div>
+        <div id="homeDashAnalytics" class="hidden"></div>
       </section>
     </section>
 
@@ -157,15 +156,15 @@
       <section class="stats">
         <div class="stat"><strong id="totalCount">0</strong><span data-i18n="total">Total</span></div>
         <div class="stat ok"><strong id="onTrackCount">0</strong><span data-i18n="congratulations">สำเร็จการฝึก</span></div>
-        <div class="stat warn">
+        <div class="stat training">
           <strong id="trainingCount">0</strong>
           <span data-i18n="training">กำลังฝึก</span>
           <div class="stat-sub">
-            <div class="stat-sub-row warn">
+            <div class="stat-sub-row training">
               <strong id="underOpCount">0</strong>
               <span data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</span>
             </div>
-            <div class="stat-sub-row warn">
+            <div class="stat-sub-row training">
               <strong id="underBasicCount">0</strong>
               <span data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</span>
             </div>
@@ -231,6 +230,7 @@
                 <th data-i18n="colTransferDate">วันโอนย้าย</th>
                 <th data-i18n="colGradEff">ประสิทธิภาพ</th>
                 <th data-i18n="colActualStatus">สถานะจริง</th>
+                <th data-i18n="colEmployeesLeave">วันลา</th>
               </tr>
             </thead>
             <tbody id="employeeTableBody"></tbody>
@@ -240,6 +240,6 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=10"></script>
+  <script src="/static/js/app.js?v=21"></script>
 </body>
 </html>
