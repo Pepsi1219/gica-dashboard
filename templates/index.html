@@ -6,7 +6,7 @@
   <title>New Operator Monitoring</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=32" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=36" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -29,6 +29,7 @@
         <button id="adminBtn" class="admin-topbar-btn hidden" data-i18n-title="adminBtn" title="Admin">⚙</button>
       </div>
       <div id="authBox" class="auth-box"></div>
+      <span id="roleBadge" class="role-badge hidden"></span>
     </div>
   </header>
 
@@ -124,12 +125,13 @@
     <section id="loginPanel" class="card hero hidden">
       <h2 data-i18n="loginTitle">เข้าสู่ระบบด้วย Microsoft Account</h2>
       <a class="primary-link" href="/login" data-i18n="loginBtn">Sign in with Microsoft</a>
+      <button id="managerLoginBtn" class="manager-login-btn" data-i18n="managerLoginBtn">สำหรับ CSA Manager</button>
     </section>
 
     <!-- Home Page -->
     <section id="homePage" class="page hidden">
       <section class="card home-card">
-        <h2 data-i18n="selectDept">เลือกหน่วยงาน</h2>
+        <h2 data-i18n="selectDept">เลือก BU</h2>
         <div id="departmentGrid" class="department-grid"></div>
       </section>
 
@@ -284,6 +286,6 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=32"></script>
+  <script src="/static/js/app.js?v=36"></script>
 </body>
 </html>

@@ -5,10 +5,10 @@ const TRANSLATIONS = {
     appSubtitle:            'ระบบติดตามข้อมูลพนักงานใหม่',
     loginTitle:             'เข้าสู่ระบบด้วย Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'เลือกหน่วยงาน',
+    selectDept:             'เลือก BU',
     overallDashboard:       'ภาพรวมทั้งหมด',
     allYears:               'ทุกปี',
-    department:             'หน่วยงาน',
+    department:             'BU',
     adminTitle:             'ตั้งค่าผู้ดูแลระบบ',
     holidaySection:         'กำหนดวันหยุดพิเศษ',
     addHoliday:             'เพิ่มวันหยุด',
@@ -121,16 +121,19 @@ const TRANSLATIONS = {
     trendResigned:          'ลาออก',
     trendMonth:             'เดือน',
     yearLabel:              'ปี',
+    managerLoginBtn:        'สำหรับ CSA Manager',
+    managerModeBadge:       'CSA Manager (อ่านอย่างเดียว)',
+    managerLoginFailed:     'ไม่สามารถเข้าสู่ระบบ CSA Manager ได้',
   },
   en: {
     appTitle:               'New Operator Monitoring',
     appSubtitle:            'New employee tracking system',
     loginTitle:             'Sign in with Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'Select Department',
+    selectDept:             'Select BU',
     overallDashboard:       'Overall Dashboard',
     allYears:               'All Years',
-    department:             'Department',
+    department:             'BU',
     adminTitle:             'Admin Settings',
     holidaySection:         'Configure Special Holidays',
     addHoliday:             'Add Holiday',
@@ -243,16 +246,19 @@ const TRANSLATIONS = {
     trendResigned:          'Resigned',
     trendMonth:             'Month',
     yearLabel:              'Year',
+    managerLoginBtn:        'For CSA Manager',
+    managerModeBadge:       'CSA Manager (View Only)',
+    managerLoginFailed:     'Could not sign in as CSA Manager',
   },
   lo: {
     appTitle:               'New Operator Monitoring',
     appSubtitle:            'ລະບົບຕິດຕາມພະນັກງານໃໝ່',
     loginTitle:             'ເຂົ້າສູ່ລະບົບດ້ວຍ Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'ເລືອກພະແນກ',
+    selectDept:             'ເລືອກ BU',
     overallDashboard:       'ພາບລວມທັງໝົດ',
     allYears:               'ທຸກປີ',
-    department:             'ພະແນກ',
+    department:             'BU',
     adminTitle:             'ຕັ້ງຄ່າຜູ້ດູແລລະບົບ',
     holidaySection:         'ກຳນົດວັນຫຍຸດພິເສດ',
     addHoliday:             'ເພີ່ມວັນຫຍຸດ',
@@ -365,16 +371,19 @@ const TRANSLATIONS = {
     trendResigned:          'ລາອອກ',
     trendMonth:             'ເດືອນ',
     yearLabel:              'ປີ',
+    managerLoginBtn:        'ສຳລັບ CSA Manager',
+    managerModeBadge:       'CSA Manager (ອ່ານຢ່າງດຽວ)',
+    managerLoginFailed:     'ບໍ່ສາມາດເຂົ້າສູ່ລະບົບ CSA Manager ໄດ້',
   },
   vi: {
     appTitle:               'New Operator Monitoring',
     appSubtitle:            'Hệ thống theo dõi nhân viên mới',
     loginTitle:             'Đăng nhập bằng tài khoản Microsoft',
     loginBtn:               'Sign in with Microsoft',
-    selectDept:             'Chọn bộ phận',
+    selectDept:             'Chọn BU',
     overallDashboard:       'Tổng quan',
     allYears:               'Tất cả năm',
-    department:             'Bộ phận',
+    department:             'BU',
     adminTitle:             'Cài đặt Admin',
     holidaySection:         'Cấu hình ngày nghỉ đặc biệt',
     addHoliday:             'Thêm ngày nghỉ',
@@ -487,6 +496,9 @@ const TRANSLATIONS = {
     trendResigned:          'Nghỉ việc',
     trendMonth:             'Tháng',
     yearLabel:              'Năm',
+    managerLoginBtn:        'Dành cho CSA Manager',
+    managerModeBadge:       'CSA Manager (Chỉ xem)',
+    managerLoginFailed:     'Không thể đăng nhập CSA Manager',
   },
 };
 
@@ -514,6 +526,7 @@ function monthAbbr(idx) {
   return (MONTH_ABBR[currentLang] || MONTH_ABBR.en)[idx];
 }
 let currentUser       = null;
+let currentRole       = 'user';  // 'user' | 'manager' (view-only)
 let lastCalc          = null;
 let currentLang       = localStorage.getItem('lang')  || 'th';
 let currentTheme      = localStorage.getItem('theme') || 'light';
@@ -598,6 +611,11 @@ function initLang() {
     if (lastEmployees.length) renderEmployeeTable(lastEmployees);
     if (currentUser) {
       $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
+    }
+    // Refresh role badge text when language changes
+    if (currentRole === 'manager') {
+      const badge = $('roleBadge');
+      if (badge) badge.textContent = t('managerModeBadge');
     }
     if (lastCalc) {
       $('dueDateText').textContent = `${t('dueDate')}: ${lastCalc.due_date || '-'}`;
@@ -688,7 +706,7 @@ function renderHolidays() {
   holidays.forEach(date => {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.innerHTML = `${date} <button type="button">×</button>`;
+    chip.innerHTML = `${escapeHtml(date)} <button type="button">×</button>`;
     chip.querySelector('button').onclick = () => {
       holidays = holidays.filter(h => h !== date);
       localStorage.setItem('specialHolidays', JSON.stringify(holidays));
@@ -1936,6 +1954,21 @@ async function init() {
     }
   });
 
+  // Manager-login button: opens a view-only session w/o password
+  const managerBtn = $('managerLoginBtn');
+  if (managerBtn) {
+    managerBtn.onclick = async () => {
+      managerBtn.disabled = true;
+      try {
+        await api('/manager-login', { method: 'POST' });
+        window.location.reload();
+      } catch (err) {
+        managerBtn.disabled = false;
+        showMessage(err.message || t('managerLoginFailed'), true);
+      }
+    };
+  }
+
   // Check auth
   const me = await api('/api/me');
   if (!me.authenticated) {
@@ -1944,8 +1977,21 @@ async function init() {
   }
 
   currentUser = me.user;
+  currentRole = me.role || 'user';
+
+  // Apply view-only mode for CSA Manager sessions — hides all write controls
+  if (currentRole === 'manager') {
+    document.body.classList.add('view-only');
+    const badge = $('roleBadge');
+    if (badge) {
+      badge.textContent = t('managerModeBadge');
+      badge.classList.remove('hidden');
+    }
+  }
+
   $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
-  show($('adminBtn'));
+  // Admin panel is a write surface (holidays) — hide it for managers
+  if (currentRole !== 'manager') show($('adminBtn'));
 
   departments = await api('/api/departments');
   if (!Array.isArray(departments)) departments = [];

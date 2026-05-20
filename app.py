@@ -33,6 +33,13 @@ app.secret_key = FLASK_SECRET_KEY
 
 _IS_VERCEL = os.getenv("VERCEL", "") == "1"
 
+# Central read-only Microsoft account's refresh token, used by the
+# "CSA Manager" login mode (no password, view-only access).
+# Set this in your environment (e.g. .env or Vercel env vars) to enable.
+# Admin must keep this token valid — if the central account's refresh token
+# is invalidated, all manager sessions will lose Graph API access.
+MANAGER_REFRESH_TOKEN = os.getenv("MANAGER_REFRESH_TOKEN", "")
+
 app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
     SESSION_COOKIE_HTTPONLY=True,
@@ -167,6 +174,21 @@ def require_token():
     return token, None
 
 
+def is_manager():
+    """True when the session was opened via /manager-login (view-only)."""
+    return session.get("role") == "manager"
+
+
+def require_writable():
+    """Block writes for manager sessions. Returns (response, status) or None."""
+    if is_manager():
+        return jsonify({
+            "error": "Read-only access for CSA Manager",
+            "read_only": True,
+        }), 403
+    return None
+
+
 def get_department_or_404(department_key):
     dep = DEPARTMENTS.get(str(department_key or "").upper())
     if not dep:
@@ -256,6 +278,18 @@ def auth_callback():
 
     print(f"[AUTH] Login OK — {session['user']['name']}")
 
+    # ── Setup helper for CSA Manager mode ─────────────────────────────────────
+    # If the operator hasn't configured MANAGER_REFRESH_TOKEN yet, print the
+    # current login's refresh token so they can copy it into .env to enable
+    # the "CSA Manager" (view-only) button on the login screen.
+    if not MANAGER_REFRESH_TOKEN and result.get("refresh_token"):
+        print("\n" + "=" * 72)
+        print(" CSA MANAGER SETUP — copy the line below into your .env file")
+        print(" (only printed because MANAGER_REFRESH_TOKEN is not set yet)")
+        print("-" * 72)
+        print(f"MANAGER_REFRESH_TOKEN={result['refresh_token']}")
+        print("=" * 72 + "\n")
+
     # Return 200 + JS redirect instead of 302.
     # Some CDN/edge layers strip Set-Cookie from 302 responses.
     return """<!doctype html>
@@ -275,6 +309,38 @@ def logout():
     return redirect(url_for("index"))
 
 
+@app.route("/manager-login", methods=["POST"])
+def manager_login():
+    """Open a view-only session using the central MANAGER_REFRESH_TOKEN.
+    No password required — the caller just clicks the button.
+    Backend will refuse writes for this session role."""
+    if not MANAGER_REFRESH_TOKEN:
+        return jsonify({
+            "error": "CSA Manager mode is not configured on the server.",
+        }), 500
+
+    session.permanent = True
+    session["rt"] = MANAGER_REFRESH_TOKEN
+    session["user"] = {
+        "name":  "CSA Manager",
+        "email": "manager@view-only",
+        "oid":   "manager-shared",
+    }
+    session["role"] = "manager"
+
+    # Verify the central token actually works before returning success
+    token = get_valid_token()
+    if not token:
+        session.clear()
+        return jsonify({
+            "error": "Central manager token is invalid or expired. "
+                     "Ask an admin to refresh MANAGER_REFRESH_TOKEN.",
+        }), 500
+
+    print("[AUTH] CSA Manager session opened")
+    return jsonify({"ok": True})
+
+
 # ---------------------------------------------------------------------------
 # Routes — API
 # ---------------------------------------------------------------------------
@@ -285,8 +351,14 @@ def api_me():
     token = get_valid_token()
     user  = session.get("user")
     authenticated = bool(token) or bool(user)
-    print(f"[API/ME] authenticated={authenticated}  token={bool(token)}  user={bool(user)}")
-    return jsonify({"authenticated": authenticated, "user": user})
+    role  = session.get("role", "user")
+    print(f"[API/ME] authenticated={authenticated}  token={bool(token)}  user={bool(user)}  role={role}")
+    return jsonify({
+        "authenticated": authenticated,
+        "user": user,
+        "role": role,
+        "manager_available": bool(MANAGER_REFRESH_TOKEN),
+    })
 
 
 @app.route("/api/departments")
@@ -350,6 +422,9 @@ def api_create_employee(department_key):
     _, error = require_token()
     if error:
         return error
+    deny = require_writable()
+    if deny:
+        return deny
     department, error = get_department_or_404(department_key)
     if error:
         return error
@@ -374,6 +449,9 @@ def api_update_employee(department_key, employee_id):
     _, error = require_token()
     if error:
         return error
+    deny = require_writable()
+    if deny:
+        return deny
     department, error = get_department_or_404(department_key)
     if error:
         return error

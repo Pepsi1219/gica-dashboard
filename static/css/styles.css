@@ -147,6 +147,53 @@ body {
 .auth-box { color: rgba(255,255,255,.9); font-size: 13px; white-space: nowrap; }
 .auth-box a { color: white; font-weight: 700; text-decoration: underline; }
 
+/* CSA Manager view-only role badge in topbar */
+.role-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: rgba(255,255,255,.18);
+  border: 1px solid rgba(255,255,255,.30);
+  color: white;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  white-space: nowrap;
+}
+
+/* CSA Manager button on login panel (no password, view-only) */
+.manager-login-btn {
+  display: block;
+  margin: 14px auto 0;
+  padding: 10px 22px;
+  background: var(--surface);
+  color: var(--blue2);
+  border: 2px solid var(--blue2);
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.manager-login-btn:hover  { background: var(--blue2); color: white; filter: none; }
+.manager-login-btn:disabled { opacity: .6; cursor: progress; }
+
+/* ===== VIEW-ONLY MODE (CSA Manager) =====
+   Hides every control that could mutate data. Backend also rejects
+   POST/PATCH for these sessions as defense-in-depth. */
+.view-only #registerBtn,
+.view-only #adminBtn,
+.view-only .btn-row-edit,
+.view-only #editForm button[type="submit"] {
+  display: none !important;
+}
+.view-only #editForm input,
+.view-only #editForm select,
+.view-only #editForm textarea {
+  pointer-events: none;
+  background: var(--surface2);
+  opacity: 0.9;
+}
+
 /* Groups the 3 buttons (lang / theme / admin) so they stay together on one row,
    while authBox sits as its own flex item beside or below them. */
 .topbar-controls {
