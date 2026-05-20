@@ -176,6 +176,18 @@ body {
 }
 .manager-login-btn:hover  { background: var(--blue2); color: white; filter: none; }
 .manager-login-btn:disabled { opacity: .6; cursor: progress; }
+.manager-login-error {
+  margin: 12px auto 0;
+  max-width: 480px;
+  padding: 10px 14px;
+  background: var(--badge-danger-bg);
+  border-left: 4px solid var(--danger);
+  color: var(--danger);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
 
 /* ===== VIEW-ONLY MODE (CSA Manager) =====
    Hides every control that could mutate data. Backend also rejects

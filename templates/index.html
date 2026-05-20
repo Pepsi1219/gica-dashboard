@@ -6,7 +6,7 @@
   <title>New Operator Monitoring</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=36" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=37" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -126,6 +126,7 @@
       <h2 data-i18n="loginTitle">เข้าสู่ระบบด้วย Microsoft Account</h2>
       <a class="primary-link" href="/login" data-i18n="loginBtn">Sign in with Microsoft</a>
       <button id="managerLoginBtn" class="manager-login-btn" data-i18n="managerLoginBtn">สำหรับ CSA Manager</button>
+      <p id="managerLoginError" class="manager-login-error hidden"></p>
     </section>
 
     <!-- Home Page -->
@@ -286,6 +287,6 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=36"></script>
+  <script src="/static/js/app.js?v=37"></script>
 </body>
 </html>

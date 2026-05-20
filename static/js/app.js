@@ -1959,12 +1959,22 @@ async function init() {
   if (managerBtn) {
     managerBtn.onclick = async () => {
       managerBtn.disabled = true;
+      // Clear any prior error
+      const errEl = $('managerLoginError');
+      if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
       try {
         await api('/manager-login', { method: 'POST' });
         window.location.reload();
       } catch (err) {
         managerBtn.disabled = false;
-        showMessage(err.message || t('managerLoginFailed'), true);
+        const msg = err.message || t('managerLoginFailed');
+        // Show inline on the login panel (messageBox is in dashboard which is hidden here)
+        if (errEl) {
+          errEl.textContent = msg;
+          errEl.classList.remove('hidden');
+        } else {
+          showMessage(msg, true);
+        }
       }
     };
   }
