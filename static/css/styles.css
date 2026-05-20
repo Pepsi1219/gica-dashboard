@@ -302,6 +302,14 @@ button:hover, .primary-link:hover { filter: brightness(.93); }
 button:active { transform: scale(.97); }
 .primary, .primary-link { background: var(--blue2); color: white; }
 .primary:hover, .primary-link:hover { filter: brightness(.88); }
+.primary-link.disabled {
+  background: var(--text-muted);
+  color: rgba(255,255,255,.75);
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: .55;
+  filter: grayscale(.3);
+}
 
 /* ===== HOME PAGE ===== */
 .home-card {
