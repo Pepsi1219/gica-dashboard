@@ -716,6 +716,13 @@ button:active { transform: scale(.97); }
   background: var(--danger);
   border-color: var(--danger);
 }
+/* Red variant — used for Resign Breakdown "View by Grade" button */
+.ac-expand-btn.ac-expand-danger.open {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.ac-expand-btn.ac-expand-danger.open:hover { background: var(--danger); filter: brightness(.92); }
 .ac-expand-chev {
   font-size: 10px;
   line-height: 1;
@@ -961,6 +968,14 @@ button:active { transform: scale(.97); }
   opacity: .6;
   margin-left: 2px;
 }
+/* Resign avg-by-grade card content — mini stat-card per grade */
+.ac-rga-list       { display: flex; flex-direction: column; gap: 14px; }
+.ac-rga-grade      { display: flex; flex-direction: column; gap: 4px; }
+.ac-rga-grade + .ac-rga-grade { border-top: 1px dashed var(--border-light); padding-top: 12px; }
+.ac-rga-grade-head { display: flex; align-items: center; gap: 8px; }
+.ac-rga-avg-value  { color: var(--danger); }
+/* Push N (3rd column) a bit to the right within resign-breakdown rows */
+.ac-rga-grade .ac-minmax .ac-minmax-item:last-child { margin-left: 90px; }
 .ac-resign-bar { margin-top: 8px; height: 9px; }
 
 /* 1.2a Responsive — stack progressively */

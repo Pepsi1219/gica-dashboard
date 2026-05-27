@@ -96,6 +96,7 @@ const TRANSLATIONS = {
     analyticsResignBeforeBasic: 'ก่อนฝึกพื้นฐาน',
     analyticsNoData:        'ไม่มีข้อมูล',
     analyticsExpandGrade:       'ดูแยกตามเกรด',
+    analyticsExpandResignGrade: 'ดูแยกตามเกรด (ผู้ลาออก)',
     analyticsExpandResignType:  'ดูแยกตามประเภทการลาออก',
     analyticsExpandProceed:     'ดูอัตราการไปต่อ Op Training',
     analyticsProceedLabel:      '% ผู้ที่ไปต่อ Op Training',
@@ -226,6 +227,7 @@ const TRANSLATIONS = {
     analyticsResignBeforeBasic: 'Before Basic Training',
     analyticsNoData:        'No data',
     analyticsExpandGrade:       'View by Grade',
+    analyticsExpandResignGrade: 'View by Grade (Resigned)',
     analyticsExpandResignType:  'View by Resign Type',
     analyticsExpandProceed:     'View Proceed-to-Op Rate',
     analyticsProceedLabel:      '% Proceed to Op Training',
@@ -356,6 +358,7 @@ const TRANSLATIONS = {
     analyticsResignBeforeBasic: 'ກ່ອນຝຶກພື້ນຖານ',
     analyticsNoData:        'ບໍ່ມີຂໍ້ມູນ',
     analyticsExpandGrade:       'ເບິ່ງແຍກຕາມເກຣດ',
+    analyticsExpandResignGrade: 'ເບິ່ງແຍກຕາມເກຣດ (ລາອອກ)',
     analyticsExpandResignType:  'ເບິ່ງແຍກຕາມປະເພດການລາອອກ',
     analyticsExpandProceed:     'ເບິ່ງອັດຕາການໄປຕໍ່ Op Training',
     analyticsProceedLabel:      '% ຜູ້ທີ່ໄປຕໍ່ Op Training',
@@ -486,6 +489,7 @@ const TRANSLATIONS = {
     analyticsResignBeforeBasic: 'Trước đào tạo cơ bản',
     analyticsNoData:        'Không có dữ liệu',
     analyticsExpandGrade:       'Xem theo Cấp bậc',
+    analyticsExpandResignGrade: 'Xem theo Cấp bậc (Nghỉ việc)',
     analyticsExpandResignType:  'Xem theo Loại nghỉ việc',
     analyticsExpandProceed:     'Xem tỷ lệ tiếp tục Op Training',
     analyticsProceedLabel:      '% Tiếp tục Op Training',
@@ -534,7 +538,7 @@ let allDeptData       = {};   // home dashboard cache: { deptKey: [employees] }
 let currentAnalyticsDept = '';  // '' = all departments
 let currentDayMode    = 'total'; // 'total' | '5d' | '6d'  (Data Analytics)
 let trendVisibility   = { joined: true, inTraining: true, completed: true, resigned: true };  // toggle state for trend lines
-// expand state for the 4 stat cards (click-to-expand sub-data)
+// expand state for the 4 stat cards — default open (true = expanded on load)
 let cardExpanded      = { total: true, basic: true, op: true, resign: true };
 
 // Month abbreviations per language (used for trend chart x-axis)
@@ -1308,8 +1312,11 @@ function computeAnalytics(yearFilter, deptFilter, dayMode) {
 
   const totalDays = [], basicDays = [], opDays = [], resignDays = [];
   // Dynamic per-grade collectors — accept whatever grade values the Excel actually contains
-  const opDaysByGrade    = {};
-  const totalDaysByGrade = {};
+  const opDaysByGrade      = {};
+  const totalDaysByGrade   = {};
+  const resignCountByGrade = {};  // count of resignations per grade
+  const resignDaysByGrade  = {};  // resign duration (days) per grade — for avg calc
+  const totalCountByGrade  = {};  // total employee count per grade — for resign rate %
   const resignDaysByType = { operation: [], basic: [], beforeBasic: [] };
   // Basic → Op proceed rate
   // Formula: (employees with Operation Start) / (employees with Basic Start) × 100
@@ -1342,6 +1349,9 @@ function computeAnalytics(yearFilter, deptFilter, dayMode) {
 
     const empGrade = String(emp['Grade'] || '').toUpperCase().trim();
 
+    // count total employees per grade (all statuses)
+    if (empGrade) totalCountByGrade[empGrade] = (totalCountByGrade[empGrade] || 0) + 1;
+
     // 1.1 Total training: Operation End - CSA Start Date (all + per-grade)
     const d11 = dateDiffDays(emp['CSA Start Date'], emp['Operation End'], dayMode);
     if (d11 !== null) {
@@ -1373,7 +1383,7 @@ function computeAnalytics(yearFilter, deptFilter, dayMode) {
       }
     }
 
-    // 1.4 Resign duration — overall + broken down by resign type
+    // 1.4 Resign duration — overall + broken down by resign type + by grade
     if (status === 'resign-operation' || status === 'resign-basic'
         || status === 'resign-before-basic') {
       const d14 = dateDiffDays(emp['CSA Start Date'], emp['Resign Date'], dayMode);
@@ -1382,6 +1392,15 @@ function computeAnalytics(yearFilter, deptFilter, dayMode) {
         if      (status === 'resign-operation')    resignDaysByType.operation.push(d14);
         else if (status === 'resign-basic')        resignDaysByType.basic.push(d14);
         else if (status === 'resign-before-basic') resignDaysByType.beforeBasic.push(d14);
+        // avg resign duration per grade
+        if (empGrade) {
+          if (!resignDaysByGrade[empGrade]) resignDaysByGrade[empGrade] = [];
+          resignDaysByGrade[empGrade].push(d14);
+        }
+      }
+      // count resignations per grade (regardless of whether duration is available)
+      if (empGrade) {
+        resignCountByGrade[empGrade] = (resignCountByGrade[empGrade] || 0) + 1;
       }
     }
   });
@@ -1410,6 +1429,9 @@ function computeAnalytics(yearFilter, deptFilter, dayMode) {
       basic:       statSummary(resignDaysByType.basic),
       beforeBasic: statSummary(resignDaysByType.beforeBasic),
     },
+    resignCountByGrade,
+    resignAvgByGrade:  summarizeByGrade(resignDaysByGrade),
+    totalCountByGrade,
     resignOp:          sc.resignOp,
     resignBasic:       sc.resignBasic,
     resignBeforeBasic: sc.resignBeforeBasic,
@@ -1484,42 +1506,36 @@ function renderAnalytics(yearFilter) {
       </div>`;
   };
 
-  const rTotal      = s.resignTotal;
-  const rOpPct      = rTotal > 0 ? (s.resignOp          / rTotal * 100).toFixed(1) : 0;
-  const rBaPct      = rTotal > 0 ? (s.resignBasic       / rTotal * 100).toFixed(1) : 0;
-  const rBeforePct  = rTotal > 0 ? (s.resignBeforeBasic / rTotal * 100).toFixed(1) : 0;
-
-  // 3-step red shades (darkest → lightest): resign-op, resign-basic, resign-before-basic
-  const COLOR_OP     = 'rgba(220,38,38,.92)';
-  const COLOR_BASIC  = 'rgba(248,113,113,.95)';
-  const COLOR_BEFORE = 'rgba(254,202,202,.95)';
-
-  const resignRatioCard = rTotal > 0 ? `
-    <div class="ac-resign-total-label">${t('analyticsResignTotal')}</div>
-    <div class="ac-resign-total-value">${rTotal}</div>
-    <div class="ac-resign-types">
-      <div class="ac-resign-type">
-        <div class="ac-resign-dot" style="background:${COLOR_OP}"></div>
-        <span class="ac-resign-label">${t('analyticsResignOp')}</span>
-        <span class="ac-resign-count">${s.resignOp} <span class="pct-sm">(${rOpPct}%)</span></span>
-      </div>
-      <div class="ac-resign-type">
-        <div class="ac-resign-dot" style="background:${COLOR_BASIC}"></div>
-        <span class="ac-resign-label">${t('analyticsResignBasic')}</span>
-        <span class="ac-resign-count">${s.resignBasic} <span class="pct-sm">(${rBaPct}%)</span></span>
-      </div>
-      <div class="ac-resign-type">
-        <div class="ac-resign-dot" style="background:${COLOR_BEFORE}"></div>
-        <span class="ac-resign-label">${t('analyticsResignBeforeBasic')}</span>
-        <span class="ac-resign-count">${s.resignBeforeBasic} <span class="pct-sm">(${rBeforePct}%)</span></span>
-      </div>
-    </div>
-    <div class="ratio-bar ac-resign-bar">
-      <div class="ratio-seg" style="width:${rOpPct}%;background:${COLOR_OP}"></div>
-      <div class="ratio-seg" style="width:${rBaPct}%;background:${COLOR_BASIC}"></div>
-      <div class="ratio-seg" style="width:${rBeforePct}%;background:${COLOR_BEFORE}"></div>
-    </div>`
-    : `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
+  // ── Resign Breakdown card: avg + min/max per grade (mini stat-card per grade) ─
+  const buildResignAvgCard = () => {
+    const avgByGrade = s.resignAvgByGrade || {};
+    const grades = Object.keys(avgByGrade).filter(g => avgByGrade[g]).sort();
+    if (!grades.length) return `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
+    return `<div class="ac-rga-list">${grades.map(g => {
+      const stat   = avgByGrade[g];
+      const avgFmt = stat.avg % 1 === 0 ? stat.avg : stat.avg.toFixed(1);
+      return `<div class="ac-rga-grade">
+        <div class="ac-rga-grade-head">
+          <span class="ac-xt-tag" style="background:var(--danger)">${escapeHtml(g)}</span>
+          <div class="ac-avg-value ac-rga-avg-value">${avgFmt} <span class="ac-unit">${t('analyticsDays')}</span></div>
+        </div>
+        <div class="ac-minmax">
+          <div class="ac-minmax-item">
+            <span class="ac-minmax-label">${t('analyticsMin')}</span>
+            <span class="ac-minmax-value">${stat.min} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+          </div>
+          <div class="ac-minmax-item">
+            <span class="ac-minmax-label">${t('analyticsMax')}</span>
+            <span class="ac-minmax-value">${stat.max} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+          </div>
+          <div class="ac-minmax-item">
+            <span class="ac-minmax-label">N</span>
+            <span class="ac-minmax-value">${stat.n}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  };
 
   // 1.3 Department filter dropdown
   const deptOptions = [`<option value="">${escapeHtml(t('analyticsAllDept'))}</option>`]
@@ -1603,6 +1619,11 @@ function renderAnalytics(yearFilter) {
     `;
   };
 
+  // 3-step red shades (darkest → lightest): resign-op, resign-basic, resign-before-basic
+  const COLOR_OP     = 'rgba(220,38,38,.92)';
+  const COLOR_BASIC  = 'rgba(248,113,113,.95)';
+  const COLOR_BEFORE = 'rgba(254,202,202,.95)';
+
   // ── Resign-duration breakdown by type (Resign Duration card expand) ───
   const buildResignDurTable = () => {
     const rows = [
@@ -1664,10 +1685,44 @@ function renderAnalytics(yearFilter) {
     </div>`;
   };
 
+  // ── Resign Breakdown → by Grade: resign rate % per grade (resign/total) ─
+  const buildResignGradeTable = () => {
+    const counts = s.resignCountByGrade || {};
+    const totals = s.totalCountByGrade  || {};
+    const grades = Object.keys(counts).filter(g => counts[g] > 0).sort();
+    if (!grades.length) {
+      return `<div class="ac-xt-no-data">${t('analyticsNoData')}</div>`;
+    }
+    const rows = grades.map(g => {
+      const resign = counts[g];
+      const total  = totals[g] || 0;
+      const rate   = total > 0 ? (resign / total * 100).toFixed(1) : '-';
+      return `
+        <div class="ac-list-row">
+          <div><span class="ac-xt-tag" style="background:var(--danger)">${escapeHtml(g)}</span></div>
+          <div class="ac-xt-avg text-right" style="color:var(--danger)">${resign} / ${total}</div>
+          <div class="ac-xt-range text-right">${rate}%</div>
+          <div class="ac-xt-n text-right"></div>
+        </div>`;
+    }).join('');
+    return `
+      <div class="ac-data-list">
+        <div class="ac-list-header">
+          <div>${t('grade')}</div>
+          <div class="text-right">${t('total')}</div>
+          <div class="text-right">%</div>
+          <div></div>
+        </div>
+        <div class="ac-list-body">${rows}</div>
+      </div>`;
+  };
+
   // ── Expandable card wrapper ───────────────────────────────────────────
-  const expandShell = (cardKey, toggleLabel, content) => {
+  // btnClass: optional extra CSS class on the button (e.g. 'ac-expand-danger' for red)
+  const expandShell = (cardKey, toggleLabel, content, btnClass = '') => {
     const open = !!cardExpanded[cardKey];
-    return `<button type="button" class="ac-expand-btn${open ? ' open' : ''}" data-card="${cardKey}" aria-expanded="${open}">
+    const extraClass = btnClass ? ` ${btnClass}` : '';
+    return `<button type="button" class="ac-expand-btn${open ? ' open' : ''}${extraClass}" data-card="${cardKey}" aria-expanded="${open}">
       <span class="ac-expand-label">${escapeHtml(toggleLabel)}</span>
       <span class="ac-expand-chev">▾</span>
     </button>
@@ -1719,7 +1774,8 @@ function renderAnalytics(yearFilter) {
       </div>
       <div class="analytic-card">
         <div class="ac-header"><span class="ac-title">${t('analyticsResignRatio')}</span></div>
-        ${resignRatioCard}
+        <div class="ac-avg-label">${t('analyticsAvg')}</div>
+        ${buildResignAvgCard()}
       </div>
     </div>
 
