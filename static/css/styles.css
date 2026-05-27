@@ -673,6 +673,223 @@ button:active { transform: scale(.97); }
   margin-bottom: 4px;
 }
 .ac-icon   { font-size: 17px; line-height: 1; }
+
+/* Day-mode controls row spanning full analytics-grid width */
+.analytics-grid-daymode {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 2px;
+}
+
+/* ─── Expandable stat-card system ─────────────────────────────────────── */
+.ac-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.ac-expand-btn:hover {
+  background: var(--btn-bg);
+  color: var(--text);
+  border-color: var(--border);
+  filter: none;
+}
+.ac-expand-btn.open {
+  background: var(--blue2);
+  border-color: var(--blue2);
+  color: #fff;
+}
+.ac-expand-btn.open:hover { background: var(--blue2); filter: brightness(.92); }
+.analytic-card.ac-danger .ac-expand-btn.open {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.ac-expand-chev {
+  font-size: 10px;
+  line-height: 1;
+  transition: transform .25s;
+}
+.ac-expand-btn.open .ac-expand-chev { transform: rotate(180deg); }
+
+.ac-expand-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .25s ease;
+  min-width: 0; 
+  width: 100%;
+}
+.ac-expand-content.open { grid-template-rows: 1fr; }
+.ac-expand-content > .ac-expand-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.ac-expand-content.open > .ac-expand-inner { 
+  padding-top: 10px;
+  overflow: hidden;
+  overflow-y: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  min-width: 0; }
+
+/* ─── Per-grade / resign-type compact data table ───────────────────────── */
+/* ─── Modern Data List (Replacing Table) ───────────────────────── */
+.ac-data-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+}
+
+/* 👇 ใช้ CSS Grid แบ่งคอลัมน์แทน Table เด็ดขาดและเสถียรกว่า */
+.ac-list-header,
+.ac-list-row {
+  display: grid;
+  /* สัดส่วน: Grade (15%), Avg (30%), Range (40%), N (15%) */
+  grid-template-columns: 15% 30% 30% 25%;
+  align-items: center; 
+  gap: 4px; 
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 8px;
+  
+}
+
+.ac-list-header {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 4px 0 6px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ac-list-row {
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border-light);
+}
+
+.ac-list-row:last-child {
+  border-bottom: none;
+}
+
+/* Utility class สำหรับคอลัมน์ตัวเลขในตาราง analytics
+   หมายเหตุ: ตั้งใจใช้ center (ไม่ใช่ right) — cell มีขนาดเล็ก center อ่านง่ายกว่าใน context นี้ */
+.text-right {
+  text-align: center; /* intentional center — ไม่ใช่ bug */
+  padding-right: 4px;
+}
+
+/* ─── ยืม Class ตกแต่งเดิมมาใช้ (ไม่ต้องแก้) ───────────────────────── */
+.ac-xt-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--blue2);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .3px;
+}
+.ac-xt-avg {
+  font-size: 13px;
+  font-weight: 800;
+  word-break: break-word; /* ป้องกันข้อความยาวทะลุช่อง */
+}
+.ac-xt-avg .ac-xt-unit {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.ac-xt-range {
+  font-size: 11px;
+  color: var(--text);
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+}
+.ac-xt-n {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Layout เฉพาะสำหรับการ์ด Resign Type ───────────────────────── */
+.ac-list-row-resign {
+  /* ให้พื้นที่คอลัมน์แรก (ชื่อประเภท) กว้างขึ้นเป็นพิเศษ สัดส่วนประมาณ 12 : 4 : 5 : 3 */
+  grid-template-columns: 12fr 4fr 5fr 3fr !important;
+}
+
+/* กรณีไม่มีข้อมูล ให้ขีดแดช (—) กินพื้นที่ 3 คอลัมน์ที่เหลือไปเลย */
+.ac-list-row-resign .ac-xt-empty-cell {
+  text-align: right;
+  padding-right: 4px;
+}
+
+/* Resign-type variant: dot + label + numbers, no header */
+.ac-xt-table-resign tbody td:first-child { width: 14px; padding-right: 4px; }
+.ac-xt-table-resign tbody td.ac-xt-lbl    { 
+  font-size: 10px;
+  color: var(--text);
+  line-height: 1.3; /* ระยะห่างระหว่างบรรทัดให้ดูอ่านง่าย */
+  padding-right: 4px;
+  
+  /* 👇 เพิ่ม 2 บรรทัดนี้เพื่อบังคับให้ข้อความขึ้นบรรทัดใหม่เสมอเมื่อสุดขอบ */
+  white-space: normal; 
+  overflow-wrap: break-word;padding-left: 0; }
+
+/* ─── Basic → Op proceed rate panel ────────────────────────────────────── */
+.ac-proceed { display: flex; flex-direction: column; gap: 5px; }
+.ac-proceed-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.ac-proceed-value {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--blue2);
+  line-height: 1;
+}
+.ac-proceed-value .ac-proceed-unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.ac-proceed-bar {
+  height: 7px;
+  background: var(--border-light);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.ac-proceed-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width .3s;
+}
+.ac-proceed-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+}
 .ac-title  {
   font-size: 11px;
   font-weight: 700;
