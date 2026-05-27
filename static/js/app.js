@@ -535,7 +535,7 @@ let currentAnalyticsDept = '';  // '' = all departments
 let currentDayMode    = 'total'; // 'total' | '5d' | '6d'  (Data Analytics)
 let trendVisibility   = { joined: true, inTraining: true, completed: true, resigned: true };  // toggle state for trend lines
 // expand state for the 4 stat cards (click-to-expand sub-data)
-let cardExpanded      = { total: false, basic: false, op: false, resign: false };
+let cardExpanded      = { total: true, basic: true, op: true, resign: true };
 
 // Month abbreviations per language (used for trend chart x-axis)
 const MONTH_ABBR = {
