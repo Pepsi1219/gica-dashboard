@@ -1679,6 +1679,11 @@ function renderAnalytics(yearFilter) {
   el.innerHTML = `
     <div class="analytics-section-hdr">
       <h3>${t('analyticsTitle')}</h3>
+      <div class="day-mode-btn-group" id="dayModeBtnGroup">
+        ${dayBtn('total', t('dayModeTotal'))}
+        ${dayBtn('5d',    t('dayMode5d'))}
+        ${dayBtn('6d',    t('dayMode6d'))}
+      </div>
       <select id="analyticsDeptFilter" class="year-select analytics-dept-select">
         ${deptOptions}
       </select>
@@ -1691,16 +1696,7 @@ function renderAnalytics(yearFilter) {
       ${chartResign}
     </div>
 
-    ${trendCardHTML}
-
     <div class="analytics-grid">
-      <div class="analytics-grid-daymode">
-        <div class="day-mode-btn-group" id="dayModeBtnGroup">
-          ${dayBtn('total', t('dayModeTotal'))}
-          ${dayBtn('5d',    t('dayMode5d'))}
-          ${dayBtn('6d',    t('dayMode6d'))}
-        </div>
-      </div>
       <div class="analytic-card">
         <div class="ac-header"><span class="ac-title">${t('analyticsTotalTraining')}</span></div>
         ${fmtStatCard(s.total)}
@@ -1725,7 +1721,9 @@ function renderAnalytics(yearFilter) {
         <div class="ac-header"><span class="ac-title">${t('analyticsResignRatio')}</span></div>
         ${resignRatioCard}
       </div>
-    </div>`;
+    </div>
+
+    <div style="margin-top:24px">${trendCardHTML}</div>`;
 
   // wire dept-filter change → re-render analytics (table stays as-is)
   const deptSel = $('analyticsDeptFilter');
