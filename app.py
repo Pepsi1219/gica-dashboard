@@ -1,5 +1,7 @@
 import os
+import re as _re
 import time
+import urllib.parse as _urllib_parse
 from datetime import timedelta
 
 import requests as _requests
@@ -471,6 +473,122 @@ def api_update_employee(department_key, employee_id):
         return _auth_error_response(exc)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Jumper Skill data — sourced from OneDrive (uploaded by scripts/pushToOneDrive.js
+# in the CSA co NiSE project).  Uses MANAGER_REFRESH_TOKEN so no user session needed.
+# ---------------------------------------------------------------------------
+
+JUMPER_DATA_FOLDER = (
+    '1. Project/CSA (Center of Skill Acquisition)'
+    '/New Operator Monitoring/jumper-data'
+)
+JUMPER_TRAINER_DEPT = 'CSA พัฒนาทักษะ'
+
+# In-process cache (dict): {'data': {...}, 'exp': float}
+# Avoids hammering Graph API on every page load; refreshes every 5 minutes.
+_JUMPER_CACHE: dict = {}
+_JUMPER_CACHE_TTL = 300  # seconds
+
+
+def _get_manager_access_token() -> str:
+    """Exchange MANAGER_REFRESH_TOKEN for a short-lived access token."""
+    if not MANAGER_REFRESH_TOKEN:
+        raise ValueError('MANAGER_REFRESH_TOKEN not configured on this server')
+    result = _do_token_refresh(MANAGER_REFRESH_TOKEN)
+    if not result or 'access_token' not in result:
+        raise ValueError('Failed to obtain manager access token — MANAGER_REFRESH_TOKEN may be expired')
+    return result['access_token']
+
+
+def _mgraph_get(token: str, path: str, **kwargs):
+    """GET helper for Microsoft Graph API; raises on non-2xx."""
+    url = f'https://graph.microsoft.com/v1.0{path}'
+    r = _requests.get(
+        url,
+        headers={'Authorization': f'Bearer {token}'},
+        timeout=20,
+        **kwargs,
+    )
+    if not r.ok:
+        raise RuntimeError(f'Graph API {r.status_code}: {r.text[:200]}')
+    return r
+
+
+def _fetch_jumper_files_from_onedrive() -> dict:
+    """List + download all data_*.json files from the jumper-data OneDrive folder."""
+    token = _get_manager_access_token()
+    encoded = _urllib_parse.quote(JUMPER_DATA_FOLDER, safe='/')
+
+    list_resp = _mgraph_get(
+        token,
+        f'/me/drive/root:/{encoded}:/children',
+        params={'$select': 'id,name', '$top': 200},
+    )
+    files = [
+        f for f in list_resp.json().get('value', [])
+        if f['name'].startswith('data_') and f['name'].endswith('.json')
+    ]
+
+    results: dict = {}
+    for f in files:
+        try:
+            content_resp = _mgraph_get(token, f"/me/drive/items/{f['id']}/content")
+            results[f['name']] = content_resp.json()
+        except Exception as exc:
+            print(f'[JUMPER] skip {f["name"]}: {exc}')
+    return results
+
+
+def _build_jumper_payload(files: dict) -> dict:
+    """Merge downloaded files into the same structure as dashboard/server.js."""
+    jumper: dict = {}
+    all_employees: dict = {}
+    sewing_operator: dict = {}
+
+    for filename, content in files.items():
+        m = _re.match(r'^data_(.+)_(.+)\.json$', filename)
+        if not m:
+            continue
+        prefix, bu = m.group(1), m.group(2)
+        if prefix == 'jumper':
+            jumper[bu] = content.get('tblEmp', [])
+        elif prefix == 'allEmployees':
+            all_employees[bu] = content.get('tblEmp', [])
+        elif prefix == 'sewingOperatorSkill':
+            sewing_operator[bu] = content.get('employees', [])
+
+    trainer: dict = {}
+    employee: dict = {}
+    for bu, emps in all_employees.items():
+        trainer[bu]  = [e for e in emps if e.get('deptname') == JUMPER_TRAINER_DEPT]
+        employee[bu] = [e for e in emps if e.get('deptname') != JUMPER_TRAINER_DEPT]
+
+    return {
+        'jumper':         jumper,
+        'trainer':        trainer,
+        'employee':       employee,
+        'sewingOperator': sewing_operator,
+    }
+
+
+@app.route('/api/jumper-data')
+def api_jumper_data():
+    """Return merged jumper/trainer/employee/sewingOperator data from OneDrive.
+    Cached in-process for 5 minutes to minimise Graph API round-trips."""
+    global _JUMPER_CACHE
+    now = time.time()
+    if _JUMPER_CACHE.get('data') and now < _JUMPER_CACHE.get('exp', 0):
+        return jsonify(_JUMPER_CACHE['data'])
+    try:
+        files   = _fetch_jumper_files_from_onedrive()
+        payload = _build_jumper_payload(files)
+        _JUMPER_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(payload)
+    except Exception as exc:
+        print(f'[JUMPER] /api/jumper-data error: {exc}')
+        return jsonify({'error': str(exc)}), 500
 
 
 if __name__ == "__main__":

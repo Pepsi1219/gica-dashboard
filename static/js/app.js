@@ -130,6 +130,11 @@ const TRANSLATIONS = {
     managerLoginBtn:        'สำหรับ CSA Manager',
     managerModeBadge:       'CSA Manager (อ่านอย่างเดียว)',
     managerLoginFailed:     'ไม่สามารถเข้าสู่ระบบ CSA Manager ได้',
+    tabNewOperator:         'New Operator',
+    tabJumper:              'Jumper',
+    tabTrainer:             'Trainer',
+    tabSewingOperator:      'Sewing Operator',
+    tabComingSoon:          'อยู่ระหว่างพัฒนา กรุณารอสักครู่...',
   },
   en: {
     appTitle:               'New Operator Monitoring',
@@ -261,6 +266,11 @@ const TRANSLATIONS = {
     managerLoginBtn:        'For CSA Manager',
     managerModeBadge:       'CSA Manager (View Only)',
     managerLoginFailed:     'Could not sign in as CSA Manager',
+    tabNewOperator:         'New Operator',
+    tabJumper:              'Jumper',
+    tabTrainer:             'Trainer',
+    tabSewingOperator:      'Sewing Operator',
+    tabComingSoon:          'Under development, please wait...',
   },
   lo: {
     appTitle:               'New Operator Monitoring',
@@ -392,6 +402,11 @@ const TRANSLATIONS = {
     managerLoginBtn:        'ສຳລັບ CSA Manager',
     managerModeBadge:       'CSA Manager (ອ່ານຢ່າງດຽວ)',
     managerLoginFailed:     'ບໍ່ສາມາດເຂົ້າສູ່ລະບົບ CSA Manager ໄດ້',
+    tabNewOperator:         'New Operator',
+    tabJumper:              'Jumper',
+    tabTrainer:             'Trainer',
+    tabSewingOperator:      'Sewing Operator',
+    tabComingSoon:          'ກຳລັງພັດທະນາ ກະລຸນາລໍຖ້າ...',
   },
   vi: {
     appTitle:               'New Operator Monitoring',
@@ -523,6 +538,11 @@ const TRANSLATIONS = {
     managerLoginBtn:        'Dành cho CSA Manager',
     managerModeBadge:       'CSA Manager (Chỉ xem)',
     managerLoginFailed:     'Không thể đăng nhập CSA Manager',
+    tabNewOperator:         'New Operator',
+    tabJumper:              'Jumper',
+    tabTrainer:             'Trainer',
+    tabSewingOperator:      'Sewing Operator',
+    tabComingSoon:          'Đang phát triển, vui lòng chờ...',
   },
 };
 
@@ -647,6 +667,13 @@ function initLang() {
       $('dueDateText').textContent = `${t('dueDate')}: ${lastCalc.due_date || '-'}`;
     }
     renderHomeDashboard($('homeDashYearFilter').value);
+    // sync tab button labels to new language
+    const tabBar = document.getElementById('mainTabBar');
+    if (tabBar) {
+      tabBar.querySelectorAll('.tab-btn[data-i18n]').forEach(btn => {
+        btn.textContent = t(btn.dataset.i18n);
+      });
+    }
   };
 }
 
@@ -1353,10 +1380,11 @@ function computeAnalytics(yearFilter, deptFilter, dayMode) {
     if (empGrade) totalCountByGrade[empGrade] = (totalCountByGrade[empGrade] || 0) + 1;
 
     // 1.1 Total training: Operation End - CSA Start Date (all + per-grade)
+    // View by Grade counts only graduated employees (completed / completed-overdue)
     const d11 = dateDiffDays(emp['CSA Start Date'], emp['Operation End'], dayMode);
     if (d11 !== null) {
       totalDays.push(d11);
-      if (empGrade) {
+      if (empGrade && (status === 'completed' || status === 'completed-overdue')) {
         if (!totalDaysByGrade[empGrade]) totalDaysByGrade[empGrade] = [];
         totalDaysByGrade[empGrade].push(d11);
       }
@@ -2130,10 +2158,50 @@ async function saveEditForm(event) {
   }
 }
 
+// ===== TAB BAR =====
+let activeMainTab = 'newOperator';
+
+function initTabBar() {
+  const TAB_IDS = ['newOperator', 'jumper', 'trainer', 'sewingOperator'];
+  const btnGroup = document.getElementById('mainTabBar');
+  if (!btnGroup) return;
+
+  const switchTab = (tabKey) => {
+    activeMainTab = tabKey;
+    // update button states
+    btnGroup.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabKey);
+    });
+    // show/hide content panels
+    TAB_IDS.forEach(id => {
+      const el = document.getElementById('tabContent-' + id);
+      if (el) el.classList.toggle('hidden', id !== tabKey);
+    });
+    // update placeholder text if i18n already loaded
+    TAB_IDS.forEach(id => {
+      const ph = document.getElementById('tabPlaceholder-' + id);
+      if (ph) ph.textContent = t('tabComingSoon');
+    });
+  };
+
+  btnGroup.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.onclick = () => {
+      switchTab(btn.dataset.tab);
+      if (btn.dataset.tab === 'jumper') initJumperTab();
+    };
+  });
+
+  // sync button labels with current language
+  btnGroup.querySelectorAll('.tab-btn[data-i18n]').forEach(btn => {
+    btn.textContent = t(btn.dataset.i18n);
+  });
+}
+
 // ===== INIT =====
 async function init() {
   initTheme();
   initLang();
+  initTabBar();
   initAdmin();
   initRegisterModal();
   initEditModal();
@@ -2276,6 +2344,541 @@ async function init() {
   // Load home dashboard in background
   loadHomeDashboard();
 }
+
+// =============================================================================
+// JUMPER SKILL TAB
+// Data comes from /api/jumper-data (Flask → OneDrive via MANAGER_REFRESH_TOKEN).
+// Mirrors the "Jumper Skill" view in the local NiSE Jumper Dashboard.
+// =============================================================================
+
+const JUMPER_POSITIONS = [
+  'Jumper Sewing Center',
+  'Jumper Sewing Inline',
+  'Jumper Sewing Machine Operation',
+];
+const JUMPER_COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777'];
+
+// ── module state ──────────────────────────────────────────────────────────────
+let _jumperByBu   = {};   // raw jumper data keyed by BU
+let _jumperSewOp  = {};   // raw sewingOperator data keyed by BU
+let _jumperRows   = [];   // normalized flat rows
+let _jumperCharts = {};   // Chart.js instances { canvasId: Chart }
+let _jumperInsideMode = 'avgSkill';   // 'avgSkill' | 'positionCount'
+let _jumperLoaded = false;
+const _jumperTableState = {
+  page: 1, pageSize: 25, sortKey: 'bu', sortDir: 1,
+  filters: { bu: '', expired: '', search: '' },
+};
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function normalizeJumperRows(byBu) {
+  const rows = [];
+  for (const [bu, emps] of Object.entries(byBu || {})) {
+    for (const e of emps) {
+      rows.push({
+        bu,
+        empid:     e.empid     || '',
+        firstname: e.firstname || '',
+        deptname:  e.deptname  || '',
+        position:  e.positionnameeng || '',
+        skill:     Number(e.skill_count)   || 0,
+        expired:   Number(e.expired_count) || 0,
+      });
+    }
+  }
+  return rows;
+}
+
+// ── JT_PROD: Jumper Training Progress tracker ─────────────────────────────────
+// Each BU × position donut persists in localStorage so values survive page refresh.
+// Click a donut to edit; press ✓ to save, ✗ to cancel.
+const JT_PROD = {
+  _bus: [], _rows: [], _ed: {},
+  _k:   (bu, pos) => `jtp_${bu}_${pos}`,
+
+  _data(bu, pos) {
+    const total = this._rows.filter(r =>
+      r.bu === bu && r.position === JUMPER_POSITIONS[pos === 'c' ? 0 : 1]
+    ).length;
+    const raw     = localStorage.getItem(this._k(bu, pos));
+    const trained = raw !== null ? Math.min(parseInt(raw, 10), total) : total;
+    return { trained, total };
+  },
+
+  _svg(trained, total) {
+    if (total === 0) {
+      return `<div style="height:72px;display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:#d1d5db;">—</div>`;
+    }
+    const ratio = Math.min(Math.max(trained / total, 0), 1);
+    const R = 14;
+    const C = 2 * Math.PI * R;
+    const dash  = (ratio * C).toFixed(2);
+    const space = (C - ratio * C).toFixed(2);
+    const col   = ratio >= 1 ? '#16a34a' : '#dc2626';
+    return `<svg viewBox="0 0 36 36" width="72" height="72">
+      <circle cx="18" cy="18" r="${R}" fill="none" stroke="#fee2e2" stroke-width="6"/>
+      <circle cx="18" cy="18" r="${R}" fill="none" stroke="${col}" stroke-width="6"
+        stroke-dasharray="${dash} ${space}" stroke-dashoffset="0"
+        style="transition:stroke-dasharray .4s ease;transform:rotate(-90deg);transform-origin:18px 18px;"/>
+      <text x="18" y="15.5" text-anchor="middle" font-size="6.5" fill="#1f2937" font-weight="700">${trained}</text>
+      <text x="18" y="22"   text-anchor="middle" font-size="3.5" fill="#9ca3af">/ ${total}</text>
+    </svg>`;
+  },
+
+  _block(bu, pos, label) {
+    const d   = this._data(bu, pos);
+    const pct = d.total > 0 ? Math.round(d.trained / d.total * 100) : 0;
+    if (this._ed[`${bu}_${pos}`]) {
+      return `<div style="text-align:center;min-width:80px;">
+        <div style="font-size:0.65rem;color:#6b7280;margin-bottom:6px;">${label}</div>
+        <input id="jtp-i-${bu}-${pos}" type="number" min="0" max="${d.total}" value="${d.trained}"
+          style="width:54px;text-align:center;border:1.5px solid #d1d5db;border-radius:6px;padding:4px;font-size:0.85rem;"/>
+        <div style="font-size:0.6rem;color:#9ca3af;margin:3px 0;">/ ${d.total}</div>
+        <div style="display:flex;gap:4px;justify-content:center;margin-top:4px;">
+          <button onclick="_JTP.save('${bu}','${pos}',${d.total})"
+            style="padding:3px 10px;background:#16a34a;color:#fff;border:none;border-radius:4px;font-size:0.72rem;cursor:pointer;">✓</button>
+          <button onclick="_JTP.cancel('${bu}','${pos}')"
+            style="padding:3px 8px;background:#f3f4f6;color:#374151;border:none;border-radius:4px;font-size:0.72rem;cursor:pointer;">✗</button>
+        </div>
+      </div>`;
+    }
+    return `<div style="text-align:center;cursor:pointer;" onclick="_JTP.edit('${bu}','${pos}')" title="คลิกเพื่อแก้ไข">
+      ${this._svg(d.trained, d.total)}
+      <div style="font-size:0.65rem;color:#6b7280;margin-top:2px;">${label}</div>
+      <div style="font-size:0.65rem;font-weight:700;color:${pct >= 100 ? '#16a34a' : '#374151'};">${pct}%</div>
+    </div>`;
+  },
+
+  render() {
+    const wrap = document.getElementById('jtp-row3');
+    if (!wrap) return;
+    wrap.innerHTML = this._bus.map((bu) => `
+      <div class="card" style="padding:14px;display:flex;flex-direction:column;">
+        <div style="text-align:center;margin-bottom:10px;">
+          <span style="font-size:0.6rem;color:#9ca3af;background:#f3f4f6;padding:1px 5px;border-radius:10px;">Training Status</span>
+        </div>
+        <div style="display:flex;justify-content:space-around;align-items:center;flex:1;gap:4px;">
+          ${this._block(bu, 'c', 'Center')}
+          ${this._block(bu, 'i', 'Inline')}
+        </div>
+      </div>`).join('');
+  },
+
+  init(bus, rows) { this._bus = bus; this._rows = rows; this._ed = {}; this.render(); },
+  edit(bu, pos)   { this._ed[`${bu}_${pos}`] = true;  this.render(); },
+  cancel(bu, pos) { delete this._ed[`${bu}_${pos}`];  this.render(); },
+  save(bu, pos, total) {
+    const inp = document.getElementById(`jtp-i-${bu}-${pos}`);
+    if (!inp) return;
+    const val = Math.min(Math.max(0, parseInt(inp.value, 10) || 0), total);
+    localStorage.setItem(this._k(bu, pos), val);
+    delete this._ed[`${bu}_${pos}`];
+    this.render();
+  },
+};
+window._JTP = JT_PROD;
+
+// ── Chart.js wrappers ─────────────────────────────────────────────────────────
+
+function _makeJumperBarChart(canvasId, label, labels, data) {
+  if (!document.getElementById(canvasId)) return;
+  if (typeof Chart === 'undefined') return;
+  const existing = _jumperCharts[canvasId];
+  if (existing) { existing.destroy(); }
+  _jumperCharts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type: 'bar',
+    data: { labels, datasets: [{ label, data, backgroundColor: JUMPER_COLORS }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400, easing: 'easeOutQuart' },
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grace: '10%' } },
+    },
+  });
+}
+
+function _makeJumperPositionChart(canvasId, bus, cA, iA, mA, sewCounts) {
+  if (!document.getElementById(canvasId)) return;
+  if (typeof Chart === 'undefined') return;
+  const existing = _jumperCharts[canvasId];
+  if (existing) { existing.destroy(); }
+
+  const cTgt = sewCounts.map(n => Math.round(n * 0.025));
+  const iTgt = sewCounts.map(n => Math.round(n * 0.05));
+  const cGap = cA.map((a, i) => Math.max(0, cTgt[i] - a));
+  const iGap = iA.map((a, i) => Math.max(0, iTgt[i] - a));
+  const buColors = bus.map((_, i) => JUMPER_COLORS[i % JUMPER_COLORS.length]);
+
+  _jumperCharts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type: 'bar',
+    data: {
+      labels: bus,
+      datasets: [
+        { label: 'Center (จริง)', data: cA,   backgroundColor: buColors.map(c => hexToRgba(c, 1.0)),  stack: 'center' },
+        { label: 'Center (เป้า)', data: cGap, backgroundColor: buColors.map(c => hexToRgba(c, 0.28)), stack: 'center',   _targetData: cTgt, _actualData: cA,  _posLabel: 'Center' },
+        { label: 'Inline (จริง)', data: iA,   backgroundColor: buColors.map(c => hexToRgba(c, 0.65)), stack: 'inline' },
+        { label: 'Inline (เป้า)', data: iGap, backgroundColor: buColors.map(c => hexToRgba(c, 0.22)), stack: 'inline',   _targetData: iTgt, _actualData: iA,  _posLabel: 'Inline' },
+        { label: 'Machine Op',    data: mA,   backgroundColor: buColors.map(c => hexToRgba(c, 0.42)), stack: 'machineop' },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const ds = ctx.dataset;
+              if (ds._targetData) {
+                const tgt = ds._targetData[ctx.dataIndex];
+                const act = ds._actualData[ctx.dataIndex];
+                if (ctx.raw === 0) return `${ds._posLabel} เป้า: ${tgt} คน ✓ ถึงเป้าแล้ว`;
+                return `${ds._posLabel} เป้า: ${tgt} คน  (จริง ${act} / ขาด ${ctx.raw})`;
+              }
+              return `${ds.label}: ${ctx.raw} คน`;
+            },
+          },
+        },
+      },
+      scales: { y: { beginAtZero: true, grace: '10%', stacked: true } },
+    },
+  });
+}
+
+// ── Summary cards (3 rows) ────────────────────────────────────────────────────
+
+function renderJumperSummaryCards() {
+  const allRows = _jumperRows;
+  const bus     = Object.keys(_jumperByBu).sort();
+  const sewOpByBu = _jumperSewOp || {};
+
+  const totalAll    = allRows.length;
+  const centerAll   = allRows.filter(r => r.position === JUMPER_POSITIONS[0]).length;
+  const inlineAll   = allRows.filter(r => r.position === JUMPER_POSITIONS[1]).length;
+  const avgSkillAll = totalAll ? (allRows.reduce((s, r) => s + r.skill, 0) / totalAll).toFixed(1) : '0';
+  const expiredAll  = allRows.filter(r => r.expired > 0).length;
+
+  let centerTarget = 0, inlineTarget = 0;
+  bus.forEach(bu => {
+    centerTarget += Math.round((sewOpByBu[bu] || []).length * 0.025);
+    inlineTarget += Math.round((sewOpByBu[bu] || []).length * 0.05);
+  });
+  const centerFilled  = centerTarget > 0 ? Math.min(100, Math.round(centerAll / centerTarget * 100)) : 0;
+  const inlineFilled  = inlineTarget  > 0 ? Math.min(100, Math.round(inlineAll / inlineTarget  * 100)) : 0;
+
+  const buStats = bus.map((bu, i) => {
+    const bRows      = allRows.filter(r => r.bu === bu);
+    const bCenter    = bRows.filter(r => r.position === JUMPER_POSITIONS[0]).length;
+    const bInline    = bRows.filter(r => r.position === JUMPER_POSITIONS[1]).length;
+    const bSewCnt    = (sewOpByBu[bu] || []).length;
+    const bCenterTgt = Math.round(bSewCnt * 0.025);
+    const bInlineTgt = Math.round(bSewCnt * 0.05);
+    return {
+      bu, total: bRows.length,
+      center: bCenter, centerTgt: bCenterTgt,
+      centerPct: bCenterTgt > 0 ? Math.min(100, Math.round(bCenter / bCenterTgt * 100)) : 0,
+      inline: bInline,  inlineTgt: bInlineTgt,
+      inlinePct:  bInlineTgt  > 0 ? Math.min(100, Math.round(bInline  / bInlineTgt  * 100)) : 0,
+      avgSkill: bRows.length ? (bRows.reduce((s, r) => s + r.skill, 0) / bRows.length).toFixed(1) : '0',
+      expired: bRows.filter(r => r.expired > 0).length,
+      color: JUMPER_COLORS[i % JUMPER_COLORS.length],
+    };
+  });
+
+  const pBar = (pct, color) => `
+    <div style="background:#e5e7eb;border-radius:999px;height:6px;overflow:hidden;">
+      <div style="background:${pct >= 100 ? '#16a34a' : color};width:${pct}%;height:100%;border-radius:999px;transition:width .3s;"></div>
+    </div>`;
+
+  const CARD = 'background:var(--surface);border-radius:10px;box-shadow:0 1px 3px var(--shadow);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
+  const LBL  = 'font-size:0.85rem;color:#6b7280;';
+  const VAL  = 'font-size:1.8rem;font-weight:700;margin-top:4px;';
+
+  const container = document.getElementById('jtp-summary');
+  if (!container) return;
+  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-bottom:24px;';
+  container.innerHTML = `
+    <!-- Row 1: 5 overview cards -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:stretch;">
+      <div style="${CARD}min-height:100px;">
+        <div style="${LBL}">Jumper ทั้งหมด</div>
+        <div style="${VAL}">${totalAll}</div>
+      </div>
+      <div style="${CARD}min-height:100px;">
+        <div style="${LBL}">Jumper Center</div>
+        <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${centerAll}</div>
+        <div style="margin-top:auto;">
+          ${pBar(centerFilled, '#2563eb')}
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#6b7280;margin-top:4px;">
+            <span>${centerFilled}%</span><span>${centerTarget}</span>
+          </div>
+        </div>
+      </div>
+      <div style="${CARD}min-height:100px;">
+        <div style="${LBL}">Jumper Inline</div>
+        <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${inlineAll}</div>
+        <div style="margin-top:auto;">
+          ${pBar(inlineFilled, '#16a34a')}
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#6b7280;margin-top:4px;">
+            <span>${inlineFilled}%</span><span>${inlineTarget}</span>
+          </div>
+        </div>
+      </div>
+      <div style="${CARD}min-height:100px;">
+        <div style="${LBL}">Avg. Skill Score / Person</div>
+        <div style="${VAL}">${avgSkillAll}</div>
+      </div>
+      <div style="${CARD}min-height:100px;">
+        <div style="${LBL}">Skill Expired</div>
+        <div style="${VAL}${expiredAll > 0 ? 'color:#dc2626;' : ''}">${expiredAll}</div>
+      </div>
+    </div>
+
+    <!-- Row 2: BU mini-cards -->
+    <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;align-items:stretch;">
+      ${buStats.map(s => `
+      <div style="${CARD}min-width:0;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+          <span style="font-size:1.05rem;font-weight:700;color:${s.color};">${escapeHtml(s.bu)}</span>
+          <span style="font-size:0.82rem;color:#6b7280;">${s.total} คน</span>
+        </div>
+        <div style="margin-bottom:5px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#6b7280;margin-bottom:2px;">
+            <span>Center</span><span style="font-weight:600;color:#374151;">${s.center}/${s.centerTgt}</span>
+          </div>
+          ${pBar(s.centerPct, s.color)}
+        </div>
+        <div style="margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#6b7280;margin-bottom:2px;">
+            <span>Inline</span><span style="font-weight:600;color:#374151;">${s.inline}/${s.inlineTgt}</span>
+          </div>
+          ${pBar(s.inlinePct, hexToRgba(s.color, 0.6))}
+        </div>
+        <div style="font-size:0.7rem;color:#6b7280;border-top:1px solid #f3f4f6;padding-top:6px;margin-top:auto;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+            <span>Skill avg</span><strong style="color:#1f2937;">${s.avgSkill}</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span>Expired</span><strong style="${s.expired > 0 ? 'color:#dc2626;' : 'color:#1f2937;'}">${s.expired}</strong>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>
+
+    <!-- Row 3: Training Progress donuts — filled by JT_PROD.init() -->
+    <div id="jtp-row3" style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;"></div>`;
+
+  JT_PROD.init(bus, allRows);
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+
+function renderJumperCharts() {
+  const bus       = Object.keys(_jumperByBu).sort();
+  const sewOpByBu = _jumperSewOp || {};
+
+  const empCounts = bus.map(bu => _jumperRows.filter(r => r.bu === bu).length);
+  const avgSkills = bus.map(bu => {
+    const emps = _jumperRows.filter(r => r.bu === bu);
+    return emps.length ? +(emps.reduce((s, e) => s + e.skill, 0) / emps.length).toFixed(1) : 0;
+  });
+
+  _makeJumperBarChart('jtp-empPerBuChart', 'จำนวนคน', bus, empCounts);
+  _makeJumperBarChart('jtp-avgSkillChart', 'Skill เฉลี่ย/คน', bus, avgSkills);
+
+  const sewCounts = bus.map(bu => (sewOpByBu[bu] || []).length);
+  const cA = bus.map(bu => _jumperRows.filter(r => r.bu === bu && r.position === JUMPER_POSITIONS[0]).length);
+  const iA = bus.map(bu => _jumperRows.filter(r => r.bu === bu && r.position === JUMPER_POSITIONS[1]).length);
+  const mA = bus.map(bu => _jumperRows.filter(r => r.bu === bu && r.position === JUMPER_POSITIONS[2]).length);
+  _makeJumperPositionChart('jtp-positionCountChart', bus, cA, iA, mA, sewCounts);
+}
+
+// ── Data table ────────────────────────────────────────────────────────────────
+
+function _getJumperFiltered() {
+  const { bu, expired, search } = _jumperTableState.filters;
+  const term = search.trim().toLowerCase();
+  return _jumperRows.filter(r => {
+    if (bu      && r.bu !== bu)                              return false;
+    if (expired === 'expired' && r.expired <= 0)             return false;
+    if (expired === 'ok'      && r.expired >  0)             return false;
+    if (term && !`${r.empid} ${r.firstname}`.toLowerCase().includes(term)) return false;
+    return true;
+  });
+}
+
+function renderJumperTable() {
+  const wrap = document.getElementById('jtp-tableWrap');
+  if (!wrap) return;
+
+  const filtered = _getJumperFiltered();
+  const { sortKey, sortDir, pageSize } = _jumperTableState;
+  const sorted = filtered.slice().sort((a, b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    if (typeof va === 'number') return (va - vb) * sortDir;
+    return String(va).localeCompare(String(vb), 'th') * sortDir;
+  });
+
+  const total     = sorted.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  if (_jumperTableState.page > pageCount) _jumperTableState.page = pageCount;
+  const start    = total ? (_jumperTableState.page - 1) * pageSize : 0;
+  const pageRows = sorted.slice(start, start + pageSize);
+
+  const cols = [
+    { key: 'bu',        label: 'BU' },
+    { key: 'empid',     label: 'รหัสพนักงาน' },
+    { key: 'firstname', label: 'ชื่อ-สกุล' },
+    { key: 'deptname',  label: 'แผนก' },
+    { key: 'position',  label: 'ตำแหน่ง' },
+    { key: 'skill',     label: 'Skill' },
+    { key: 'expired',   label: 'หมดอายุ' },
+  ];
+
+  if (!pageRows.length) {
+    wrap.innerHTML = '<div style="color:#6b7280;padding:16px;text-align:center;">ไม่พบข้อมูล</div>';
+  } else {
+    const head = cols.map(c => {
+      const arrow = sortKey === c.key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+      return `<th data-key="${c.key}" style="cursor:pointer;user-select:none;">${c.label}${arrow}</th>`;
+    }).join('');
+    const body = pageRows.map(r => `<tr>${cols.map(c => {
+      if (c.key === 'expired') {
+        const cls = r.expired > 0 ? 'warn' : 'ok';
+        const lbl = r.expired > 0 ? `${r.expired} หมดอายุ` : '✓';
+        return `<td><span class="badge ${cls}">${lbl}</span></td>`;
+      }
+      return `<td>${escapeHtml(String(r[c.key] ?? ''))}</td>`;
+    }).join('')}</tr>`).join('');
+    wrap.innerHTML = `<div style="overflow-x:auto"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+    wrap.querySelectorAll('th[data-key]').forEach(th => {
+      th.onclick = () => {
+        const k = th.dataset.key;
+        _jumperTableState.sortDir  = _jumperTableState.sortKey === k ? -_jumperTableState.sortDir : 1;
+        _jumperTableState.sortKey  = k;
+        _jumperTableState.page     = 1;
+        renderJumperTable();
+      };
+    });
+  }
+
+  // pagination controls
+  const rs = total ? start + 1 : 0;
+  const re = Math.min(start + pageSize, total);
+  const rl = document.getElementById('jtp-rangeLabel');
+  const pl = document.getElementById('jtp-pageLabel');
+  const pp = document.getElementById('jtp-prevPage');
+  const np = document.getElementById('jtp-nextPage');
+  if (rl) rl.textContent = `แสดง ${rs}-${re} จาก ${total} รายการ`;
+  if (pl) pl.textContent = `หน้า ${_jumperTableState.page} / ${pageCount}`;
+  if (pp) pp.disabled    = _jumperTableState.page <= 1;
+  if (np) np.disabled    = _jumperTableState.page >= pageCount;
+}
+
+// ── Wire controls (called once after dashboard HTML is in the DOM) ────────────
+
+function _wireJumperControls() {
+  // Inside-data slide toggle
+  const toggleWrap = document.getElementById('jtp-insideDataToggle');
+  if (toggleWrap) {
+    toggleWrap.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.onclick = () => {
+        _jumperInsideMode = btn.dataset.mode;
+        toggleWrap.querySelectorAll('.toggle-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.mode === _jumperInsideMode));
+        const track = document.getElementById('jtp-chartTrack');
+        if (track) track.style.transform = _jumperInsideMode === 'positionCount' ? 'translateX(-100%)' : 'translateX(0)';
+      };
+    });
+  }
+
+  // Table filters
+  const buSel     = document.getElementById('jtp-filterBu');
+  const expSel    = document.getElementById('jtp-filterExpired');
+  const searchInp = document.getElementById('jtp-filterSearch');
+  const prevBtn   = document.getElementById('jtp-prevPage');
+  const nextBtn   = document.getElementById('jtp-nextPage');
+  const pageSel   = document.getElementById('jtp-pageSize');
+
+  if (buSel) {
+    const bus = [...new Set(_jumperRows.map(r => r.bu))].sort();
+    buSel.innerHTML = '<option value="">ทุก BU</option>' +
+      bus.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+    buSel.onchange = () => {
+      _jumperTableState.filters.bu = buSel.value;
+      _jumperTableState.page = 1;
+      renderJumperTable();
+    };
+  }
+  if (expSel) expSel.onchange = () => {
+    _jumperTableState.filters.expired = expSel.value;
+    _jumperTableState.page = 1;
+    renderJumperTable();
+  };
+  if (searchInp) {
+    let debounce;
+    searchInp.oninput = () => {
+      _jumperTableState.filters.search = searchInp.value;
+      clearTimeout(debounce);
+      debounce = setTimeout(() => { _jumperTableState.page = 1; renderJumperTable(); }, 250);
+    };
+  }
+  if (prevBtn) prevBtn.onclick = () => { if (_jumperTableState.page > 1) { _jumperTableState.page--; renderJumperTable(); } };
+  if (nextBtn) nextBtn.onclick = () => { _jumperTableState.page++; renderJumperTable(); };
+  if (pageSel) pageSel.onchange = () => {
+    _jumperTableState.pageSize = Number(pageSel.value);
+    _jumperTableState.page     = 1;
+    renderJumperTable();
+  };
+}
+
+// ── Public entry point ────────────────────────────────────────────────────────
+
+async function initJumperTab() {
+  if (_jumperLoaded) return;   // lazy-load once per session
+
+  const loadingEl = document.getElementById('jumper-loading');
+  const errorEl   = document.getElementById('jumper-error');
+  const dashEl    = document.getElementById('jumper-dashboard');
+
+  if (loadingEl) loadingEl.classList.remove('hidden');
+  if (errorEl)   errorEl.classList.add('hidden');
+  if (dashEl)    dashEl.classList.add('hidden');
+
+  try {
+    const data = await api('/api/jumper-data');
+    _jumperByBu  = data.jumper        || {};
+    _jumperSewOp = data.sewingOperator || {};
+    _jumperRows  = normalizeJumperRows(_jumperByBu);
+    _jumperLoaded = true;
+
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (dashEl)    dashEl.classList.remove('hidden');
+
+    renderJumperSummaryCards();
+    renderJumperCharts();
+    renderJumperTable();
+    _wireJumperControls();
+  } catch (err) {
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (errorEl) {
+      errorEl.innerHTML = `<p style="color:var(--danger);font-weight:600;">${escapeHtml(err.message)}</p>
+        <button onclick="initJumperTab()" style="margin-top:8px;">ลองใหม่</button>`;
+      errorEl.classList.remove('hidden');
+    }
+  }
+}
+
+// =============================================================================
 
 init().catch(err => {
   console.error(err);

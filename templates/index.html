@@ -6,10 +6,12 @@
   <title>New Operator Monitoring</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=44" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=46" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Chart.js — used by Jumper Skill tab -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
   <header class="topbar">
@@ -32,6 +34,14 @@
       <span id="roleBadge" class="role-badge hidden"></span>
     </div>
   </header>
+
+  <!-- Tab Bar -->
+  <nav class="tab-bar" id="mainTabBar">
+    <button class="tab-btn active" data-tab="newOperator" data-i18n="tabNewOperator">New Operator</button>
+    <button class="tab-btn" data-tab="jumper" data-i18n="tabJumper">Jumper</button>
+    <button class="tab-btn" data-tab="trainer" data-i18n="tabTrainer">Trainer</button>
+    <button class="tab-btn" data-tab="sewingOperator" data-i18n="tabSewingOperator">Sewing Operator</button>
+  </nav>
 
   <!-- Register Modal -->
   <div id="registerModal" class="modal-overlay hidden">
@@ -120,7 +130,7 @@
     </div>
   </div>
 
-  <main class="container">
+  <main class="container" id="tabContent-newOperator">
     <!-- Login Panel -->
     <section id="loginPanel" class="card hero hidden">
       <h2 data-i18n="loginTitle">เข้าสู่ระบบด้วย Microsoft Account</h2>
@@ -288,6 +298,102 @@
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=44"></script>
+  <!-- Jumper Skill Tab -->
+  <div id="tabContent-jumper" class="tab-content hidden">
+    <main class="container">
+
+      <!-- loading / error states -->
+      <div id="jumper-loading" class="card hero" style="text-align:center;padding:40px;">
+        <p class="hint" data-i18n="loading">กำลังโหลด...</p>
+      </div>
+      <div id="jumper-error" class="card hero hidden" style="text-align:center;padding:40px;"></div>
+
+      <!-- full dashboard — rendered by JS after data arrives -->
+      <div id="jumper-dashboard" class="hidden">
+
+        <!-- Rows 1-3: summary cards (filled by renderJumperSummaryCards) -->
+        <div id="jtp-summary"></div>
+
+        <!-- Charts row -->
+        <div class="charts" style="margin-bottom:24px;">
+          <div class="card" style="padding:16px;">
+            <h3 style="margin:0 0 12px;font-size:1rem;">จำนวนคนต่อ BU</h3>
+            <div class="chart-canvas-wrap">
+              <canvas id="jtp-empPerBuChart"></canvas>
+            </div>
+          </div>
+          <div class="card" style="padding:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+              <h3 style="margin:0;font-size:1rem;">Inside Data</h3>
+              <div id="jtp-insideDataToggle" class="toggle-group">
+                <button class="toggle-btn active" data-mode="avgSkill" type="button">Skill เฉลี่ยต่อคน แยกตาม BU</button>
+                <button class="toggle-btn" data-mode="positionCount" type="button">จำนวน Jumper แยกตามตำแหน่ง</button>
+              </div>
+            </div>
+            <div class="chart-viewport">
+              <div class="chart-track" id="jtp-chartTrack">
+                <div class="chart-slide"><div class="chart-canvas-wrap"><canvas id="jtp-avgSkillChart"></canvas></div></div>
+                <div class="chart-slide"><div class="chart-canvas-wrap"><canvas id="jtp-positionCountChart"></canvas></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data table -->
+        <section class="card" style="padding:16px;">
+          <h3 style="margin:0 0 12px;font-size:1rem;">รายชื่อ Jumper</h3>
+          <div class="filters">
+            <select id="jtp-filterBu"><option value="">ทุก BU</option></select>
+            <select id="jtp-filterExpired">
+              <option value="">ทุกสถานะ</option>
+              <option value="expired">มี Skill หมดอายุ</option>
+              <option value="ok">ไม่มี Skill หมดอายุ</option>
+            </select>
+            <input type="text" id="jtp-filterSearch" placeholder="ค้นหาชื่อ / รหัสพนักงาน" />
+          </div>
+          <div id="jtp-tableWrap"></div>
+          <div class="pagination">
+            <div class="pageSizeGroup">
+              <span>แสดงต่อหน้า</span>
+              <select id="jtp-pageSize">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <span id="jtp-rangeLabel"></span>
+            </div>
+            <div class="pageNav">
+              <button id="jtp-prevPage">‹ ก่อนหน้า</button>
+              <span id="jtp-pageLabel"></span>
+              <button id="jtp-nextPage">ถัดไป ›</button>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /#jumper-dashboard -->
+    </main>
+  </div>
+
+  <!-- Trainer Tab (placeholder) -->
+  <div id="tabContent-trainer" class="tab-content hidden">
+    <main class="container">
+      <div class="tab-placeholder">
+        <div class="tab-placeholder-icon">🚧</div>
+        <p id="tabPlaceholder-trainer" data-i18n="tabComingSoon">อยู่ระหว่างพัฒนา กรุณารอสักครู่...</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Sewing Operator Tab (placeholder) -->
+  <div id="tabContent-sewingOperator" class="tab-content hidden">
+    <main class="container">
+      <div class="tab-placeholder">
+        <div class="tab-placeholder-icon">🚧</div>
+        <p id="tabPlaceholder-sewingOperator" data-i18n="tabComingSoon">อยู่ระหว่างพัฒนา กรุณารอสักครู่...</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/js/app.js?v=46"></script>
 </body>
 </html>
