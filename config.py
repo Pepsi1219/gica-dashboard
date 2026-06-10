@@ -79,9 +79,51 @@ EXCEL_COLUMNS = [
     "Total Training Days",
 ]
 
+# ── Jumper Monitoring Excel ───────────────────────────────────────────────────
+JUMPER_EXCEL_SHARE_URL = (
+    "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/"
+    "pongsathon_s_nanyangtextile_com/"
+    "IQAHEqX7lxxpQ4r-uut2iH1zAUd6690J0eIXZonGOcCjzJY?e=jPJ8AA"
+)
+JUMPER_SEW_TABLE  = "SewingOperatorCount" # ชื่อ Table จำนวน Sewing Operator
+JUMPER_SEW_COLS   = ["BU", "Total"]
+
+# BU key → Excel Table name (แต่ละ BU อยู่คนละ sheet)
+JUMPER_BU_TABLES = {
+    "G1":  "Jumper_G1",
+    "G2":  "Jumper_G2",
+    "G3":  "Jumper_G3",
+    "G4":  "Jumper_G4",
+    "EA":  "Jumper_EA",
+    "TRM": "Jumper_TRM",
+}
+
+# คอลัมน์ใน table แต่ละ BU (ไม่มีคอลัมน์ BU — BU ได้จากชื่อ table)
+JUMPER_EXCEL_COLS = [
+    "Employee ID",
+    "Employee Name",
+    "Department",
+    "Position",
+    "Skill Count",
+    "Expired Count",
+    "Training Status",
+]
+
 GRADE_ALLOWED_WORKING_DAYS = {
     "B": 18,
     "C": 6,
     "D": 5,
     "E": 2,
 }
+
+# ── Trainer Monitoring Excel ──────────────────────────────────────────────────
+TRAINER_EXCEL_SHARE_URL = (
+    "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/"
+    "pongsathon_s_nanyangtextile_com/"
+    "IQCW0mCMNqBZSqtqevcc5wwsAYU-dtFGqH1f478vgj7qoXY?e=VMlBrv"
+)
+TRAINER_LIST_TABLE  = "TrainerListAll"
+TRAINER_LIST_COLS   = ["Employee ID", "Employee Name", "BU", "Status"]
+TRAINER_SETUP_TABLE = "BUSetup"
+TRAINER_SETUP_COLS  = ["BU", "Product Type", "Style", "Total Steps"]
+TRAINER_SKILL_COLS  = ["Employee ID", "Product Type", "Style", "grade", "expired", "eff"]

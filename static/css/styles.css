@@ -240,10 +240,50 @@ body {
   position: sticky;
   top: 57px;   /* approximate topbar height — tabs stay visible when scrolling */
   z-index: 90;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: visible;  /* allow BU dropdown to extend below the bar */
 }
-.tab-bar::-webkit-scrollbar { display: none; }
+
+/* ── Tab Item wrapper (used for tabs that have a hover sub-menu) ── */
+.tab-item {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+/* BU sub-menu dropdown — shown on hover */
+.tab-submenu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 2px);   /* just below the tab bar border */
+  left: 0;
+  min-width: 130px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.13);
+  padding: 5px;
+  z-index: 200;
+}
+.tab-item.has-submenu:hover .tab-submenu { display: block; }
+
+.tab-submenu-btn {
+  display: block;
+  width: 100%;
+  padding: 9px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font: 600 13px "Segoe UI", Arial, sans-serif;
+  color: var(--text);
+  white-space: nowrap;
+  transition: background .12s, color .12s;
+}
+.tab-submenu-btn:hover {
+  background: var(--border-light);
+  color: var(--blue2);
+}
 
 .tab-btn {
   flex-shrink: 0;
@@ -319,7 +359,7 @@ body {
 }
 
 /* ===== LAYOUT ===== */
-.container { max-width: 1440px; margin: 0 auto; padding: 28px; }
+.container { max-width: 100%; margin: 0 auto; padding: 28px; }
 .hidden { display: none !important; }
 
 .card {
@@ -1389,6 +1429,26 @@ tbody tr:hover { filter: brightness(.97); }
   .charts { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Jumper summary row grids — responsive, no overflow on small screens */
+.jtp-row1 {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.jtp-row2, .jtp-row3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+@media (max-width: 860px) {
+  .jtp-row1 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .jtp-row1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* Fixed-height canvas wrapper — prevents Chart.js infinite-grow loop in flex/grid */
 .chart-canvas-wrap {
   position: relative;
@@ -1423,4 +1483,83 @@ tbody tr:hover { filter: brightness(.97); }
   background: var(--blue2);
   border-color: var(--blue2);
   color: #fff;
+}
+
+/* ── Jumper table pagination ─────────────────────────────────────────────── */
+.jtp-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 4px 4px;
+  border-top: 1px solid var(--border-light);
+  margin-top: 12px;
+}
+
+/* left: record range info */
+.jtp-range-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-width: 160px;
+}
+
+/* center: page-size selector */
+.jtp-page-size-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.jtp-page-size-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.jtp-page-size-select {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.jtp-page-size-select:focus { outline: none; border-color: var(--blue2); }
+
+/* right: prev / page-label / next */
+.jtp-page-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.jtp-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.jtp-nav-btn:hover:not(:disabled) {
+  background: var(--blue2);
+  border-color: var(--blue2);
+  color: #fff;
+}
+.jtp-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.jtp-page-label {
+  font-size: 0.85rem;
+  color: var(--text);
+  font-weight: 600;
+  min-width: 72px;
+  text-align: center;
 }

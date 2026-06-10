@@ -15,15 +15,28 @@ from config import (
     CLIENT_SECRET,
     DEPARTMENTS,
     FLASK_SECRET_KEY,
+    JUMPER_BU_TABLES,
+    JUMPER_EXCEL_COLS,
+    JUMPER_EXCEL_SHARE_URL,
+    JUMPER_SEW_COLS,
+    JUMPER_SEW_TABLE,
     REDIRECT_URI,
     SCOPES,
+    TRAINER_EXCEL_SHARE_URL,
+    TRAINER_LIST_COLS,
+    TRAINER_LIST_TABLE,
+    TRAINER_SETUP_COLS,
+    TRAINER_SETUP_TABLE,
+    TRAINER_SKILL_COLS,
 )
 from business_rules import calculate_status
 from graph_excel import (
     TokenExpiredError,
     create_employee,
+    encode_sharing_url,
     find_employee,
     get_table_rows,
+    graph_request,
     update_employee,
 )
 
@@ -571,6 +584,232 @@ def _build_jumper_payload(files: dict) -> dict:
         'employee':       employee,
         'sewingOperator': sewing_operator,
     }
+
+
+_JUMPER_EXCEL_CACHE:   dict = {}
+_TRAINER_EXCEL_CACHE: dict = {}
+
+
+def _read_excel_table(token: str, drive_id: str, item_id: str,
+                      table_name: str, cols: list) -> list:
+    """Read rows from a named table, mapping values by column name (not index)."""
+    base = f'/drives/{drive_id}/items/{item_id}/workbook/tables/{table_name}'
+
+    # Fetch actual column order from the table header
+    col_resp = graph_request(token, 'GET', f'{base}/columns?$select=name')
+    headers = [c.get('name', '') for c in col_resp.get('value', [])]
+
+    # Fetch all row values
+    row_resp = graph_request(token, 'GET', f'{base}/rows')
+    records = []
+    for row in row_resp.get('value', []):
+        values = (row.get('values') or [[]])[0]
+        by_name = {headers[i]: (values[i] if i < len(values) else '')
+                   for i in range(len(headers))}
+        obj = {col: by_name.get(col, '') for col in cols}
+        records.append(obj)
+    return records
+
+
+def _fetch_jumper_excel_data(token: str) -> tuple:
+    """Resolve Jumper_Monitoring.xlsx then read one table per BU + SewingOperatorCount."""
+    share_id = encode_sharing_url(JUMPER_EXCEL_SHARE_URL)
+    item = graph_request(
+        token, 'GET',
+        f'/shares/{share_id}/driveItem',
+        headers={'Prefer': 'redeemSharingLinkIfNecessary'},
+    )
+    drive_id = item['parentReference']['driveId']
+    item_id  = item['id']
+
+    # Read per-BU Jumper tables — inject '_bu' key so payload builder knows which BU
+    jumper_rows = []
+    for bu, table_name in JUMPER_BU_TABLES.items():
+        try:
+            rows = _read_excel_table(token, drive_id, item_id, table_name, JUMPER_EXCEL_COLS)
+            for r in rows:
+                r['_bu'] = bu
+            jumper_rows.extend(rows)
+            print(f'[JUMPER-EXCEL] {table_name}: {len(rows)} rows', flush=True)
+        except Exception as exc:
+            print(f'[JUMPER-EXCEL] {table_name} skipped: {exc}', flush=True)
+
+    # Read SewingOperatorCount (optional — bars hide gracefully if missing)
+    sew_rows = []
+    try:
+        sew_rows = _read_excel_table(token, drive_id, item_id, JUMPER_SEW_TABLE, JUMPER_SEW_COLS)
+    except Exception as exc:
+        print(f'[JUMPER-EXCEL] SewingOperatorCount skipped: {exc}', flush=True)
+
+    return jumper_rows, sew_rows
+
+
+def _build_jumper_excel_payload(jumper_rows: list, sew_rows: list) -> dict:
+    """Group Excel rows by BU → same shape as /api/jumper-data response."""
+    jumper: dict = {}
+    for r in jumper_rows:
+        bu = str(r.get('_bu', '')).strip()   # injected by _fetch_jumper_excel_data
+        if not bu:
+            continue
+        emp_id = str(r.get('Employee ID', '')).strip()
+        if not emp_id:
+            continue
+        emp = {
+            'empid':            emp_id,
+            'firstname':        str(r.get('Employee Name',   '')).strip(),
+            'deptname':         str(r.get('Department',      '')).strip(),
+            'positionnameeng':  str(r.get('Position',        '')).strip(),
+            'skill_count':      r.get('Skill Count',    0),
+            'expired_count':    r.get('Expired Count',  0),
+            'training_status':  str(r.get('Training Status', '')).strip().upper(),
+        }
+        jumper.setdefault(bu, []).append(emp)
+
+    # Build sewingOperator as { BU: [{} * Total] } so frontend .length works correctly
+    sewing_operator: dict = {}
+    for r in sew_rows:
+        bu    = str(r.get('BU',    '')).strip()
+        total = r.get('Total', 0)
+        if not bu:
+            continue
+        try:
+            count = int(float(total))
+        except (ValueError, TypeError):
+            count = 0
+        if count > 0:
+            sewing_operator[bu] = [{}] * count
+
+    return {
+        'jumper':         jumper,
+        'sewingOperator': sewing_operator,
+    }
+
+
+@app.route('/api/jumper-excel')
+def api_jumper_excel():
+    """Return Jumper data from Jumper_Monitoring.xlsx on OneDrive.
+    Cached in-process for 5 minutes to minimise Graph API round-trips."""
+    global _JUMPER_EXCEL_CACHE
+    now = time.time()
+    if _JUMPER_EXCEL_CACHE.get('data') and now < _JUMPER_EXCEL_CACHE.get('exp', 0):
+        return jsonify(_JUMPER_EXCEL_CACHE['data'])
+    try:
+        token                    = _get_manager_access_token()
+        jumper_rows, sew_rows    = _fetch_jumper_excel_data(token)
+        payload                  = _build_jumper_excel_payload(jumper_rows, sew_rows)
+        _JUMPER_EXCEL_CACHE      = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(payload)
+    except Exception as exc:
+        print(f'[JUMPER-EXCEL] /api/jumper-excel error: {exc}')
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/trainer-excel')
+def api_trainer_excel():
+    """Return Trainer data from Trainer_Monitoring.xlsx on OneDrive. Cached 5 min."""
+    global _TRAINER_EXCEL_CACHE
+    now = time.time()
+    if _TRAINER_EXCEL_CACHE.get('data') and now < _TRAINER_EXCEL_CACHE.get('exp', 0):
+        return jsonify(_TRAINER_EXCEL_CACHE['data'])
+    try:
+        token = _get_manager_access_token()
+        share_id = encode_sharing_url(TRAINER_EXCEL_SHARE_URL)
+        item = graph_request(
+            token, 'GET', f'/shares/{share_id}/driveItem',
+            headers={'Prefer': 'redeemSharingLinkIfNecessary'},
+        )
+        drive_id = item['parentReference']['driveId']
+        item_id  = item['id']
+
+        # 1. Trainer list (master)
+        trainer_list = _read_excel_table(token, drive_id, item_id,
+                                          TRAINER_LIST_TABLE, TRAINER_LIST_COLS)
+
+        # 2. Setup sheet (optional — coverage matrix hides gracefully if missing)
+        setup_rows = []
+        try:
+            setup_rows = _read_excel_table(token, drive_id, item_id,
+                                            TRAINER_SETUP_TABLE, TRAINER_SETUP_COLS)
+        except Exception as exc:
+            print(f'[TRAINER-EXCEL] BUSetup skipped: {exc}', flush=True)
+
+        # 3. Individual trainer skill sheets — one per trainer from list
+        skill_rows = []
+        for t in trainer_list:
+            emp_id = str(t.get('Employee ID', '')).strip()
+            bu     = str(t.get('BU', '')).strip()
+            if not emp_id or not bu:
+                continue
+            table_name = f'Trainer_{bu}-{emp_id}'
+            try:
+                rows = _read_excel_table(token, drive_id, item_id,
+                                          table_name, TRAINER_SKILL_COLS)
+                for r in rows:
+                    r['_empid'] = emp_id
+                    r['_bu']    = bu
+                skill_rows.extend(rows)
+                print(f'[TRAINER-EXCEL] {table_name}: {len(rows)} rows', flush=True)
+            except Exception as exc:
+                print(f'[TRAINER-EXCEL] {table_name} skipped: {exc}', flush=True)
+
+        # Build payload
+        trainers = []
+        for t in trainer_list:
+            emp_id = str(t.get('Employee ID', '')).strip()
+            if not emp_id:
+                continue
+            trainers.append({
+                'empid':  emp_id,
+                'name':   str(t.get('Employee Name', '')).strip(),
+                'bu':     str(t.get('BU', '')).strip(),
+                'status': str(t.get('Status', '')).strip(),
+            })
+
+        setup = []
+        for s in setup_rows:
+            bu = str(s.get('BU', '')).strip()
+            pt = str(s.get('Product Type', '')).strip()
+            st = str(s.get('Style', '')).strip()
+            try:
+                steps = int(float(s.get('Total Steps', 0) or 0))
+            except (ValueError, TypeError):
+                steps = 0
+            if bu and pt and steps > 0:
+                setup.append({'bu': bu, 'productType': pt, 'style': st, 'totalSteps': steps})
+
+        skills: dict = {}
+        for r in skill_rows:
+            emp_id = str(r.get('_empid', '')).strip()
+            if not emp_id:
+                continue
+            grade_raw = r.get('grade')
+            grade = str(grade_raw).strip() if grade_raw is not None else ''
+            try:
+                expired = int(float(r.get('expired', 0) or 0))
+            except (ValueError, TypeError):
+                expired = 0
+            eff_raw = r.get('eff')
+            try:
+                eff = float(eff_raw) if eff_raw not in (None, '', 'null') else 0.0
+            except (ValueError, TypeError):
+                eff = 0.0
+            record = {
+                'empid':       emp_id,
+                'bu':          str(r.get('_bu', '')).strip(),
+                'productType': str(r.get('Product Type', '')).strip(),
+                'style':       str(r.get('Style', '')).strip(),
+                'grade':       grade,
+                'expired':     expired,
+                'eff':         eff,
+            }
+            skills.setdefault(emp_id, []).append(record)
+
+        payload = {'trainers': trainers, 'setup': setup, 'skills': skills}
+        _TRAINER_EXCEL_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(payload)
+    except Exception as exc:
+        print(f'[TRAINER-EXCEL] error: {exc}')
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/api/jumper-data')

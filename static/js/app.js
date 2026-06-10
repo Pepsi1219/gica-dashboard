@@ -1,8 +1,8 @@
 // ===== TRANSLATIONS =====
 const TRANSLATIONS = {
   th: {
-    appTitle:               'New Operator Monitoring',
-    appSubtitle:            'ระบบติดตามข้อมูลพนักงานใหม่',
+    appTitle:               'CSA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition',
     loginTitle:             'เข้าสู่ระบบด้วย Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'เลือก BU',
@@ -132,13 +132,13 @@ const TRANSLATIONS = {
     managerLoginFailed:     'ไม่สามารถเข้าสู่ระบบ CSA Manager ได้',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
-    tabTrainer:             'Trainer',
+    tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'อยู่ระหว่างพัฒนา กรุณารอสักครู่...',
   },
   en: {
-    appTitle:               'New Operator Monitoring',
-    appSubtitle:            'New employee tracking system',
+    appTitle:               'CSA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition',
     loginTitle:             'Sign in with Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'Select BU',
@@ -268,13 +268,13 @@ const TRANSLATIONS = {
     managerLoginFailed:     'Could not sign in as CSA Manager',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
-    tabTrainer:             'Trainer',
+    tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'Under development, please wait...',
   },
   lo: {
-    appTitle:               'New Operator Monitoring',
-    appSubtitle:            'ລະບົບຕິດຕາມພະນັກງານໃໝ່',
+    appTitle:               'CSA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition',
     loginTitle:             'ເຂົ້າສູ່ລະບົບດ້ວຍ Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'ເລືອກ BU',
@@ -404,13 +404,13 @@ const TRANSLATIONS = {
     managerLoginFailed:     'ບໍ່ສາມາດເຂົ້າສູ່ລະບົບ CSA Manager ໄດ້',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
-    tabTrainer:             'Trainer',
+    tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'ກຳລັງພັດທະນາ ກະລຸນາລໍຖ້າ...',
   },
   vi: {
-    appTitle:               'New Operator Monitoring',
-    appSubtitle:            'Hệ thống theo dõi nhân viên mới',
+    appTitle:               'CSA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition',
     loginTitle:             'Đăng nhập bằng tài khoản Microsoft',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'Chọn BU',
@@ -540,13 +540,14 @@ const TRANSLATIONS = {
     managerLoginFailed:     'Không thể đăng nhập CSA Manager',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
-    tabTrainer:             'Trainer',
+    tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'Đang phát triển, vui lòng chờ...',
   },
 };
 
 // ===== STATE =====
+let _switchMainTab    = null;   // set by initTabBar — used by renderTabSubMenu
 let currentDepartment = null;
 let currentEmployeeId = null;
 let currentFilter     = '';
@@ -779,6 +780,18 @@ function setPage(page) {
 }
 
 // ===== DEPARTMENT GRID =====
+function selectDepartmentKey(key, label) {
+  currentDepartment = key;
+  currentFilter     = '';
+  currentYearFilter = '';
+  if ($('statusFilter'))  $('statusFilter').value  = '';
+  if ($('empYearFilter')) $('empYearFilter').value = '';
+  $('dashboardTitle').textContent = `${label} ${t('dashboard')}`;
+  if (activeMainTab !== 'newOperator' && _switchMainTab) _switchMainTab('newOperator');
+  setPage('dashboard');
+  loadDashboard();
+}
+
 function renderDepartmentButtons() {
   const grid = $('departmentGrid');
   grid.innerHTML = '';
@@ -786,16 +799,7 @@ function renderDepartmentButtons() {
     const btn = document.createElement('button');
     btn.className = 'department-btn';
     btn.textContent = dep.label;
-    btn.onclick = () => {
-      currentDepartment = dep.key;
-      currentFilter = '';
-      currentYearFilter = '';
-      if ($('statusFilter'))  $('statusFilter').value  = '';
-      if ($('empYearFilter')) $('empYearFilter').value = '';
-      $('dashboardTitle').textContent = `${dep.label} ${t('dashboard')}`;
-      setPage('dashboard');
-      loadDashboard();
-    };
+    btn.onclick = () => selectDepartmentKey(dep.key, dep.label);
     grid.appendChild(btn);
   });
 }
@@ -2184,16 +2188,38 @@ function initTabBar() {
     });
   };
 
+  // expose for use by selectDepartmentKey / renderTabSubMenu
+  _switchMainTab = switchTab;
+
   btnGroup.querySelectorAll('.tab-btn').forEach(btn => {
     btn.onclick = () => {
       switchTab(btn.dataset.tab);
-      if (btn.dataset.tab === 'jumper') initJumperTab();
+      if (btn.dataset.tab === 'jumper')  initJumperTab();
+      if (btn.dataset.tab === 'trainer') initTrainerTab();
     };
   });
 
   // sync button labels with current language
   btnGroup.querySelectorAll('.tab-btn[data-i18n]').forEach(btn => {
     btn.textContent = t(btn.dataset.i18n);
+  });
+}
+
+// Populate BU hover sub-menu under the New Operator tab button
+function renderTabSubMenu() {
+  const container = document.getElementById('tabSubMenu-newOperator');
+  if (!container) return;
+  container.innerHTML = '';
+  departments.forEach(dep => {
+    const btn = document.createElement('button');
+    btn.type        = 'button';
+    btn.className   = 'tab-submenu-btn';
+    btn.textContent = dep.label;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      selectDepartmentKey(dep.key, dep.label);
+    };
+    container.appendChild(btn);
   });
 }
 
@@ -2338,6 +2364,7 @@ async function init() {
   departments = await api('/api/departments');
   if (!Array.isArray(departments)) departments = [];
   renderDepartmentButtons();
+  renderTabSubMenu();
   renderHolidays();
   setPage('home');
 
@@ -2358,15 +2385,28 @@ const JUMPER_POSITIONS = [
 ];
 const JUMPER_COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777'];
 
+// BU name aliases: raw key from NiSE → display name shown in the dashboard
+// (NiSE stores "NYV"; we show "EA" to match the rest of the app)
+const JUMPER_BU_ALIASES = { NYV: 'EA' };
+
+// Re-key an object using BU aliases  { NYV: [...] } → { EA: [...] }
+function applyBuAliases(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    out[JUMPER_BU_ALIASES[k] ?? k] = v;
+  }
+  return out;
+}
+
 // ── module state ──────────────────────────────────────────────────────────────
 let _jumperByBu   = {};   // raw jumper data keyed by BU
 let _jumperSewOp  = {};   // raw sewingOperator data keyed by BU
 let _jumperRows   = [];   // normalized flat rows
 let _jumperCharts = {};   // Chart.js instances { canvasId: Chart }
-let _jumperInsideMode = 'avgSkill';   // 'avgSkill' | 'positionCount'
+let _jumperInsideMode = 'positionCount';   // 'avgSkill' | 'positionCount'
 let _jumperLoaded = false;
 const _jumperTableState = {
-  page: 1, pageSize: 25, sortKey: 'bu', sortDir: 1,
+  page: 1, pageSize: 10, sortKey: 'bu', sortDir: 1,
   filters: { bu: '', expired: '', search: '' },
 };
 
@@ -2381,16 +2421,18 @@ function hexToRgba(hex, alpha) {
 
 function normalizeJumperRows(byBu) {
   const rows = [];
-  for (const [bu, emps] of Object.entries(byBu || {})) {
+  for (const [rawBu, emps] of Object.entries(byBu || {})) {
+    const bu = JUMPER_BU_ALIASES[rawBu] ?? rawBu;  // NYV → EA (or keep as-is)
     for (const e of emps) {
       rows.push({
         bu,
-        empid:     e.empid     || '',
-        firstname: e.firstname || '',
-        deptname:  e.deptname  || '',
-        position:  e.positionnameeng || '',
-        skill:     Number(e.skill_count)   || 0,
-        expired:   Number(e.expired_count) || 0,
+        empid:          e.empid            || '',
+        firstname:      e.firstname        || '',
+        deptname:       e.deptname         || '',
+        position:       e.positionnameeng  || '',
+        skill:          Number(e.skill_count)   || 0,
+        expired:        Number(e.expired_count) || 0,
+        trainingStatus: String(e.training_status || '').trim().toUpperCase(),
       });
     }
   }
@@ -2398,18 +2440,16 @@ function normalizeJumperRows(byBu) {
 }
 
 // ── JT_PROD: Jumper Training Progress tracker ─────────────────────────────────
-// Each BU × position donut persists in localStorage so values survive page refresh.
-// Click a donut to edit; press ✓ to save, ✗ to cancel.
+// trained count comes from Excel column "Training Status" (Y = trained, N = not trained)
 const JT_PROD = {
-  _bus: [], _rows: [], _ed: {},
-  _k:   (bu, pos) => `jtp_${bu}_${pos}`,
+  _bus: [], _rows: [],
 
   _data(bu, pos) {
-    const total = this._rows.filter(r =>
+    const posRows = this._rows.filter(r =>
       r.bu === bu && r.position === JUMPER_POSITIONS[pos === 'c' ? 0 : 1]
-    ).length;
-    const raw     = localStorage.getItem(this._k(bu, pos));
-    const trained = raw !== null ? Math.min(parseInt(raw, 10), total) : total;
+    );
+    const total   = posRows.length;
+    const trained = posRows.filter(r => r.trainingStatus === 'Y').length;
     return { trained, total };
   },
 
@@ -2436,21 +2476,7 @@ const JT_PROD = {
   _block(bu, pos, label) {
     const d   = this._data(bu, pos);
     const pct = d.total > 0 ? Math.round(d.trained / d.total * 100) : 0;
-    if (this._ed[`${bu}_${pos}`]) {
-      return `<div style="text-align:center;min-width:80px;">
-        <div style="font-size:0.65rem;color:#6b7280;margin-bottom:6px;">${label}</div>
-        <input id="jtp-i-${bu}-${pos}" type="number" min="0" max="${d.total}" value="${d.trained}"
-          style="width:54px;text-align:center;border:1.5px solid #d1d5db;border-radius:6px;padding:4px;font-size:0.85rem;"/>
-        <div style="font-size:0.6rem;color:#9ca3af;margin:3px 0;">/ ${d.total}</div>
-        <div style="display:flex;gap:4px;justify-content:center;margin-top:4px;">
-          <button onclick="_JTP.save('${bu}','${pos}',${d.total})"
-            style="padding:3px 10px;background:#16a34a;color:#fff;border:none;border-radius:4px;font-size:0.72rem;cursor:pointer;">✓</button>
-          <button onclick="_JTP.cancel('${bu}','${pos}')"
-            style="padding:3px 8px;background:#f3f4f6;color:#374151;border:none;border-radius:4px;font-size:0.72rem;cursor:pointer;">✗</button>
-        </div>
-      </div>`;
-    }
-    return `<div style="text-align:center;cursor:pointer;" onclick="_JTP.edit('${bu}','${pos}')" title="คลิกเพื่อแก้ไข">
+    return `<div style="text-align:center;">
       ${this._svg(d.trained, d.total)}
       <div style="font-size:0.65rem;color:#6b7280;margin-top:2px;">${label}</div>
       <div style="font-size:0.65rem;font-weight:700;color:${pct >= 100 ? '#16a34a' : '#374151'};">${pct}%</div>
@@ -2472,17 +2498,7 @@ const JT_PROD = {
       </div>`).join('');
   },
 
-  init(bus, rows) { this._bus = bus; this._rows = rows; this._ed = {}; this.render(); },
-  edit(bu, pos)   { this._ed[`${bu}_${pos}`] = true;  this.render(); },
-  cancel(bu, pos) { delete this._ed[`${bu}_${pos}`];  this.render(); },
-  save(bu, pos, total) {
-    const inp = document.getElementById(`jtp-i-${bu}-${pos}`);
-    if (!inp) return;
-    const val = Math.min(Math.max(0, parseInt(inp.value, 10) || 0), total);
-    localStorage.setItem(this._k(bu, pos), val);
-    delete this._ed[`${bu}_${pos}`];
-    this.render();
-  },
+  init(bus, rows) { this._bus = bus; this._rows = rows; this.render(); },
 };
 window._JTP = JT_PROD;
 
@@ -2505,7 +2521,7 @@ function _makeJumperBarChart(canvasId, label, labels, data) {
   });
 }
 
-function _makeJumperPositionChart(canvasId, bus, cA, iA, mA, sewCounts) {
+function _makeJumperPositionChart(canvasId, bus, cA, iA, sewCounts) {
   if (!document.getElementById(canvasId)) return;
   if (typeof Chart === 'undefined') return;
   const existing = _jumperCharts[canvasId];
@@ -2526,7 +2542,6 @@ function _makeJumperPositionChart(canvasId, bus, cA, iA, mA, sewCounts) {
         { label: 'Center (เป้า)', data: cGap, backgroundColor: buColors.map(c => hexToRgba(c, 0.28)), stack: 'center',   _targetData: cTgt, _actualData: cA,  _posLabel: 'Center' },
         { label: 'Inline (จริง)', data: iA,   backgroundColor: buColors.map(c => hexToRgba(c, 0.65)), stack: 'inline' },
         { label: 'Inline (เป้า)', data: iGap, backgroundColor: buColors.map(c => hexToRgba(c, 0.22)), stack: 'inline',   _targetData: iTgt, _actualData: iA,  _posLabel: 'Inline' },
-        { label: 'Machine Op',    data: mA,   backgroundColor: buColors.map(c => hexToRgba(c, 0.42)), stack: 'machineop' },
       ],
     },
     options: {
@@ -2608,7 +2623,7 @@ function renderJumperSummaryCards() {
   container.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-bottom:24px;';
   container.innerHTML = `
     <!-- Row 1: 5 overview cards -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:stretch;">
+    <div class="jtp-row1">
       <div style="${CARD}min-height:100px;">
         <div style="${LBL}">Jumper ทั้งหมด</div>
         <div style="${VAL}">${totalAll}</div>
@@ -2616,22 +2631,22 @@ function renderJumperSummaryCards() {
       <div style="${CARD}min-height:100px;">
         <div style="${LBL}">Jumper Center</div>
         <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${centerAll}</div>
-        <div style="margin-top:auto;">
+        ${centerTarget > 0 ? `<div style="margin-top:auto;">
           ${pBar(centerFilled, '#2563eb')}
           <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#6b7280;margin-top:4px;">
-            <span>${centerFilled}%</span><span>${centerTarget}</span>
+            <span>${centerFilled}%</span><span>Target: ${centerTarget}</span>
           </div>
-        </div>
+        </div>` : ''}
       </div>
       <div style="${CARD}min-height:100px;">
         <div style="${LBL}">Jumper Inline</div>
         <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${inlineAll}</div>
-        <div style="margin-top:auto;">
+        ${inlineTarget > 0 ? `<div style="margin-top:auto;">
           ${pBar(inlineFilled, '#16a34a')}
           <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#6b7280;margin-top:4px;">
-            <span>${inlineFilled}%</span><span>${inlineTarget}</span>
+            <span>${inlineFilled}%</span><span>Target: ${inlineTarget}</span>
           </div>
-        </div>
+        </div>` : ''}
       </div>
       <div style="${CARD}min-height:100px;">
         <div style="${LBL}">Avg. Skill Score / Person</div>
@@ -2644,7 +2659,7 @@ function renderJumperSummaryCards() {
     </div>
 
     <!-- Row 2: BU mini-cards -->
-    <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;align-items:stretch;">
+    <div class="jtp-row2">
       ${buStats.map(s => `
       <div style="${CARD}min-width:0;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
@@ -2653,15 +2668,17 @@ function renderJumperSummaryCards() {
         </div>
         <div style="margin-bottom:5px;">
           <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#6b7280;margin-bottom:2px;">
-            <span>Center</span><span style="font-weight:600;color:#374151;">${s.center}/${s.centerTgt}</span>
+            <span>Center</span>
+            <span style="font-weight:600;color:#374151;">${s.centerTgt > 0 ? `${s.center}/${s.centerTgt}` : s.center}</span>
           </div>
-          ${pBar(s.centerPct, s.color)}
+          ${s.centerTgt > 0 ? pBar(s.centerPct, s.color) : ''}
         </div>
         <div style="margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#6b7280;margin-bottom:2px;">
-            <span>Inline</span><span style="font-weight:600;color:#374151;">${s.inline}/${s.inlineTgt}</span>
+            <span>Inline</span>
+            <span style="font-weight:600;color:#374151;">${s.inlineTgt > 0 ? `${s.inline}/${s.inlineTgt}` : s.inline}</span>
           </div>
-          ${pBar(s.inlinePct, hexToRgba(s.color, 0.6))}
+          ${s.inlineTgt > 0 ? pBar(s.inlinePct, hexToRgba(s.color, 0.6)) : ''}
         </div>
         <div style="font-size:0.7rem;color:#6b7280;border-top:1px solid #f3f4f6;padding-top:6px;margin-top:auto;">
           <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
@@ -2675,7 +2692,7 @@ function renderJumperSummaryCards() {
     </div>
 
     <!-- Row 3: Training Progress donuts — filled by JT_PROD.init() -->
-    <div id="jtp-row3" style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;"></div>`;
+    <div id="jtp-row3" class="jtp-row3"></div>`;
 
   JT_PROD.init(bus, allRows);
 }
@@ -2698,8 +2715,7 @@ function renderJumperCharts() {
   const sewCounts = bus.map(bu => (sewOpByBu[bu] || []).length);
   const cA = bus.map(bu => _jumperRows.filter(r => r.bu === bu && r.position === JUMPER_POSITIONS[0]).length);
   const iA = bus.map(bu => _jumperRows.filter(r => r.bu === bu && r.position === JUMPER_POSITIONS[1]).length);
-  const mA = bus.map(bu => _jumperRows.filter(r => r.bu === bu && r.position === JUMPER_POSITIONS[2]).length);
-  _makeJumperPositionChart('jtp-positionCountChart', bus, cA, iA, mA, sewCounts);
+  _makeJumperPositionChart('jtp-positionCountChart', bus, cA, iA, sewCounts);
 }
 
 // ── Data table ────────────────────────────────────────────────────────────────
@@ -2799,6 +2815,9 @@ function _wireJumperControls() {
         if (track) track.style.transform = _jumperInsideMode === 'positionCount' ? 'translateX(-100%)' : 'translateX(0)';
       };
     });
+    // Apply initial position based on default mode
+    const track = document.getElementById('jtp-chartTrack');
+    if (track) track.style.transform = _jumperInsideMode === 'positionCount' ? 'translateX(-100%)' : 'translateX(0)';
   }
 
   // Table filters
@@ -2855,9 +2874,9 @@ async function initJumperTab() {
   if (dashEl)    dashEl.classList.add('hidden');
 
   try {
-    const data = await api('/api/jumper-data');
-    _jumperByBu  = data.jumper        || {};
-    _jumperSewOp = data.sewingOperator || {};
+    const data = await api('/api/jumper-excel');
+    _jumperByBu  = applyBuAliases(data.jumper        || {});
+    _jumperSewOp = applyBuAliases(data.sewingOperator || {});
     _jumperRows  = normalizeJumperRows(_jumperByBu);
     _jumperLoaded = true;
 
@@ -2873,6 +2892,517 @@ async function initJumperTab() {
     if (errorEl) {
       errorEl.innerHTML = `<p style="color:var(--danger);font-weight:600;">${escapeHtml(err.message)}</p>
         <button onclick="initJumperTab()" style="margin-top:8px;">ลองใหม่</button>`;
+      errorEl.classList.remove('hidden');
+    }
+  }
+}
+
+// =============================================================================
+// TRAINER TAB
+// =============================================================================
+
+let _trainerData        = null;
+let _trainerCharts      = {};
+let _trainerLoaded      = false;
+let _trainerBuMode      = 'status';   // 'headcount' | 'status'
+let _trainerInsideMode  = 'grade';    // 'skill' | 'grade'
+let _trainerTableMode   = 'person';   // 'person' | 'skilltype'
+let _trainerTableVisible = true;
+const _trainerTableState = {
+  page: 1, pageSize: 25,
+  filters: { bu: '', style: '', status: '', search: '' },
+};
+
+// ── Coverage helpers ──────────────────────────────────────────────────────────
+
+function _trainerCoverageData(data) {
+  const bus          = [...new Set(data.trainers.map(t => t.bu))].sort();
+  const productTypes = [...new Set(data.setup.map(s => s.productType))].sort();
+  const coverage     = {};
+  for (const bu of bus) {
+    coverage[bu] = {};
+    const trainersInBu = data.trainers.filter(t => t.bu === bu);
+    for (const pt of productTypes) {
+      const setupRows = data.setup.filter(s => s.bu === bu && s.productType === pt);
+      if (!setupRows.length || !trainersInBu.length) { coverage[bu][pt] = null; continue; }
+      const totalSteps = setupRows.reduce((s, r) => s + r.totalSteps, 0);
+      if (!totalSteps) { coverage[bu][pt] = null; continue; }
+      let stepsDone = 0;
+      for (const t of trainersInBu)
+        stepsDone += (data.skills[t.empid] || []).filter(s => s.productType === pt).length;
+      coverage[bu][pt] = Math.min(100, Math.round(stepsDone / (trainersInBu.length * totalSteps) * 100));
+    }
+  }
+  return { bus, productTypes, coverage };
+}
+
+// ── Summary cards (Rows 1–3) ─────────────────────────────────────────────────
+
+function renderTrainerSummaryCards(data) {
+  const { bus, productTypes, coverage } = _trainerCoverageData(data);
+  const allSkills   = Object.values(data.skills).flat();
+  const totalTr     = data.trainers.length;
+  const masterCount = data.trainers.filter(t => t.status === 'Master Trainer').length;
+  const certCount   = data.trainers.filter(t => t.status === 'Certified').length;
+  const avgSkill    = allSkills.length
+    ? (allSkills.reduce((s, r) => s + (r.eff || 0), 0) / allSkills.length).toFixed(1) : '0.0';
+  const expiredAll  = allSkills.filter(r => Number(r.expired) === 1).length;
+
+  const buStats = bus.map((bu, i) => {
+    const trs      = data.trainers.filter(t => t.bu === bu);
+    const buSkills = trs.flatMap(t => data.skills[t.empid] || []);
+    const bAvg     = buSkills.length
+      ? (buSkills.reduce((s, r) => s + (r.eff || 0), 0) / buSkills.length).toFixed(1) : '0.0';
+    const bExp     = buSkills.filter(r => Number(r.expired) === 1).length;
+    const topPt    = productTypes
+      .map(pt => ({ pt, pct: coverage[bu][pt] }))
+      .filter(x => x.pct !== null)
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 3);
+    return {
+      bu, color: JUMPER_COLORS[i % JUMPER_COLORS.length],
+      total:      trs.length,
+      master:     trs.filter(t => t.status === 'Master Trainer').length,
+      certified:  trs.filter(t => t.status === 'Certified').length,
+      onProgress: trs.filter(t => t.status === 'On-Progress').length,
+      avgSkill: bAvg, expired: bExp, topPt,
+    };
+  });
+
+  const CARD = 'background:var(--surface);border-radius:10px;box-shadow:0 1px 3px var(--shadow);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
+  const LBL  = 'font-size:0.85rem;color:#6b7280;';
+  const VAL  = 'font-size:1.8rem;font-weight:700;margin-top:4px;';
+  const pBar = (pct, color) => `
+    <div style="background:#e5e7eb;border-radius:999px;height:5px;overflow:hidden;margin-top:3px;">
+      <div style="background:${color};width:${pct}%;height:100%;border-radius:999px;transition:width .3s;"></div>
+    </div>`;
+  const ptColor = pct => pct >= 80 ? '#16a34a' : pct >= 60 ? '#22d3ee' : pct >= 30 ? '#f59e0b' : '#ef4444';
+
+  const container = document.getElementById('trainer-summary');
+  if (!container) return;
+  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-bottom:24px;';
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+      <div style="${CARD}"><div style="${LBL}">Total Trainer</div><div style="${VAL}">${totalTr}</div></div>
+      <div style="${CARD}"><div style="${LBL}">Master Trainer</div><div style="${VAL}color:#7c3aed;">${masterCount}</div></div>
+      <div style="${CARD}"><div style="${LBL}">Certified</div><div style="${VAL}color:#16a34a;">${certCount}</div></div>
+      <div style="${CARD}"><div style="${LBL}">Avg. Skill Score / Person</div><div style="${VAL}">${avgSkill}</div></div>
+      <div style="${CARD}"><div style="${LBL}">Skill Expired</div><div style="${VAL}${expiredAll > 0 ? 'color:#dc2626;' : ''}">${expiredAll}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;">
+      ${buStats.map(s => `
+      <div style="${CARD}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+          <span style="font-size:1.05rem;font-weight:700;color:${s.color};">${escapeHtml(s.bu)}</span>
+          <span style="font-size:0.82rem;color:#6b7280;">${s.total} คน</span>
+        </div>
+        <div style="font-size:0.7rem;color:#6b7280;display:flex;flex-direction:column;gap:3px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;"><span>★ Master Trainer</span><strong style="color:#7c3aed;">${s.master}</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>✓ Certified</span><strong style="color:#16a34a;">${s.certified}</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>○ On-Progress</span><strong style="color:#f59e0b;">${s.onProgress}</strong></div>
+        </div>
+        <div style="font-size:0.7rem;color:#6b7280;border-top:1px solid #f3f4f6;padding-top:6px;margin-top:auto;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span>Skill avg</span><strong style="color:#1f2937;">${s.avgSkill}</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>Expired</span><strong style="${s.expired > 0 ? 'color:#dc2626;' : 'color:#1f2937;'}">${s.expired}</strong></div>
+        </div>
+      </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;">
+      ${buStats.map(s => `
+      <div style="${CARD}min-height:80px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:0.9rem;font-weight:600;color:#6b7280;">${escapeHtml(s.bu)}</span>
+          <span style="color:#9ca3af;font-size:0.85rem;">⚙</span>
+        </div>
+        ${s.topPt.length === 0
+          ? `<div style="font-size:0.7rem;color:#9ca3af;text-align:center;padding:8px 0;">ไม่มีข้อมูล Setup</div>`
+          : s.topPt.map(x => `
+            <div style="margin-bottom:6px;">
+              <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:#6b7280;margin-bottom:2px;">
+                <span>${escapeHtml(x.pt)}</span><span style="font-weight:600;color:#374151;">${x.pct}%</span>
+              </div>
+              ${pBar(x.pct, ptColor(x.pct))}
+            </div>`).join('')}
+      </div>`).join('')}
+    </div>`;
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+
+function renderTrainerCharts(data) {
+  _makeTrainerBuChart(data, _trainerBuMode);
+  _makeTrainerInsideChart(data, _trainerInsideMode);
+}
+
+function _makeTrainerBuChart(data, mode) {
+  const id = 'trainer-buChart';
+  if (!document.getElementById(id) || typeof Chart === 'undefined') return;
+  if (_trainerCharts[id]) _trainerCharts[id].destroy();
+  const bus = [...new Set(data.trainers.map(t => t.bu))].sort();
+  if (mode === 'status') {
+    const statuses = ['Master Trainer', 'Certified', 'On-Progress', 'No-Certified'];
+    const colors   = ['#2563eb', '#16a34a', '#f59e0b', '#f97316'];
+    _trainerCharts[id] = new Chart(document.getElementById(id), {
+      type: 'bar',
+      data: {
+        labels: bus,
+        datasets: statuses.map((s, i) => ({
+          label: s,
+          data: bus.map(bu => data.trainers.filter(t => t.bu === bu && t.status === s).length),
+          backgroundColor: colors[i], borderRadius: 3,
+        })),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } },
+      },
+    });
+  } else {
+    const sorted = bus.map(bu => ({ bu, n: data.trainers.filter(t => t.bu === bu).length }))
+      .sort((a, b) => b.n - a.n);
+    _trainerCharts[id] = new Chart(document.getElementById(id), {
+      type: 'bar',
+      data: {
+        labels: sorted.map(x => x.bu),
+        datasets: [{ label: 'จำนวน Trainer', data: sorted.map(x => x.n),
+          backgroundColor: sorted.map((_, i) => JUMPER_COLORS[i % JUMPER_COLORS.length]), borderRadius: 4 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      },
+    });
+  }
+}
+
+function _makeTrainerInsideChart(data, mode) {
+  const id = 'trainer-insideChart';
+  if (!document.getElementById(id) || typeof Chart === 'undefined') return;
+  if (_trainerCharts[id]) _trainerCharts[id].destroy();
+  const bus       = [...new Set(data.trainers.map(t => t.bu))].sort();
+  const allSkills = Object.values(data.skills).flat();
+  if (mode === 'grade') {
+    const grades = ['A', 'B', 'C', 'D'];
+    const gColors = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626'];
+    _trainerCharts[id] = new Chart(document.getElementById(id), {
+      type: 'bar',
+      data: {
+        labels: bus,
+        datasets: grades.map((g, i) => ({
+          label: `Grade ${g}`,
+          data: bus.map(bu => {
+            const ids = data.trainers.filter(t => t.bu === bu).map(t => t.empid);
+            return allSkills.filter(s => ids.includes(s.empid) && s.grade === g).length;
+          }),
+          backgroundColor: gColors[i], borderRadius: 3,
+        })),
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+        scales: { y: { beginAtZero: true } },
+      },
+    });
+  } else {
+    const sorted = bus.map(bu => {
+      const ids = data.trainers.filter(t => t.bu === bu).map(t => t.empid);
+      const s   = allSkills.filter(r => ids.includes(r.empid) && (r.eff || 0) > 0);
+      return { bu, avg: s.length ? +(s.reduce((a, r) => a + r.eff, 0) / s.length).toFixed(1) : 0 };
+    }).sort((a, b) => b.avg - a.avg);
+    _trainerCharts[id] = new Chart(document.getElementById(id), {
+      type: 'bar',
+      data: {
+        labels: sorted.map(x => x.bu),
+        datasets: [{ label: 'Avg Skill Score', data: sorted.map(x => x.avg),
+          backgroundColor: sorted.map((_, i) => JUMPER_COLORS[i % JUMPER_COLORS.length]), borderRadius: 4 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } },
+      },
+    });
+  }
+}
+
+// ── Coverage Matrix ───────────────────────────────────────────────────────────
+
+function renderTrainerCoverageMatrix(data) {
+  const wrap = document.getElementById('trainer-coverageMatrix');
+  if (!wrap) return;
+  const { bus, productTypes, coverage } = _trainerCoverageData(data);
+  if (!productTypes.length) {
+    wrap.innerHTML = '<p style="color:#9ca3af;font-size:0.85rem;text-align:center;padding:20px;">ยังไม่มีข้อมูล BUSetup — กรุณาสร้างตาราง BUSetup ในไฟล์ Excel</p>';
+    return;
+  }
+  const cellBg = pct => {
+    if (pct === null) return '';
+    if (pct >= 80) return 'background:#bbf7d0;';
+    if (pct >= 60) return 'background:#dcfce7;';
+    if (pct >= 30) return 'background:#fef9c3;';
+    return 'background:#fecaca;';
+  };
+  const colAvg = productTypes.map(pt => {
+    const v = bus.map(bu => coverage[bu][pt]).filter(x => x !== null);
+    return v.length ? Math.round(v.reduce((s, x) => s + x, 0) / v.length) : null;
+  });
+  const rowAvg = bus.map(bu => {
+    const v = productTypes.map(pt => coverage[bu][pt]).filter(x => x !== null);
+    return v.length ? Math.round(v.reduce((s, x) => s + x, 0) / v.length) : null;
+  });
+  const allV = bus.flatMap(bu => productTypes.map(pt => coverage[bu][pt])).filter(x => x !== null);
+  const grandAvg = allV.length ? Math.round(allV.reduce((s, x) => s + x, 0) / allV.length) : null;
+
+  const TH = 'padding:7px 10px;font-size:0.75rem;font-weight:600;background:var(--surface-alt,#f9fafb);text-align:center;white-space:nowrap;border:1px solid #e5e7eb;';
+  const TD = 'padding:6px 10px;font-size:0.75rem;text-align:center;border:1px solid #e5e7eb;';
+  wrap.innerHTML = `
+    <table style="border-collapse:collapse;width:100%;min-width:500px;">
+      <thead><tr>
+        <th style="${TH}text-align:left;">BU</th>
+        ${productTypes.map(pt => `<th style="${TH}">${escapeHtml(pt)}</th>`).join('')}
+        <th style="${TH}">x̄</th>
+      </tr></thead>
+      <tbody>
+        ${bus.map((bu, i) => `
+        <tr>
+          <td style="${TD}text-align:left;font-weight:600;">${escapeHtml(bu)}</td>
+          ${productTypes.map(pt => {
+            const p = coverage[bu][pt];
+            return `<td style="${TD}${cellBg(p)}">${p === null ? '—' : p + '%'}</td>`;
+          }).join('')}
+          <td style="${TD}font-weight:700;">${rowAvg[i] === null ? '—' : rowAvg[i] + '%'}</td>
+        </tr>`).join('')}
+        <tr style="border-top:2px solid #d1d5db;">
+          <td style="${TD}text-align:left;font-weight:700;">x̄</td>
+          ${colAvg.map(v => `<td style="${TD}font-weight:700;">${v === null ? '—' : v + '%'}</td>`).join('')}
+          <td style="${TD}font-weight:700;">${grandAvg === null ? '—' : grandAvg + '%'}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
+// ── Person list ───────────────────────────────────────────────────────────────
+
+function renderTrainerTable(data) {
+  const wrap = document.getElementById('trainer-table');
+  if (!wrap) return;
+  const { bu, style, status, search } = _trainerTableState.filters;
+  const q = search.toLowerCase();
+  const TH = 'padding:8px 10px;font-size:0.75rem;font-weight:600;background:var(--surface-alt,#f9fafb);text-align:left;white-space:nowrap;border-bottom:2px solid #e5e7eb;';
+  const TD = 'padding:7px 10px;font-size:0.8rem;border-bottom:1px solid #f3f4f6;';
+
+  if (_trainerTableMode === 'person') {
+    let rows = data.trainers.map(t => {
+      const skills = (data.skills[t.empid] || []).filter(s => !style || s.style === style);
+      return {
+        empid: t.empid, name: t.name, bu: t.bu, status: t.status,
+        total: skills.length,
+        A:     skills.filter(s => s.grade === 'A').length,
+        B:     skills.filter(s => s.grade === 'B').length,
+        C:     skills.filter(s => s.grade === 'C').length,
+        D:     skills.filter(s => s.grade === 'D').length,
+        nullG: skills.filter(s => !s.grade || !['A','B','C','D'].includes(s.grade)).length,
+        exp:   skills.filter(s => Number(s.expired) === 1).length,
+      };
+    });
+    if (bu)     rows = rows.filter(r => r.bu === bu);
+    if (status) rows = rows.filter(r => r.status === status);
+    if (q)      rows = rows.filter(r => r.name.toLowerCase().includes(q) || r.empid.toLowerCase().includes(q));
+
+    const total = rows.length;
+    const { page, pageSize } = _trainerTableState;
+    const pageCount  = Math.ceil(total / pageSize) || 1;
+    const start      = (page - 1) * pageSize;
+    const pageRows   = rows.slice(start, start + pageSize);
+
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="${TH}">BU</th><th style="${TH}">รหัสพนักงาน</th><th style="${TH}">ชื่อ-สกุล</th>
+          <th style="${TH}text-align:right;">Skill รวม</th>
+          <th style="${TH}text-align:right;">A</th><th style="${TH}text-align:right;">B</th>
+          <th style="${TH}text-align:right;">C</th><th style="${TH}text-align:right;">D</th>
+          <th style="${TH}text-align:right;">Null</th><th style="${TH}text-align:center;">หมดอายุ</th>
+        </tr></thead>
+        <tbody>${pageRows.map(r => `
+          <tr>
+            <td style="${TD}">${escapeHtml(r.bu)}</td>
+            <td style="${TD}">${escapeHtml(r.empid)}</td>
+            <td style="${TD}">${escapeHtml(r.name)}</td>
+            <td style="${TD}text-align:right;">${r.total}</td>
+            <td style="${TD}text-align:right;">${r.A}</td><td style="${TD}text-align:right;">${r.B}</td>
+            <td style="${TD}text-align:right;">${r.C}</td><td style="${TD}text-align:right;">${r.D}</td>
+            <td style="${TD}text-align:right;">${r.nullG}</td>
+            <td style="${TD}text-align:center;">${r.exp > 0
+              ? `<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:600;">${r.exp} หมดอายุ</span>`
+              : `<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:600;">ปกติ</span>`}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+    const rl = document.getElementById('trainer-rangeLabel');
+    const pl = document.getElementById('trainer-pageLabel');
+    const pv = document.getElementById('trainer-prevPage');
+    const nv = document.getElementById('trainer-nextPage');
+    if (rl) rl.textContent = total > 0 ? `${start+1}–${Math.min(start+pageSize,total)} จาก ${total}` : '0 รายการ';
+    if (pl) pl.textContent = `${page} / ${pageCount}`;
+    if (pv) pv.disabled = page <= 1;
+    if (nv) nv.disabled = page >= pageCount;
+
+  } else {
+    // By Skill Type — group by Product Type
+    const allSkills = Object.values(data.skills).flat();
+    const groups = {};
+    for (const s of allSkills) {
+      const t = data.trainers.find(x => x.empid === s.empid);
+      if (!t) continue;
+      if (bu && t.bu !== bu) continue;
+      if (style && s.style !== style) continue;
+      if (status && t.status !== status) continue;
+      if (q && !t.name.toLowerCase().includes(q) && !t.empid.toLowerCase().includes(q)) continue;
+      const key = s.productType || '—';
+      if (!groups[key]) groups[key] = { A:0, B:0, C:0, D:0, nullG:0, exp:0, total:0 };
+      groups[key].total++;
+      if (['A','B','C','D'].includes(s.grade)) groups[key][s.grade]++;
+      else groups[key].nullG++;
+      if (Number(s.expired) === 1) groups[key].exp++;
+    }
+    const ptRows = Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr>
+          <th style="${TH}">Product Type</th>
+          <th style="${TH}text-align:right;">Skill รวม</th>
+          <th style="${TH}text-align:right;">A</th><th style="${TH}text-align:right;">B</th>
+          <th style="${TH}text-align:right;">C</th><th style="${TH}text-align:right;">D</th>
+          <th style="${TH}text-align:right;">Null</th><th style="${TH}text-align:right;">หมดอายุ</th>
+        </tr></thead>
+        <tbody>${ptRows.map(([pt, g]) => `
+          <tr>
+            <td style="${TD}">${escapeHtml(pt)}</td>
+            <td style="${TD}text-align:right;">${g.total}</td>
+            <td style="${TD}text-align:right;">${g.A}</td><td style="${TD}text-align:right;">${g.B}</td>
+            <td style="${TD}text-align:right;">${g.C}</td><td style="${TD}text-align:right;">${g.D}</td>
+            <td style="${TD}text-align:right;">${g.nullG}</td>
+            <td style="${TD}text-align:right;${g.exp>0?'color:#dc2626;font-weight:600;':''}">${g.exp}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+    const rl = document.getElementById('trainer-rangeLabel');
+    const pl = document.getElementById('trainer-pageLabel');
+    if (rl) rl.textContent = '';
+    if (pl) pl.textContent = '';
+  }
+}
+
+// ── Wire controls ─────────────────────────────────────────────────────────────
+
+function _wireTrainerControls(data) {
+  const wire = (id, modeRef, setter, renderFn) => {
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
+    wrap.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.onclick = () => {
+        setter(btn.dataset.mode);
+        wrap.querySelectorAll('.toggle-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.mode === btn.dataset.mode));
+        renderFn(data, btn.dataset.mode);
+      };
+    });
+  };
+  wire('trainer-buChartToggle',      _trainerBuMode,     m => { _trainerBuMode = m; },     _makeTrainerBuChart);
+  wire('trainer-insideDataToggle',   _trainerInsideMode,  m => { _trainerInsideMode = m; },  _makeTrainerInsideChart);
+
+  const tableToggle = document.getElementById('trainer-tableToggle');
+  if (tableToggle) {
+    tableToggle.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.onclick = () => {
+        _trainerTableMode = btn.dataset.mode;
+        tableToggle.querySelectorAll('.toggle-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.mode === _trainerTableMode));
+        _trainerTableState.page = 1;
+        renderTrainerTable(data);
+      };
+    });
+  }
+
+  const hideBtn = document.getElementById('trainer-tableHideBtn');
+  if (hideBtn) {
+    hideBtn.onclick = () => {
+      _trainerTableVisible = !_trainerTableVisible;
+      const body = document.getElementById('trainer-tableBody');
+      if (body) body.style.display = _trainerTableVisible ? '' : 'none';
+      hideBtn.textContent = _trainerTableVisible ? 'ซ่อน ▲' : 'แสดง ▼';
+    };
+  }
+
+  const buSel     = document.getElementById('trainer-filterBu');
+  const styleSel  = document.getElementById('trainer-filterStyle');
+  const statusSel = document.getElementById('trainer-filterStatus');
+  const searchInp = document.getElementById('trainer-filterSearch');
+  const prevBtn   = document.getElementById('trainer-prevPage');
+  const nextBtn   = document.getElementById('trainer-nextPage');
+  const pageSel   = document.getElementById('trainer-pageSize');
+
+  if (buSel) {
+    const bus = [...new Set(data.trainers.map(t => t.bu))].sort();
+    buSel.innerHTML = '<option value="">ทุก BU</option>' +
+      bus.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+    buSel.onchange = () => { _trainerTableState.filters.bu = buSel.value; _trainerTableState.page = 1; renderTrainerTable(data); };
+  }
+  if (styleSel) {
+    const styles = [...new Set(Object.values(data.skills).flat().map(s => s.style).filter(Boolean))].sort();
+    styleSel.innerHTML = '<option value="">ทุก Style</option>' +
+      styles.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    styleSel.onchange = () => { _trainerTableState.filters.style = styleSel.value; _trainerTableState.page = 1; renderTrainerTable(data); };
+  }
+  if (statusSel) {
+    ['Master Trainer','Certified','On-Progress','No-Certified'].forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      statusSel.appendChild(opt);
+    });
+    statusSel.onchange = () => { _trainerTableState.filters.status = statusSel.value; _trainerTableState.page = 1; renderTrainerTable(data); };
+  }
+  if (searchInp) {
+    let db;
+    searchInp.oninput = () => {
+      clearTimeout(db);
+      db = setTimeout(() => { _trainerTableState.filters.search = searchInp.value; _trainerTableState.page = 1; renderTrainerTable(data); }, 250);
+    };
+  }
+  if (prevBtn) prevBtn.onclick = () => { _trainerTableState.page--; renderTrainerTable(data); };
+  if (nextBtn) nextBtn.onclick = () => { _trainerTableState.page++; renderTrainerTable(data); };
+  if (pageSel) pageSel.onchange = () => { _trainerTableState.pageSize = +pageSel.value; _trainerTableState.page = 1; renderTrainerTable(data); };
+}
+
+// ── Main init ─────────────────────────────────────────────────────────────────
+
+async function initTrainerTab() {
+  if (_trainerLoaded) return;
+  const loadingEl = document.getElementById('trainer-loading');
+  const errorEl   = document.getElementById('trainer-error');
+  const dashEl    = document.getElementById('trainer-dashboard');
+  try {
+    const res = await fetch('/api/trainer-excel');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _trainerData = await res.json();
+    if (_trainerData.error) throw new Error(_trainerData.error);
+    _trainerLoaded = true;
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (dashEl)    dashEl.classList.remove('hidden');
+    renderTrainerSummaryCards(_trainerData);
+    renderTrainerCharts(_trainerData);
+    renderTrainerCoverageMatrix(_trainerData);
+    renderTrainerTable(_trainerData);
+    _wireTrainerControls(_trainerData);
+  } catch (err) {
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (errorEl) {
+      errorEl.innerHTML = `<p style="color:var(--danger);font-weight:600;">${escapeHtml(err.message)}</p>
+        <button onclick="initTrainerTab()" style="margin-top:8px;">ลองใหม่</button>`;
       errorEl.classList.remove('hidden');
     }
   }
