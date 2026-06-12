@@ -2,6 +2,7 @@ import os
 import re as _re
 import time
 import urllib.parse as _urllib_parse
+from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 from datetime import timedelta
 
 import requests as _requests
@@ -624,17 +625,23 @@ def _fetch_jumper_excel_data(token: str) -> tuple:
     drive_id = item['parentReference']['driveId']
     item_id  = item['id']
 
-    # Read per-BU Jumper tables — inject '_bu' key so payload builder knows which BU
-    jumper_rows = []
-    for bu, table_name in JUMPER_BU_TABLES.items():
+    # Read per-BU Jumper tables in parallel — inject '_bu' key so payload builder knows which BU
+    def _read_jumper_bu(bu_tbl):
+        bu, table_name = bu_tbl
         try:
             rows = _read_excel_table(token, drive_id, item_id, table_name, JUMPER_EXCEL_COLS)
             for r in rows:
                 r['_bu'] = bu
-            jumper_rows.extend(rows)
             print(f'[JUMPER-EXCEL] {table_name}: {len(rows)} rows', flush=True)
+            return rows
         except Exception as exc:
             print(f'[JUMPER-EXCEL] {table_name} skipped: {exc}', flush=True)
+            return []
+
+    jumper_rows = []
+    with _ThreadPoolExecutor(max_workers=len(JUMPER_BU_TABLES)) as ex:
+        for rows in ex.map(_read_jumper_bu, JUMPER_BU_TABLES.items()):
+            jumper_rows.extend(rows)
 
     # Read SewingOperatorCount (optional — bars hide gracefully if missing)
     sew_rows = []
@@ -743,23 +750,26 @@ def api_trainer_excel():
         except Exception as exc:
             print(f'[TRAINER-EXCEL] top_3 skipped: {exc}', flush=True)
 
-        # 4. Per-BU skill sheets: Trainer_G1, Trainer_G2, …
+        # 4. Per-BU skill sheets: Trainer_G1, Trainer_G2, … (parallel)
+        unique_bus = list({str(t.get('BU', '')).strip() for t in trainer_list if t.get('BU', '').strip()})
+
+        def _read_trainer_bu(bu):
+            table_name = f'Trainer_{bu}'
+            try:
+                rows = _read_excel_table(token, drive_id, item_id,
+                                          table_name, TRAINER_SKILL_COLS)
+                for r in rows:
+                    r['_bu'] = bu
+                print(f'[TRAINER-EXCEL] {table_name}: {len(rows)} rows', flush=True)
+                return rows
+            except Exception as exc:
+                print(f'[TRAINER-EXCEL] {table_name} skipped: {exc}', flush=True)
+                return []
+
         skill_rows = []
-        bus_seen: set = set()
-        for t in trainer_list:
-            bu = str(t.get('BU', '')).strip()
-            if bu and bu not in bus_seen:
-                bus_seen.add(bu)
-                table_name = f'Trainer_{bu}'
-                try:
-                    rows = _read_excel_table(token, drive_id, item_id,
-                                              table_name, TRAINER_SKILL_COLS)
-                    for r in rows:
-                        r['_bu'] = bu
-                    skill_rows.extend(rows)
-                    print(f'[TRAINER-EXCEL] {table_name}: {len(rows)} rows', flush=True)
-                except Exception as exc:
-                    print(f'[TRAINER-EXCEL] {table_name} skipped: {exc}', flush=True)
+        with _ThreadPoolExecutor(max_workers=max(len(unique_bus), 1)) as ex:
+            for rows in ex.map(_read_trainer_bu, unique_bus):
+                skill_rows.extend(rows)
 
         # Build payload
         trainers = []

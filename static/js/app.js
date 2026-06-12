@@ -742,6 +742,21 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// ── sessionStorage cache helpers (TTL in seconds) ─────────────────────────────
+function _ssGet(key, ttlSec) {
+  try {
+    const raw = sessionStorage.getItem('_cc_' + key);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > ttlSec * 1000) { sessionStorage.removeItem('_cc_' + key); return null; }
+    return data;
+  } catch { return null; }
+}
+function _ssSet(key, data) {
+  try { sessionStorage.setItem('_cc_' + key, JSON.stringify({ ts: Date.now(), data })); }
+  catch {} // silently ignore if storage quota exceeded
+}
+
 function normalizeDateForInput(value) {
   if (value === null || value === undefined || value === '' || value === 0) return '';
   if (typeof value === 'number') {
@@ -2483,6 +2498,14 @@ const JUMPER_POSITIONS = [
   'Jumper Sewing Machine Operation',
 ];
 const JUMPER_COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777'];
+const BU_ORDER = ['G1', 'G3', 'G2', 'G4', 'TRM', 'EA'];
+function sortBus(arr) {
+  return [...arr].sort((a, b) => {
+    const ai = BU_ORDER.indexOf(a), bi = BU_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+}
 const TRAINER_PT_COLORS = [
   '#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777',
   '#ea580c', '#65a30d', '#0d9488', '#9333ea', '#0284c7', '#be123c', '#854d0e',
@@ -2725,7 +2748,7 @@ function _makeJumperPositionChart(canvasId, bus, cA, iA, sewCounts) {
 
 function renderJumperSummaryCards() {
   const allRows = _jumperRows;
-  const bus     = Object.keys(_jumperByBu).sort();
+  const bus     = sortBus(Object.keys(_jumperByBu));
   const sewOpByBu = _jumperSewOp || {};
 
   const totalAll    = allRows.length;
@@ -2826,7 +2849,8 @@ function renderJumperSummaryCards() {
       </div>
     </div>
 
-    <!-- Row 2: BU mini-cards -->
+    <!-- Row 2 + Row 3: BU mini-cards + Training Progress donuts (combined section) -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
     <div class="jtp-row2">
       ${buStats.map(s => `
       <div style="${CARD}min-width:0;">
@@ -2860,7 +2884,8 @@ function renderJumperSummaryCards() {
     </div>
 
     <!-- Row 3: Training Progress donuts — filled by JT_PROD.init() -->
-    <div id="jtp-row3" class="jtp-row3"></div>`;
+    <div id="jtp-row3" class="jtp-row3"></div>
+    </div>`;
 
   JT_PROD.init(bus, allRows);
 }
@@ -2868,7 +2893,7 @@ function renderJumperSummaryCards() {
 // ── Charts ────────────────────────────────────────────────────────────────────
 
 function renderJumperCharts() {
-  const bus       = Object.keys(_jumperByBu).sort();
+  const bus       = sortBus(Object.keys(_jumperByBu));
   const sewOpByBu = _jumperSewOp || {};
 
   const empCounts = bus.map(bu => _jumperRows.filter(r => r.bu === bu).length);
@@ -3001,7 +3026,7 @@ function _wireJumperControls() {
   const pageSel   = document.getElementById('jtp-pageSize');
 
   if (buSel) {
-    const bus = [...new Set(_jumperRows.map(r => r.bu))].sort();
+    const bus = sortBus([...new Set(_jumperRows.map(r => r.bu))]);
     buSel.innerHTML = '<option value="">ทุก BU</option>' +
       bus.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
     buSel.onchange = () => {
@@ -3041,24 +3066,31 @@ async function initJumperTab() {
   const errorEl   = document.getElementById('jumper-error');
   const dashEl    = document.getElementById('jumper-dashboard');
 
+  const _applyJumperData = (data) => {
+    _jumperByBu  = applyBuAliases(data.jumper        || {});
+    _jumperSewOp = applyBuAliases(data.sewingOperator || {});
+    _jumperRows  = normalizeJumperRows(_jumperByBu);
+    _jumperLoaded = true;
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (dashEl)    dashEl.classList.remove('hidden');
+    renderJumperSummaryCards();
+    renderJumperCharts();
+    renderJumperTable();
+    _wireJumperControls();
+  };
+
+  // Serve from sessionStorage if fresh (TTL 5 min, matches backend cache)
+  const cached = _ssGet('jumper-excel', 300);
+  if (cached) { _applyJumperData(cached); return; }
+
   if (loadingEl) loadingEl.classList.remove('hidden');
   if (errorEl)   errorEl.classList.add('hidden');
   if (dashEl)    dashEl.classList.add('hidden');
 
   try {
     const data = await api('/api/jumper-excel');
-    _jumperByBu  = applyBuAliases(data.jumper        || {});
-    _jumperSewOp = applyBuAliases(data.sewingOperator || {});
-    _jumperRows  = normalizeJumperRows(_jumperByBu);
-    _jumperLoaded = true;
-
-    if (loadingEl) loadingEl.classList.add('hidden');
-    if (dashEl)    dashEl.classList.remove('hidden');
-
-    renderJumperSummaryCards();
-    renderJumperCharts();
-    renderJumperTable();
-    _wireJumperControls();
+    _ssSet('jumper-excel', data);
+    _applyJumperData(data);
   } catch (err) {
     if (loadingEl) loadingEl.classList.add('hidden');
     if (errorEl) {
@@ -3090,7 +3122,7 @@ const _trainerTableState = {
 // ── Coverage helpers ──────────────────────────────────────────────────────────
 
 function _trainerCoverageData(data) {
-  const bus          = [...new Set(data.trainers.map(t => t.bu))].sort();
+  const bus          = sortBus([...new Set(data.trainers.map(t => t.bu))]);
   const productTypes = [...new Set(data.setup.map(s => s.productType))].sort();
   const coverage     = {};
   for (const bu of bus) {
@@ -3268,6 +3300,8 @@ function renderTrainerSummaryCards(data) {
         </div>
       </div>
     </div>
+    <!-- Row 2 + Row 3: BU mini-cards + Top 3 Priority (combined section) -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
     <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;">
       ${buStats.map(s => `
       <div style="${CARD}">
@@ -3314,6 +3348,7 @@ function renderTrainerSummaryCards(data) {
             </div>`).join('')}
       </div>`;
       }).join('')}
+    </div>
     </div>`;
 }
 
@@ -3328,7 +3363,7 @@ function _makeTrainerBuChart(data, mode) {
   const id = 'trainer-buChart';
   if (!document.getElementById(id) || typeof Chart === 'undefined') return;
   if (_trainerCharts[id]) _trainerCharts[id].destroy();
-  const bus = [...new Set(data.trainers.map(t => t.bu))].sort();
+  const bus = sortBus([...new Set(data.trainers.map(t => t.bu))]);
   if (mode === 'status') {
     const statuses = ['Master Trainer', 'Certified', 'On-Progress', 'No-Certified'];
     const colors   = ['#2563eb', '#16a34a', '#f59e0b', '#f97316'];
@@ -3377,7 +3412,7 @@ function _makeTrainerInsideChart(data, mode) {
 
   const hint  = document.getElementById('trainer-insideChartHint');
 
-  const bus       = [...new Set(data.trainers.map(t => t.bu))].sort();
+  const bus       = sortBus([...new Set(data.trainers.map(t => t.bu))]);
   const allSkills = Object.values(data.skills).flat();
   const qualified = allSkills.filter(s => (s.eff || 0) >= 75);
 
@@ -3483,8 +3518,8 @@ function _makeTrainerInsideChart(data, mode) {
 
   } else if (mode === 'ttt') {
     const passLine = 70;
-    const trainersWithScore = data.trainers.filter(t => t.score != null && t.status !== 'Master Trainer');
-    const buList = [...new Set(trainersWithScore.map(t => t.bu))].sort();
+    const trainersWithScore = data.trainers;
+    const buList = sortBus([...new Set(trainersWithScore.map(t => t.bu))]);
     const buColorMap = {};
     buList.forEach((bu, i) => { buColorMap[bu] = JUMPER_COLORS[i % JUMPER_COLORS.length]; });
 
@@ -3502,7 +3537,7 @@ function _makeTrainerInsideChart(data, mode) {
       // ── BU Overview ──
       const avgScores = buList.map(bu => {
         const inBu = trainersWithScore.filter(t => t.bu === bu);
-        return inBu.length ? +(inBu.reduce((s, t) => s + t.score, 0) / inBu.length).toFixed(1) : 0;
+        return inBu.length ? +(inBu.reduce((s, t) => s + (t.score ?? 0), 0) / inBu.length).toFixed(1) : 0;
       });
 
       _trainerCharts[id] = new Chart(canvas, {
@@ -3543,7 +3578,7 @@ function _makeTrainerInsideChart(data, mode) {
     } else {
       // ── Individual drill-down for selected BU ──
       const selBu = _trainerTttBu;
-      const inBu = trainersWithScore.filter(t => t.bu === selBu).sort((a, b) => b.score - a.score);
+      const inBu = trainersWithScore.filter(t => t.bu === selBu).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
       if (!inBu.length) {
         canvas.style.display = 'none';
         if (hint) { hint.classList.remove('hidden'); hint.textContent = 'ไม่มีข้อมูลคะแนนใน BU นี้'; }
@@ -3553,7 +3588,7 @@ function _makeTrainerInsideChart(data, mode) {
         const n = t.name;
         return n.length > 8 ? n.slice(0, 8) + '…' : n;
       });
-      const scores = inBu.map(t => t.score);
+      const scores = inBu.map(t => t.score ?? 0);
       const colors = scores.map(v => v >= passLine ? '#16a34a' : '#ef4444');
 
       _trainerCharts[id] = new Chart(canvas, {
@@ -3981,11 +4016,9 @@ async function initTrainerTab() {
   const loadingEl = document.getElementById('trainer-loading');
   const errorEl   = document.getElementById('trainer-error');
   const dashEl    = document.getElementById('trainer-dashboard');
-  try {
-    const res = await fetch('/api/trainer-excel');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    _trainerData = await res.json();
-    if (_trainerData.error) throw new Error(_trainerData.error);
+
+  const _applyTrainerData = (data) => {
+    _trainerData   = data;
     _trainerLoaded = true;
     if (loadingEl) loadingEl.classList.add('hidden');
     if (dashEl)    dashEl.classList.remove('hidden');
@@ -3994,6 +4027,22 @@ async function initTrainerTab() {
     renderTrainerCoverageMatrix(_trainerData);
     renderTrainerTable(_trainerData);
     _wireTrainerControls(_trainerData);
+  };
+
+  // Serve from sessionStorage if fresh (TTL 5 min, matches backend cache)
+  const cached = _ssGet('trainer-excel', 300);
+  if (cached) { _applyTrainerData(cached); return; }
+
+  if (loadingEl) loadingEl.classList.remove('hidden');
+  if (dashEl)    dashEl.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/trainer-excel');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _ssSet('trainer-excel', data);
+    _applyTrainerData(data);
   } catch (err) {
     if (loadingEl) loadingEl.classList.add('hidden');
     if (errorEl) {
