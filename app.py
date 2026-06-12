@@ -28,6 +28,8 @@ from config import (
     TRAINER_SETUP_COLS,
     TRAINER_SETUP_TABLE,
     TRAINER_SKILL_COLS,
+    TRAINER_TOP3_COLS,
+    TRAINER_TOP3_TABLE,
 )
 from business_rules import calculate_status
 from graph_excel import (
@@ -733,78 +735,113 @@ def api_trainer_excel():
         except Exception as exc:
             print(f'[TRAINER-EXCEL] BUSetup skipped: {exc}', flush=True)
 
-        # 3. Individual trainer skill sheets — one per trainer from list
+        # 3. top_3 targets (optional)
+        top3_rows = []
+        try:
+            top3_rows = _read_excel_table(token, drive_id, item_id,
+                                           TRAINER_TOP3_TABLE, TRAINER_TOP3_COLS)
+        except Exception as exc:
+            print(f'[TRAINER-EXCEL] top_3 skipped: {exc}', flush=True)
+
+        # 4. Per-BU skill sheets: Trainer_G1, Trainer_G2, …
         skill_rows = []
+        bus_seen: set = set()
         for t in trainer_list:
-            emp_id = str(t.get('Employee ID', '')).strip()
-            bu     = str(t.get('BU', '')).strip()
-            if not emp_id or not bu:
-                continue
-            table_name = f'Trainer_{bu}-{emp_id}'
-            try:
-                rows = _read_excel_table(token, drive_id, item_id,
-                                          table_name, TRAINER_SKILL_COLS)
-                for r in rows:
-                    r['_empid'] = emp_id
-                    r['_bu']    = bu
-                skill_rows.extend(rows)
-                print(f'[TRAINER-EXCEL] {table_name}: {len(rows)} rows', flush=True)
-            except Exception as exc:
-                print(f'[TRAINER-EXCEL] {table_name} skipped: {exc}', flush=True)
+            bu = str(t.get('BU', '')).strip()
+            if bu and bu not in bus_seen:
+                bus_seen.add(bu)
+                table_name = f'Trainer_{bu}'
+                try:
+                    rows = _read_excel_table(token, drive_id, item_id,
+                                              table_name, TRAINER_SKILL_COLS)
+                    for r in rows:
+                        r['_bu'] = bu
+                    skill_rows.extend(rows)
+                    print(f'[TRAINER-EXCEL] {table_name}: {len(rows)} rows', flush=True)
+                except Exception as exc:
+                    print(f'[TRAINER-EXCEL] {table_name} skipped: {exc}', flush=True)
 
         # Build payload
         trainers = []
         for t in trainer_list:
-            emp_id = str(t.get('Employee ID', '')).strip()
+            emp_id = str(t.get('EMPID', '')).strip()
             if not emp_id:
                 continue
+            raw_score = t.get('Score', '')
+            score_val = None
+            if raw_score not in (None, '', 'null'):
+                s = str(raw_score).strip().replace('%', '')
+                try:
+                    v = float(s)
+                    score_val = round(v * 100, 2) if v <= 1 else round(v, 2)
+                except (ValueError, TypeError):
+                    score_val = None
             trainers.append({
-                'empid':  emp_id,
-                'name':   str(t.get('Employee Name', '')).strip(),
-                'bu':     str(t.get('BU', '')).strip(),
-                'status': str(t.get('Status', '')).strip(),
+                'empid':    emp_id,
+                'name':     str(t.get('Employee Name', '')).strip(),
+                'bu':       str(t.get('BU', '')).strip(),
+                'status':   str(t.get('Status', '')).strip(),
+                'position': str(t.get('Position', '')).strip(),
+                'score':    score_val,
             })
+
+        def _safe_float(v):
+            try:
+                return float(v) if v not in (None, '', 'null') else 0.0
+            except (ValueError, TypeError):
+                return 0.0
+
+        def _safe_int(v):
+            try:
+                return int(float(v)) if v not in (None, '', 'null') else 0
+            except (ValueError, TypeError):
+                return 0
 
         setup = []
         for s in setup_rows:
             bu = str(s.get('BU', '')).strip()
             pt = str(s.get('Product Type', '')).strip()
             st = str(s.get('Style', '')).strip()
-            try:
-                steps = int(float(s.get('Total Steps', 0) or 0))
-            except (ValueError, TypeError):
-                steps = 0
+            steps = _safe_int(s.get('Total Steps'))
             if bu and pt and steps > 0:
                 setup.append({'bu': bu, 'productType': pt, 'style': st, 'totalSteps': steps})
 
+        top3 = []
+        for s in top3_rows:
+            bu = str(s.get('BU', '')).strip()
+            pt = str(s.get('Product Type', '')).strip()
+            st = str(s.get('Style', '')).strip()
+            steps = _safe_int(s.get('Total Steps'))
+            if bu and pt and steps > 0:
+                top3.append({'bu': bu, 'productType': pt, 'style': st, 'totalSteps': steps})
+
         skills: dict = {}
         for r in skill_rows:
-            emp_id = str(r.get('_empid', '')).strip()
+            emp_id = str(r.get('EMPID', '')).strip()
             if not emp_id:
                 continue
-            grade_raw = r.get('grade')
-            grade = str(grade_raw).strip() if grade_raw is not None else ''
-            try:
-                expired = int(float(r.get('expired', 0) or 0))
-            except (ValueError, TypeError):
-                expired = 0
-            eff_raw = r.get('eff')
-            try:
-                eff = float(eff_raw) if eff_raw not in (None, '', 'null') else 0.0
-            except (ValueError, TypeError):
-                eff = 0.0
             record = {
                 'empid':       emp_id,
                 'bu':          str(r.get('_bu', '')).strip(),
-                'productType': str(r.get('Product Type', '')).strip(),
-                'style':       str(r.get('Style', '')).strip(),
-                'grade':       grade,
-                'expired':     expired,
-                'eff':         eff,
+                'processNo':   str(r.get('process_no',   '') or '').strip(),
+                'gsdCode':     str(r.get('gsd_code',     '') or '').strip(),
+                'processName': str(r.get('process_name', '') or '').strip(),
+                'machineType': str(r.get('machinetype',  '') or '').strip(),
+                'grade':       str(r.get('grade',        '') or '').strip(),
+                'smv':         _safe_float(r.get('smv')),
+                'amv':         _safe_float(r.get('amv')),
+                'lastUpdate':  str(r.get('last_update',  '') or '').strip(),
+                'leadTime':    _safe_float(r.get('lead_time')),
+                'csaApprove':  str(r.get('csa_approve',  '') or '').strip(),
+                'expired':     _safe_int(r.get('expired')),
+                'eff':         _safe_float(r.get('eff')),
+                'productType': str(r.get('PRODUCT_TYPE', '') or '').strip(),
+                'style':       str(r.get('STYLE',        '') or '').strip(),
+                'totalCount':  _safe_int(r.get('total_count')),
             }
             skills.setdefault(emp_id, []).append(record)
 
-        payload = {'trainers': trainers, 'setup': setup, 'skills': skills}
+        payload = {'trainers': trainers, 'setup': setup, 'top3': top3, 'skills': skills}
         _TRAINER_EXCEL_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
         return jsonify(payload)
     except Exception as exc:

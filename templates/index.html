@@ -6,12 +6,16 @@
   <title>CSA Dashboard</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
-  <link rel="stylesheet" href="/static/css/styles.css?v=49" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/styles.css?v=56" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- Chart.js — used by Jumper Skill tab -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
 </head>
 <body>
   <header class="topbar">
@@ -30,13 +34,15 @@
         <button id="themeToggle" class="theme-toggle" data-i18n-title="themeToggleTitle" title="Toggle theme">🌙</button>
         <button id="adminBtn" class="admin-topbar-btn hidden" data-i18n-title="adminBtn" title="Admin">⚙</button>
       </div>
-      <div id="authBox" class="auth-box"></div>
-      <span id="roleBadge" class="role-badge hidden"></span>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+        <span id="roleBadge" class="role-badge hidden"></span>
+        <div id="authBox" class="auth-box"></div>
+      </div>
     </div>
   </header>
 
   <!-- Tab Bar -->
-  <nav class="tab-bar" id="mainTabBar">
+  <nav class="tab-bar hidden" id="mainTabBar">
     <!-- New Operator — has BU hover sub-menu -->
     <div class="tab-item has-submenu" id="tabItem-newOperator">
       <button class="tab-btn active" data-tab="newOperator" data-i18n="tabNewOperator">New Operator</button>
@@ -138,12 +144,18 @@
 
   <main class="container" id="tabContent-newOperator">
     <!-- Login Panel -->
-    <section id="loginPanel" class="card hero hidden">
-      <h2 data-i18n="loginTitle">เข้าสู่ระบบด้วย Microsoft Account</h2>
-      <!-- MS login is temporarily disabled during system trial -->
-      <a class="primary-link disabled" aria-disabled="true" tabindex="-1" data-i18n="loginBtn">Sign in with Microsoft</a>
-      <button id="managerLoginBtn" class="manager-login-btn" data-i18n="managerLoginBtn">สำหรับ CSA Manager</button>
-      <p id="managerLoginError" class="manager-login-error hidden"></p>
+    <section id="loginPanel" class="hidden">
+      <canvas id="loginParticles"></canvas>
+      <div class="login-card">
+        <div class="login-logo">CSA</div>
+        <h1 class="login-app-name">CSA Dashboard</h1>
+        <p class="login-app-sub"> · Nan Yang Textile ·</p>
+        
+        <!-- Sign in with Microsoft — code preserved, activate when needed -->
+        <a id="msLoginLink" href="/login" style="display:none" aria-hidden="true" tabindex="-1" data-i18n="loginBtn">Sign in with Microsoft</a>
+        <button id="managerLoginBtn" class="login-btn" data-i18n="managerLoginBtn">เข้าสู่ระบบ</button>
+        <p id="managerLoginError" class="login-error hidden"></p>
+      </div>
     </section>
 
     <!-- Home Page -->
@@ -155,7 +167,23 @@
       </section>
 
       <!-- Overall Dashboard -->
-      <section class="card home-dash-card">
+      <div id="homeDashLoading" class="sk-screen">
+        <div class="jtp-row2">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+        </div>
+        <div class="sk-row">
+          <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+          <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+        </div>
+      </div>
+
+
+      <section id="homeDashCard" class="card home-dash-card hidden">
         <div class="home-dash-header">
           <h2 data-i18n="overallDashboard">ภาพรวมทั้งหมด</h2>
           <div class="home-dash-controls">
@@ -165,7 +193,7 @@
             <button id="homeDashRefreshBtn" class="small" data-i18n="refresh">โหลดใหม่</button>
           </div>
         </div>
-        <p id="homeDashLoading" class="hint" data-i18n="loading">กำลังโหลด...</p>
+
         <div id="homeDashGrid" class="hidden"></div>
         <div id="homeDashAnalytics" class="hidden"></div>
       </section>
@@ -310,8 +338,26 @@
     <main class="container">
 
       <!-- loading / error states -->
-      <div id="jumper-loading" class="card hero" style="text-align:center;padding:40px;">
-        <p class="hint" data-i18n="loading">กำลังโหลด...</p>
+      <div id="jumper-loading" class="sk-screen">
+        <div class="jtp-row1">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-bar"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-bar"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div></div>
+        </div>
+        <div class="jtp-row2">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+        </div>
+        <div class="sk-row">
+          <div class="sk-card" style="min-height:220px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+          <div class="sk-card" style="min-height:220px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+        </div>
       </div>
       <div id="jumper-error" class="card hero hidden" style="text-align:center;padding:40px;"></div>
 
@@ -322,19 +368,19 @@
         <div id="jtp-summary"></div>
 
         <!-- Charts row -->
-        <div class="charts" style="margin-bottom:24px;">
-          <div class="card" style="padding:16px;">
+        <div class="charts">
+          <div class="card" style="padding:16px;margin-top:-12px;">
             <h3 style="margin:0 0 12px;font-size:1rem;">จำนวนคนต่อ BU</h3>
             <div class="chart-canvas-wrap">
               <canvas id="jtp-empPerBuChart"></canvas>
             </div>
           </div>
-          <div class="card" style="padding:16px;">
+          <div class="card" style="padding:16px;margin-top:-12px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
               <h3 style="margin:0;font-size:1rem;">Inside Data</h3>
               <div id="jtp-insideDataToggle" class="toggle-group">
-                <button class="toggle-btn" data-mode="avgSkill" type="button">Skill เฉลี่ยต่อคน แยกตาม BU</button>
-                <button class="toggle-btn active" data-mode="positionCount" type="button">จำนวน Jumper แยกตามตำแหน่ง</button>
+                <button class="toggle-btn" data-mode="avgSkill" type="button">Sort by Avg Skill</button>
+                <button class="toggle-btn active" data-mode="positionCount" type="button">Sort by Position</button>
               </div>
             </div>
             <div class="chart-viewport">
@@ -343,11 +389,12 @@
                 <div class="chart-slide"><div class="chart-canvas-wrap"><canvas id="jtp-positionCountChart"></canvas></div></div>
               </div>
             </div>
+            <div id="jtp-positionLegend"></div>
           </div>
         </div>
 
         <!-- Data table -->
-        <section class="card" style="padding:16px;">
+        <section class="card" style="padding:16px;margin-top:-12px;">
           <h3 style="margin:0 0 12px;font-size:1rem;">รายชื่อ Jumper</h3>
           <div class="filters">
             <select id="jtp-filterBu"><option value="">ทุก BU</option></select>
@@ -385,11 +432,27 @@
   <div id="tabContent-trainer" class="tab-content hidden">
     <main class="container">
 
-      <div class="card hero" style="text-align:center;padding:60px 40px;">
-        <div style="font-size:2rem;margin-bottom:16px;">🚧</div>
-        <h2 style="margin:0 0 8px;font-size:1.2rem;font-weight:700;color:var(--text);">Under development, please wait...</h2>
-        <p class="hint" style="margin:0;">หน้านี้อยู่ระหว่างการพัฒนา จะเปิดให้ใช้งานเร็วๆ นี้</p>
+      <div id="trainer-loading" class="sk-screen">
+        <div class="sk-row">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-bar"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-bar"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div></div>
+        </div>
+        <div class="jtp-row2">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+        </div>
+        <div class="sk-row">
+          <div class="sk-card" style="min-height:220px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+          <div class="sk-card" style="flex:0.45;min-height:220px;"><div class="sk-lbl"></div><div class="sk-text"></div><div class="sk-text"></div><div class="sk-text-s"></div></div>
+        </div>
       </div>
+      <div id="trainer-error" class="card hero hidden" style="text-align:center;padding:40px;"></div>
 
       <div id="trainer-dashboard" class="hidden">
 
@@ -397,7 +460,7 @@
         <div id="trainer-summary"></div>
 
         <!-- Charts row -->
-        <div class="charts" style="margin-bottom:24px;">
+        <div class="charts">
           <!-- Left: จำนวนคนต่อ BU -->
           <div class="card" style="padding:16px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
@@ -414,19 +477,29 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
               <h3 style="margin:0;font-size:1rem;">Inside Data</h3>
               <div id="trainer-insideDataToggle" class="toggle-group">
-                <button class="toggle-btn" data-mode="skill" type="button">Sort by Skill</button>
-                <button class="toggle-btn active" data-mode="grade" type="button">Sort by Grade</button>
+                <button class="toggle-btn active" data-mode="ttt"        type="button">Train The Trainer</button>
+                <button class="toggle-btn"        data-mode="status"     type="button">Skill Status</button>
+                <button class="toggle-btn"        data-mode="machine"    type="button">Top Machine</button>
+                <button class="toggle-btn"        data-mode="product"    type="button">Top Product Type</button>
+                <div class="individual-wrap">
+                  <button class="toggle-btn" data-mode="individual" type="button" id="trainer-individualBtn">Individual ▾</button>
+                  <div id="trainer-individualMenu" class="individual-menu hidden"></div>
+                </div>
               </div>
             </div>
-            <div class="chart-canvas-wrap"><canvas id="trainer-insideChart"></canvas></div>
+            <div class="chart-canvas-wrap" style="position:relative;">
+              <canvas id="trainer-insideChart"></canvas>
+            </div>
+            <div id="trainer-insideChartHint" class="hidden" style="display:flex;align-items:center;gap:10px;padding:6px 0 0;font-size:0.82rem;color:var(--text-muted);min-height:28px;">
+            </div>
           </div>
         </div>
 
         <!-- Coverage Matrix -->
-        <div class="card" style="padding:16px;margin-bottom:24px;">
+        <div class="card" style="padding:16px;margin-top:-15px;">
           <h3 style="margin:0 0 16px;font-size:1rem;font-weight:700;">Trainer Product type Coverage Matrix</h3>
           <div id="trainer-coverageMatrix" style="overflow-x:auto;"></div>
-          <div style="display:flex;gap:16px;margin-top:10px;font-size:0.72rem;flex-wrap:wrap;">
+          <div style="display:flex;gap:16px;margin-top:16px;font-size:0.72rem;flex-wrap:wrap;">
             <span><span style="display:inline-block;width:12px;height:12px;background:#fecaca;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>&lt; 30%</span>
             <span><span style="display:inline-block;width:12px;height:12px;background:#fef9c3;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>30–60%</span>
             <span><span style="display:inline-block;width:12px;height:12px;background:#dcfce7;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>60–80%</span>
@@ -435,9 +508,9 @@
         </div>
 
         <!-- Person list -->
-        <div class="card" style="padding:16px;">
+        <div class="card" style="padding:16px;margin-top:-15px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-            <h3 style="margin:0;font-size:1rem;font-weight:700;">รายชื่อ</h3>
+            <h3 style="margin:0;font-size:1rem;font-weight:700;">รายชื่อครูฝึก</h3>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               <div id="trainer-tableToggle" class="toggle-group">
                 <button class="toggle-btn active" data-mode="person" type="button">By Person</button>
@@ -449,6 +522,7 @@
           <div id="trainer-tableBody">
             <div class="filters">
               <select id="trainer-filterBu"><option value="">ทุก BU</option></select>
+              <select id="trainer-filterProductType"><option value="">ทุก Product Type</option></select>
               <select id="trainer-filterStyle"><option value="">ทุก Style</option></select>
               <select id="trainer-filterStatus"><option value="">ทุกสถานะ</option></select>
               <input type="text" id="trainer-filterSearch" placeholder="ค้นหาชื่อ / รหัสพนักงาน" />
@@ -459,8 +533,8 @@
               <div class="jtp-page-size-group">
                 <label class="jtp-page-size-label" for="trainer-pageSize">แสดงต่อหน้า</label>
                 <select id="trainer-pageSize" class="jtp-page-size-select">
-                  <option value="10">10</option>
-                  <option value="25" selected>25</option>
+                  <option value="10" selected>10</option>
+                  <option value="25">25</option>
                   <option value="50">50</option>
                 </select>
               </div>
@@ -487,6 +561,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=49"></script>
+  <script src="/static/js/app.js?v=92"></script>
 </body>
 </html>

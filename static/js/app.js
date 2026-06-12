@@ -127,8 +127,8 @@ const TRANSLATIONS = {
     trendResigned:          'ลาออก',
     trendMonth:             'เดือน',
     yearLabel:              'ปี',
-    managerLoginBtn:        'สำหรับ CSA Manager',
-    managerModeBadge:       'CSA Manager (อ่านอย่างเดียว)',
+    managerLoginBtn:        'เข้าสู่ระบบ',
+    managerModeBadge:       'CSA Manager',
     managerLoginFailed:     'ไม่สามารถเข้าสู่ระบบ CSA Manager ได้',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
@@ -263,8 +263,8 @@ const TRANSLATIONS = {
     trendResigned:          'Resigned',
     trendMonth:             'Month',
     yearLabel:              'Year',
-    managerLoginBtn:        'For CSA Manager',
-    managerModeBadge:       'CSA Manager (View Only)',
+    managerLoginBtn:        'Sign In',
+    managerModeBadge:       'CSA Manager',
     managerLoginFailed:     'Could not sign in as CSA Manager',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
@@ -399,8 +399,8 @@ const TRANSLATIONS = {
     trendResigned:          'ລາອອກ',
     trendMonth:             'ເດືອນ',
     yearLabel:              'ປີ',
-    managerLoginBtn:        'ສຳລັບ CSA Manager',
-    managerModeBadge:       'CSA Manager (ອ່ານຢ່າງດຽວ)',
+    managerLoginBtn:        'ເຂົ້າສູ່ລະບົບ',
+    managerModeBadge:       'CSA Manager',
     managerLoginFailed:     'ບໍ່ສາມາດເຂົ້າສູ່ລະບົບ CSA Manager ໄດ້',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
@@ -535,8 +535,8 @@ const TRANSLATIONS = {
     trendResigned:          'Nghỉ việc',
     trendMonth:             'Tháng',
     yearLabel:              'Năm',
-    managerLoginBtn:        'Dành cho CSA Manager',
-    managerModeBadge:       'CSA Manager (Chỉ xem)',
+    managerLoginBtn:        'Đăng nhập',
+    managerModeBadge:       'CSA Manager',
     managerLoginFailed:     'Không thể đăng nhập CSA Manager',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
@@ -634,6 +634,9 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   $('themeToggle').textContent = theme === 'dark' ? '☀️' : '🌙';
   localStorage.setItem('theme', theme);
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.color = theme === 'dark' ? '#94a3b8' : '#6b7280';
+  }
 }
 
 function initTheme() {
@@ -1069,7 +1072,9 @@ async function loadDashboard() {
     showMessage(t('loadedCount', { n: lastEmployees.length }));
   } catch (err) {
     if (err.message && err.message.includes('login_required')) {
+      hide($('mainTabBar'));
       show($('loginPanel'));
+      startLoginParticles();
       setPage('home');
     } else {
       showMessage(err.message, true);
@@ -1080,9 +1085,11 @@ async function loadDashboard() {
 // ===== HOME DASHBOARD =====
 async function loadHomeDashboard() {
   const loadingEl    = $('homeDashLoading');
+  const cardEl       = $('homeDashCard');
   const gridEl       = $('homeDashGrid');
   const analyticsEl  = $('homeDashAnalytics');
   show(loadingEl);
+  hide(cardEl);
   hide(gridEl);
   hide(analyticsEl);
 
@@ -1119,6 +1126,7 @@ async function loadHomeDashboard() {
   });
 
   hide(loadingEl);
+  show(cardEl);
   show(gridEl);
   renderHomeDashboard(sel.value);
 }
@@ -1261,7 +1269,7 @@ function trendChartSVG(data, visibility) {
               font-size="13" fill="var(--text-muted)">${val}</text>`;
   }).join('');
 
-  // X-axis labels: month abbreviations per current language (Jan/ม.ค./T1/…)
+  // X-axis labels: all 12 months
   const xLabels = [...Array(12)].map((_, i) => `
     <text x="${xAt(i)}" y="${H - 16}" text-anchor="middle"
       font-size="14" fill="var(--text-muted)" font-weight="600">${escapeHtml(monthAbbr(i))}</text>`
@@ -1580,6 +1588,10 @@ function renderAnalytics(yearFilter) {
     `<button type="button" class="day-mode-btn${currentDayMode === mode ? ' active' : ''}" data-mode="${mode}">${escapeHtml(label)}</button>`;
 
   // ── Monthly trend card ────────────────────────────────────────────────
+  const yearOptions = [...($('homeDashYearFilter').options || [])]
+    .map(o => `<option value="${escapeHtml(o.value)}"${o.value === yearFilter ? ' selected' : ''}>${escapeHtml(o.textContent)}</option>`)
+    .join('');
+
   const trendData = computeTrendData(yearFilter, currentAnalyticsDept);
   const trendSeries = [
     { key: 'joined',     color: '#f59e0b', label: t('trendJoined')    },
@@ -1598,7 +1610,15 @@ function renderAnalytics(yearFilter) {
   const trendCardHTML = `
     <div class="trend-chart-card">
       <div class="trend-header">
-        <h4>${escapeHtml(t('trendTitle'))}</h4>
+        <div class="trend-header-left">
+          <h4>${escapeHtml(t('trendTitle'))}</h4>
+          <select id="trendYearFilter" class="year-select trend-filter-sel">
+            ${yearOptions}
+          </select>
+          <select id="trendDeptFilter" class="year-select trend-filter-sel">
+            ${deptOptions}
+          </select>
+        </div>
         <div class="trend-toggle-group" id="trendToggleGroup">
           ${trendToggles}
         </div>
@@ -1818,6 +1838,28 @@ function renderAnalytics(yearFilter) {
   if (deptSel) {
     deptSel.onchange = () => {
       currentAnalyticsDept = deptSel.value;
+      const trendDept = $('trendDeptFilter');
+      if (trendDept) trendDept.value = currentAnalyticsDept;
+      renderAnalytics(yearFilter);
+    };
+  }
+
+  // wire trend card year/dept filters — sync back to top-level controls
+  const trendYearSel = $('trendYearFilter');
+  if (trendYearSel) {
+    trendYearSel.onchange = () => {
+      const yr = trendYearSel.value;
+      const topYear = $('homeDashYearFilter');
+      if (topYear) topYear.value = yr;
+      renderHomeDashboard(yr);
+    };
+  }
+  const trendDeptSel = $('trendDeptFilter');
+  if (trendDeptSel) {
+    trendDeptSel.onchange = () => {
+      currentAnalyticsDept = trendDeptSel.value;
+      const topDept = $('analyticsDeptFilter');
+      if (topDept) topDept.value = currentAnalyticsDept;
       renderAnalytics(yearFilter);
     };
   }
@@ -2224,10 +2266,65 @@ function renderTabSubMenu() {
 }
 
 // ===== INIT =====
+function syncTabBarTop() {
+  const topbarEl = document.querySelector('.topbar');
+  const tabBarEl = document.getElementById('mainTabBar');
+  if (topbarEl && tabBarEl) tabBarEl.style.top = topbarEl.offsetHeight + 'px';
+}
+
+// ===== LOGIN PARTICLE ANIMATION =====
+let _loginRafId = null;
+
+function startLoginParticles() {
+  if (_loginRafId) return;
+  const canvas = document.getElementById('loginParticles');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let W, H, particles;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function initParticles() {
+    particles = Array.from({ length: 70 }, () => ({
+      x:  Math.random() * W,
+      y:  Math.random() * H,
+      r:  Math.random() * 1.8 + 0.6,
+      dx: (Math.random() - 0.5) * 0.45,
+      dy: (Math.random() - 0.5) * 0.45,
+      o:  Math.random() * 0.35 + 0.08,
+    }));
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    particles.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${p.o})`;
+      ctx.fill();
+      p.x += p.dx;
+      p.y += p.dy;
+      if (p.x < 0 || p.x > W) p.dx *= -1;
+      if (p.y < 0 || p.y > H) p.dy *= -1;
+    });
+    _loginRafId = requestAnimationFrame(draw);
+  }
+
+  resize();
+  initParticles();
+  draw();
+  window.addEventListener('resize', () => { resize(); initParticles(); });
+}
+
 async function init() {
   initTheme();
   initLang();
   initTabBar();
+  syncTabBarTop();
+  window.addEventListener('resize', syncTabBarTop);
   initAdmin();
   initRegisterModal();
   initEditModal();
@@ -2341,6 +2438,7 @@ async function init() {
   const me = await api('/api/me');
   if (!me.authenticated) {
     show($('loginPanel'));
+    startLoginParticles();
     return;
   }
 
@@ -2358,6 +2456,7 @@ async function init() {
   }
 
   $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
+  show($('mainTabBar'));
   // Admin panel is a write surface (holidays) — hide it for managers
   if (currentRole !== 'manager') show($('adminBtn'));
 
@@ -2384,6 +2483,11 @@ const JUMPER_POSITIONS = [
   'Jumper Sewing Machine Operation',
 ];
 const JUMPER_COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777'];
+const TRAINER_PT_COLORS = [
+  '#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777',
+  '#ea580c', '#65a30d', '#0d9488', '#9333ea', '#0284c7', '#be123c', '#854d0e',
+  '#166534', '#1e40af', '#86198f', '#0f766e', '#b91c1c', '#4338ca',
+];
 
 // BU name aliases: raw key from NiSE → display name shown in the dashboard
 // (NiSE stores "NYV"; we show "EA" to match the rest of the app)
@@ -2464,12 +2568,12 @@ const JT_PROD = {
     const space = (C - ratio * C).toFixed(2);
     const col   = ratio >= 1 ? '#16a34a' : '#dc2626';
     return `<svg viewBox="0 0 36 36" width="72" height="72">
-      <circle cx="18" cy="18" r="${R}" fill="none" stroke="#fee2e2" stroke-width="6"/>
+      <circle cx="18" cy="18" r="${R}" fill="none" stroke="var(--badge-danger-bg)" stroke-width="6"/>
       <circle cx="18" cy="18" r="${R}" fill="none" stroke="${col}" stroke-width="6"
         stroke-dasharray="${dash} ${space}" stroke-dashoffset="0"
         style="transition:stroke-dasharray .4s ease;transform:rotate(-90deg);transform-origin:18px 18px;"/>
-      <text x="18" y="15.5" text-anchor="middle" font-size="6.5" fill="#1f2937" font-weight="700">${trained}</text>
-      <text x="18" y="22"   text-anchor="middle" font-size="3.5" fill="#9ca3af">/ ${total}</text>
+      <text x="18" y="15.5" text-anchor="middle" font-size="6.5" style="fill:var(--text)" font-weight="700">${trained}</text>
+      <text x="18" y="22"   text-anchor="middle" font-size="3.5" style="fill:var(--text-muted)">/ ${total}</text>
     </svg>`;
   },
 
@@ -2478,8 +2582,8 @@ const JT_PROD = {
     const pct = d.total > 0 ? Math.round(d.trained / d.total * 100) : 0;
     return `<div style="text-align:center;">
       ${this._svg(d.trained, d.total)}
-      <div style="font-size:0.65rem;color:#6b7280;margin-top:2px;">${label}</div>
-      <div style="font-size:0.65rem;font-weight:700;color:${pct >= 100 ? '#16a34a' : '#374151'};">${pct}%</div>
+      <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px;">${label}</div>
+      <div style="font-size:0.65rem;font-weight:700;color:${pct >= 100 ? 'var(--ok)' : 'var(--text)'};">${pct}%</div>
     </div>`;
   },
 
@@ -2489,7 +2593,7 @@ const JT_PROD = {
     wrap.innerHTML = this._bus.map((bu) => `
       <div class="card" style="padding:14px;display:flex;flex-direction:column;">
         <div style="text-align:center;margin-bottom:10px;">
-          <span style="font-size:0.6rem;color:#9ca3af;background:#f3f4f6;padding:1px 5px;border-radius:10px;">Training Status</span>
+          <span style="font-size:0.6rem;color:var(--text-muted);background:var(--surface2);padding:1px 5px;border-radius:10px;">Training Status</span>
         </div>
         <div style="display:flex;justify-content:space-around;align-items:center;flex:1;gap:4px;">
           ${this._block(bu, 'c', 'Center')}
@@ -2531,42 +2635,90 @@ function _makeJumperPositionChart(canvasId, bus, cA, iA, sewCounts) {
   const iTgt = sewCounts.map(n => Math.round(n * 0.05));
   const cGap = cA.map((a, i) => Math.max(0, cTgt[i] - a));
   const iGap = iA.map((a, i) => Math.max(0, iTgt[i] - a));
-  const buColors = bus.map((_, i) => JUMPER_COLORS[i % JUMPER_COLORS.length]);
+
+  // Flatten: [Center_BU0, Inline_BU0, Center_BU1, Inline_BU1, ...]
+  const labels     = bus.flatMap(() => ['Center', 'Inline']);
+  const actualData = bus.flatMap((_, i) => [cA[i], iA[i]]);
+  const gapData    = bus.flatMap((_, i) => [cGap[i], iGap[i]]);
+  const targetData = bus.flatMap((_, i) => [cTgt[i], iTgt[i]]);
+
+  // Center=full opacity, Inline=slightly muted to distinguish visually
+  const actualColors = bus.flatMap((_, i) => [
+    hexToRgba(JUMPER_COLORS[i % JUMPER_COLORS.length], 1.0),
+    hexToRgba(JUMPER_COLORS[i % JUMPER_COLORS.length], 0.65),
+  ]);
+  const gapColors = bus.flatMap((_, i) => [
+    hexToRgba(JUMPER_COLORS[i % JUMPER_COLORS.length], 0.28),
+    hexToRgba(JUMPER_COLORS[i % JUMPER_COLORS.length], 0.22),
+  ]);
 
   _jumperCharts[canvasId] = new Chart(document.getElementById(canvasId), {
     type: 'bar',
     data: {
-      labels: bus,
+      labels,
       datasets: [
-        { label: 'Center (จริง)', data: cA,   backgroundColor: buColors.map(c => hexToRgba(c, 1.0)),  stack: 'center' },
-        { label: 'Center (เป้า)', data: cGap, backgroundColor: buColors.map(c => hexToRgba(c, 0.28)), stack: 'center',   _targetData: cTgt, _actualData: cA,  _posLabel: 'Center' },
-        { label: 'Inline (จริง)', data: iA,   backgroundColor: buColors.map(c => hexToRgba(c, 0.65)), stack: 'inline' },
-        { label: 'Inline (เป้า)', data: iGap, backgroundColor: buColors.map(c => hexToRgba(c, 0.22)), stack: 'inline',   _targetData: iTgt, _actualData: iA,  _posLabel: 'Inline' },
+        {
+          label: 'Actual',
+          data: actualData,
+          backgroundColor: actualColors,
+          stack: 'stack',
+        },
+        {
+          label: 'Gap to target',
+          data: gapData,
+          backgroundColor: gapColors,
+          stack: 'stack',
+          _targetData: targetData,
+          _actualData: actualData,
+        },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: { duration: 400, easing: 'easeOutQuart' },
       plugins: {
-        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        legend: { display: false },
         tooltip: {
           callbacks: {
+            title(items) {
+              const raw = items[0].label;
+              return Array.isArray(raw) ? raw.join(' — ') : String(raw);
+            },
             label(ctx) {
               const ds = ctx.dataset;
+              const idx = ctx.dataIndex;
               if (ds._targetData) {
-                const tgt = ds._targetData[ctx.dataIndex];
-                const act = ds._actualData[ctx.dataIndex];
-                if (ctx.raw === 0) return `${ds._posLabel} เป้า: ${tgt} คน ✓ ถึงเป้าแล้ว`;
-                return `${ds._posLabel} เป้า: ${tgt} คน  (จริง ${act} / ขาด ${ctx.raw})`;
+                const tgt = ds._targetData[idx];
+                const act = ds._actualData[idx];
+                if (ctx.raw === 0) return `เป้า: ${tgt} คน ✓ ถึงเป้าแล้ว`;
+                return `เป้า: ${tgt} คน  (จริง ${act} / ขาด ${ctx.raw})`;
               }
-              return `${ds.label}: ${ctx.raw} คน`;
+              return `จริง: ${ctx.raw} คน`;
             },
           },
         },
       },
-      scales: { y: { beginAtZero: true, grace: '10%', stacked: true } },
+      scales: {
+        x: { stacked: true },
+        y: { beginAtZero: true, grace: '10%', stacked: true },
+      },
     },
   });
+
+  const legendEl = document.getElementById('jtp-positionLegend');
+  if (legendEl) {
+    const buSwatches = bus.map((bu, i) =>
+      `<span style="display:inline-flex;align-items:center;gap:4px;">
+        <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${JUMPER_COLORS[i % JUMPER_COLORS.length]};flex-shrink:0;"></span>
+        <span style="font-size:0.75rem;">${escapeHtml(bu)}</span>
+      </span>`
+    ).join('');
+    legendEl.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+        ${buSwatches}
+        <span style="margin-left:auto;font-size:0.72rem;color:var(--text-muted);white-space:nowrap;">■ = Actual &nbsp; ░ = Gap to Target</span>
+      </div>`;
+  }
 }
 
 // ── Summary cards (3 rows) ────────────────────────────────────────────────────
@@ -2615,45 +2767,61 @@ function renderJumperSummaryCards() {
     </div>`;
 
   const CARD = 'background:var(--surface);border-radius:10px;box-shadow:0 1px 3px var(--shadow);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
-  const LBL  = 'font-size:0.85rem;color:#6b7280;';
+  const LBL  = 'font-size:0.85rem;color:var(--text-muted);';
   const VAL  = 'font-size:1.8rem;font-weight:700;margin-top:4px;';
 
   const container = document.getElementById('jtp-summary');
   if (!container) return;
-  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-bottom:24px;';
+  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+  const jtpTip = (html) => `<div class="crd-tip"><span class="crd-tip-i">ℹ</span><div class="crd-tip-box">${html}</div></div>`;
   container.innerHTML = `
     <!-- Row 1: 5 overview cards -->
     <div class="jtp-row1">
       <div style="${CARD}min-height:100px;">
-        <div style="${LBL}">Jumper ทั้งหมด</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+          <div style="${LBL}">Jumper ทั้งหมด</div>
+          ${jtpTip('จำนวน Jumper ทั้งหมดในทุก BU<br><span style="color:var(--text-muted)">นับทุก record ใน Jumper table</span>')}
+        </div>
         <div style="${VAL}">${totalAll}</div>
       </div>
-      <div style="${CARD}min-height:100px;">
-        <div style="${LBL}">Jumper Center</div>
+      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div style="${LBL}">Jumper Center</div>
+          ${jtpTip('Jumper ตำแหน่ง Center<br><span style="color:var(--text-muted)">Target: 2.5% × จำนวน Sewing Operator ต่อ BU</span>')}
+        </div>
         <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${centerAll}</div>
         ${centerTarget > 0 ? `<div style="margin-top:auto;">
           ${pBar(centerFilled, '#2563eb')}
-          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#6b7280;margin-top:4px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
             <span>${centerFilled}%</span><span>Target: ${centerTarget}</span>
           </div>
         </div>` : ''}
       </div>
-      <div style="${CARD}min-height:100px;">
-        <div style="${LBL}">Jumper Inline</div>
+      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div style="${LBL}">Jumper Inline</div>
+          ${jtpTip('Jumper ตำแหน่ง Inline<br><span style="color:var(--text-muted)">Target: 5.0% × จำนวน Sewing Operator ต่อ BU</span>')}
+        </div>
         <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${inlineAll}</div>
         ${inlineTarget > 0 ? `<div style="margin-top:auto;">
           ${pBar(inlineFilled, '#16a34a')}
-          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#6b7280;margin-top:4px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
             <span>${inlineFilled}%</span><span>Target: ${inlineTarget}</span>
           </div>
         </div>` : ''}
       </div>
       <div style="${CARD}min-height:100px;">
-        <div style="${LBL}">Avg. Skill Score / Person</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+          <div style="${LBL}">Avg. Skill Score / Person</div>
+          ${jtpTip('ค่าเฉลี่ย Skill Count ต่อ 1 คน<br><span style="color:var(--text-muted)">avg ของ Skill Count ของทุก Jumper</span>')}
+        </div>
         <div style="${VAL}">${avgSkillAll}</div>
       </div>
       <div style="${CARD}min-height:100px;">
-        <div style="${LBL}">Skill Expired</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+          <div style="${LBL}">Skill Expired</div>
+          ${jtpTip('จำนวน Jumper ที่มี Skill หมดอายุ อย่างน้อย 1 รายการ<br><span style="color:var(--text-muted)">นับ Jumper ที่ Expired Count > 0</span>')}
+        </div>
         <div style="${VAL}${expiredAll > 0 ? 'color:#dc2626;' : ''}">${expiredAll}</div>
       </div>
     </div>
@@ -2664,28 +2832,28 @@ function renderJumperSummaryCards() {
       <div style="${CARD}min-width:0;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
           <span style="font-size:1.05rem;font-weight:700;color:${s.color};">${escapeHtml(s.bu)}</span>
-          <span style="font-size:0.82rem;color:#6b7280;">${s.total} คน</span>
+          <span style="font-size:0.82rem;color:var(--text-muted);">${s.total} คน</span>
         </div>
         <div style="margin-bottom:5px;">
-          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#6b7280;margin-bottom:2px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);margin-bottom:2px;">
             <span>Center</span>
-            <span style="font-weight:600;color:#374151;">${s.centerTgt > 0 ? `${s.center}/${s.centerTgt}` : s.center}</span>
+            <span style="font-weight:600;color:var(--text);">${s.centerTgt > 0 ? `${s.center}/${s.centerTgt}` : s.center}</span>
           </div>
           ${s.centerTgt > 0 ? pBar(s.centerPct, s.color) : ''}
         </div>
         <div style="margin-bottom:8px;">
-          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:#6b7280;margin-bottom:2px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);margin-bottom:2px;">
             <span>Inline</span>
-            <span style="font-weight:600;color:#374151;">${s.inlineTgt > 0 ? `${s.inline}/${s.inlineTgt}` : s.inline}</span>
+            <span style="font-weight:600;color:var(--text);">${s.inlineTgt > 0 ? `${s.inline}/${s.inlineTgt}` : s.inline}</span>
           </div>
           ${s.inlineTgt > 0 ? pBar(s.inlinePct, hexToRgba(s.color, 0.6)) : ''}
         </div>
-        <div style="font-size:0.7rem;color:#6b7280;border-top:1px solid #f3f4f6;padding-top:6px;margin-top:auto;">
+        <div style="font-size:0.7rem;color:var(--text-muted);border-top:1px solid var(--border-light);padding-top:6px;margin-top:auto;">
           <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-            <span>Skill avg</span><strong style="color:#1f2937;">${s.avgSkill}</strong>
+            <span>Skill avg</span><strong style="color:var(--text);">${s.avgSkill}</strong>
           </div>
           <div style="display:flex;justify-content:space-between;">
-            <span>Expired</span><strong style="${s.expired > 0 ? 'color:#dc2626;' : 'color:#1f2937;'}">${s.expired}</strong>
+            <span>Expired</span><strong style="${s.expired > 0 ? 'color:#dc2626;' : 'color:var(--text);'}">${s.expired}</strong>
           </div>
         </div>
       </div>`).join('')}
@@ -2761,7 +2929,7 @@ function renderJumperTable() {
   ];
 
   if (!pageRows.length) {
-    wrap.innerHTML = '<div style="color:#6b7280;padding:16px;text-align:center;">ไม่พบข้อมูล</div>';
+    wrap.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center;">ไม่พบข้อมูล</div>';
   } else {
     const head = cols.map(c => {
       const arrow = sortKey === c.key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
@@ -2770,7 +2938,7 @@ function renderJumperTable() {
     const body = pageRows.map(r => `<tr>${cols.map(c => {
       if (c.key === 'expired') {
         const cls = r.expired > 0 ? 'warn' : 'ok';
-        const lbl = r.expired > 0 ? `${r.expired} หมดอายุ` : '✓';
+        const lbl = r.expired > 0 ? `${r.expired} หมดอายุ` : 'ปกติ';
         return `<td><span class="badge ${cls}">${lbl}</span></td>`;
       }
       return `<td>${escapeHtml(String(r[c.key] ?? ''))}</td>`;
@@ -2813,11 +2981,15 @@ function _wireJumperControls() {
           b.classList.toggle('active', b.dataset.mode === _jumperInsideMode));
         const track = document.getElementById('jtp-chartTrack');
         if (track) track.style.transform = _jumperInsideMode === 'positionCount' ? 'translateX(-100%)' : 'translateX(0)';
+        const posLegend = document.getElementById('jtp-positionLegend');
+        if (posLegend) posLegend.style.display = _jumperInsideMode === 'positionCount' ? '' : 'none';
       };
     });
     // Apply initial position based on default mode
     const track = document.getElementById('jtp-chartTrack');
     if (track) track.style.transform = _jumperInsideMode === 'positionCount' ? 'translateX(-100%)' : 'translateX(0)';
+    const posLegend = document.getElementById('jtp-positionLegend');
+    if (posLegend) posLegend.style.display = _jumperInsideMode === 'positionCount' ? '' : 'none';
   }
 
   // Table filters
@@ -2905,12 +3077,14 @@ let _trainerData        = null;
 let _trainerCharts      = {};
 let _trainerLoaded      = false;
 let _trainerBuMode      = 'status';   // 'headcount' | 'status'
-let _trainerInsideMode  = 'grade';    // 'skill' | 'grade'
+let _trainerInsideMode  = 'ttt';      // 'ttt' | 'status' | 'machine' | 'product' | 'individual'
+let _trainerIndividualBu = '';
+let _trainerTttBu        = '';
 let _trainerTableMode   = 'person';   // 'person' | 'skilltype'
 let _trainerTableVisible = true;
 const _trainerTableState = {
-  page: 1, pageSize: 25,
-  filters: { bu: '', style: '', status: '', search: '' },
+  page: 1, pageSize: 10,
+  filters: { bu: '', productType: '', style: '', status: '', search: '' },
 };
 
 // ── Coverage helpers ──────────────────────────────────────────────────────────
@@ -2921,7 +3095,7 @@ function _trainerCoverageData(data) {
   const coverage     = {};
   for (const bu of bus) {
     coverage[bu] = {};
-    const trainersInBu = data.trainers.filter(t => t.bu === bu);
+    const trainersInBu = data.trainers.filter(t => t.bu === bu && t.status !== 'Master Trainer');
     for (const pt of productTypes) {
       const setupRows = data.setup.filter(s => s.bu === bu && s.productType === pt);
       if (!setupRows.length || !trainersInBu.length) { coverage[bu][pt] = null; continue; }
@@ -2929,7 +3103,7 @@ function _trainerCoverageData(data) {
       if (!totalSteps) { coverage[bu][pt] = null; continue; }
       let stepsDone = 0;
       for (const t of trainersInBu)
-        stepsDone += (data.skills[t.empid] || []).filter(s => s.productType === pt).length;
+        stepsDone += (data.skills[t.empid] || []).filter(s => s.productType === pt && (s.eff || 0) >= 75).length;
       coverage[bu][pt] = Math.min(100, Math.round(stepsDone / (trainersInBu.length * totalSteps) * 100));
     }
   }
@@ -2940,20 +3114,53 @@ function _trainerCoverageData(data) {
 
 function renderTrainerSummaryCards(data) {
   const { bus, productTypes, coverage } = _trainerCoverageData(data);
-  const allSkills   = Object.values(data.skills).flat();
+  const ptColorMap = {};
+  productTypes.forEach((pt, i) => { ptColorMap[pt] = TRAINER_PT_COLORS[i % TRAINER_PT_COLORS.length]; });
+  const allSkills      = Object.values(data.skills).flat();
+  const trainedSkills  = allSkills.filter(r => (r.eff || 0) > 0);
   const totalTr     = data.trainers.length;
-  const masterCount = data.trainers.filter(t => t.status === 'Master Trainer').length;
-  const certCount   = data.trainers.filter(t => t.status === 'Certified').length;
-  const avgSkill    = allSkills.length
-    ? (allSkills.reduce((s, r) => s + (r.eff || 0), 0) / allSkills.length).toFixed(1) : '0.0';
-  const expiredAll  = allSkills.filter(r => Number(r.expired) === 1).length;
+  const masterCount  = data.trainers.filter(t => t.status === 'Master Trainer').length;
+  const certCount    = data.trainers.filter(t => t.status === 'Certified').length;
+  const masterTarget = data.trainers.filter(t => t.position === 'Master Trainer').length;
+  const certTarget   = totalTr;
+  const masterFilled = masterTarget > 0 ? Math.min(100, Math.round(masterCount / masterTarget * 100)) : 0;
+  const certFilled   = certTarget  > 0 ? Math.min(100, Math.round(certCount  / certTarget  * 100)) : 0;
+
+  // Avg Qualified Rate / Person: avg of (qualified skills / total assigned skills) per trainer
+  const trainerRates = data.trainers.map(t => {
+    const sk = (data.skills[t.empid] || []);
+    return sk.length ? sk.filter(r => (r.eff || 0) >= 75).length / sk.length * 100 : null;
+  }).filter(v => v !== null);
+  const avgSkill    = trainerRates.length
+    ? (trainerRates.reduce((s, v) => s + v, 0) / trainerRates.length).toFixed(1) : '0.0';
+  const avgPct = Math.min(100, parseFloat(avgSkill) || 0);
+
+  // Expired: count trainers (persons) per BU that have ≥1 expired skill row
+  const expiredAll  = data.trainers.filter(t => (data.skills[t.empid] || []).some(r => (r.eff || 0) > 0 && Number(r.expired) === 1)).length;
+  const expiredByBu = {};
+  data.trainers.forEach(t => {
+    const hasExp = (data.skills[t.empid] || []).some(r => (r.eff || 0) > 0 && Number(r.expired) === 1);
+    if (hasExp) expiredByBu[t.bu] = (expiredByBu[t.bu] || 0) + 1;
+  });
+
+  // Master Trainer breakdown by BU
+  const masterByBu = {};
+  data.trainers.filter(t => t.status === 'Master Trainer').forEach(t => {
+    masterByBu[t.bu] = (masterByBu[t.bu] || 0) + 1;
+  });
 
   const buStats = bus.map((bu, i) => {
-    const trs      = data.trainers.filter(t => t.bu === bu);
-    const buSkills = trs.flatMap(t => data.skills[t.empid] || []);
-    const bAvg     = buSkills.length
-      ? (buSkills.reduce((s, r) => s + (r.eff || 0), 0) / buSkills.length).toFixed(1) : '0.0';
-    const bExp     = buSkills.filter(r => Number(r.expired) === 1).length;
+    const trs       = data.trainers.filter(t => t.bu === bu);
+    const buTrained = trs.flatMap(t => (data.skills[t.empid] || []).filter(r => (r.eff || 0) > 0));
+    // Avg. Efficiency Pass Rate per BU: avg of (qualified/total assigned) per trainer
+    const buRates = trs.map(t => {
+      const sk = (data.skills[t.empid] || []);
+      return sk.length ? sk.filter(r => (r.eff || 0) >= 75).length / sk.length * 100 : null;
+    }).filter(v => v !== null);
+    const bAvg = buRates.length
+      ? (buRates.reduce((s, v) => s + v, 0) / buRates.length).toFixed(1) : '0.0';
+    // Expired: number of persons with ≥1 expired skill
+    const bExp = trs.filter(t => (data.skills[t.empid] || []).some(r => (r.eff || 0) > 0 && Number(r.expired) === 1)).length;
     const topPt    = productTypes
       .map(pt => ({ pt, pct: coverage[bu][pt] }))
       .filter(x => x.pct !== null)
@@ -2970,60 +3177,143 @@ function renderTrainerSummaryCards(data) {
   });
 
   const CARD = 'background:var(--surface);border-radius:10px;box-shadow:0 1px 3px var(--shadow);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
-  const LBL  = 'font-size:0.85rem;color:#6b7280;';
+  const LBL  = 'font-size:0.85rem;color:var(--text-muted);';
   const VAL  = 'font-size:1.8rem;font-weight:700;margin-top:4px;';
   const pBar = (pct, color) => `
-    <div style="background:#e5e7eb;border-radius:999px;height:5px;overflow:hidden;margin-top:3px;">
+    <div style="background:var(--progress-track);border-radius:999px;height:5px;overflow:hidden;margin-top:3px;">
       <div style="background:${color};width:${pct}%;height:100%;border-radius:999px;transition:width .3s;"></div>
     </div>`;
   const ptColor = pct => pct >= 80 ? '#16a34a' : pct >= 60 ? '#22d3ee' : pct >= 30 ? '#f59e0b' : '#ef4444';
 
   const container = document.getElementById('trainer-summary');
   if (!container) return;
-  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;margin-bottom:24px;';
+  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+  const RSUB = (entries, color) => {
+    if (!Object.keys(entries).length) return '';
+    const rows = Object.entries(entries).map(([bu, n]) =>
+      `<div style="display:flex;justify-content:space-between;gap:8px;white-space:nowrap;"><span>${escapeHtml(bu)}</span><strong style="color:${color};">${n}</strong></div>`
+    ).join('');
+    return `<div style="font-size:0.68rem;color:var(--text-muted);display:flex;flex-direction:column;gap:2px;justify-content:center;">${rows}</div>`;
+  };
+
+  const cardWithSub = (label, valHtml, subHtml) => `
+    <div style="${CARD}">
+      <div style="${LBL}">${label}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;flex:1;">
+        <div style="${VAL}margin-top:0;">${valHtml}</div>
+        ${subHtml}
+      </div>
+    </div>`;
+
+  const tip = (html) => `<div class="crd-tip"><span class="crd-tip-i">ℹ</span><div class="crd-tip-box">${html}</div></div>`;
+
   container.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
-      <div style="${CARD}"><div style="${LBL}">Total Trainer</div><div style="${VAL}">${totalTr}</div></div>
-      <div style="${CARD}"><div style="${LBL}">Master Trainer</div><div style="${VAL}color:#7c3aed;">${masterCount}</div></div>
-      <div style="${CARD}"><div style="${LBL}">Certified</div><div style="${VAL}color:#16a34a;">${certCount}</div></div>
-      <div style="${CARD}"><div style="${LBL}">Avg. Skill Score / Person</div><div style="${VAL}">${avgSkill}</div></div>
-      <div style="${CARD}"><div style="${LBL}">Skill Expired</div><div style="${VAL}${expiredAll > 0 ? 'color:#dc2626;' : ''}">${expiredAll}</div></div>
+      <div style="${CARD}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+          <div style="${LBL}">Total Trainer</div>
+          ${tip('จำนวน Trainer ทั้งหมดในทีม<br><span style="color:var(--text-muted)">นับทุก record ใน TrainerListAll</span>')}
+        </div>
+        <div style="${VAL}">${totalTr}</div>
+      </div>
+      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div style="${LBL}">Master Trainer</div>
+          ${tip('Trainer ที่ได้รับการรับรองระดับสูงสุด<br><span style="color:var(--text-muted)">ปัจจุบัน: Column <strong>Status</strong> = "Master Trainer"<br>Target: Column <strong>Position</strong> = "Master Trainer"</span>')}
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:1.6rem;font-weight:700;color:var(--purple);margin-bottom:6px;">${masterCount}</div>
+          ${masterTarget > 0 ? `<div>
+            ${pBar(masterFilled, 'var(--purple)')}
+            <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
+              <span>${masterFilled}%</span><span>Target: ${masterTarget}</span>
+            </div>
+          </div>` : ''}
+        </div>
+      </div>
+      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div style="${LBL}">Certified</div>
+          ${tip('Trainer ที่ได้รับการรับรองระดับ Certified<br><span style="color:var(--text-muted)">ปัจจุบัน: Column <strong>Status</strong> = "Certified"<br>Target: จำนวน Trainer ทั้งหมด</span>')}
+        </div>
+        <div style="font-size:1.6rem;font-weight:700;color:var(--ok);margin-bottom:6px;">${certCount}</div>
+        ${certTarget > 0 ? `<div style="margin-top:auto;">
+          ${pBar(certFilled, 'var(--ok)')}
+          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
+            <span>${certFilled}%</span><span>Target: ${certTarget}</span>
+          </div>
+        </div>` : ''}
+      </div>
+      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div style="${LBL}">Avg. Efficiency Pass Rate / Person</div>
+          ${tip('ค่าเฉลี่ยอัตราการผ่านมาตรฐาน Efficiency ของ Trainer แต่ละคน<br><span style="color:var(--text-muted)">สูตร: (Skill ที่ eff ≥ 75) / (Skill ทั้งหมดของคนนั้น) × 100 → avg ทุกคน<br>Target: 100%</span>')}
+        </div>
+        <div style="font-size:1.6rem;font-weight:700;color:#0891b2;margin-bottom:6px;">${avgSkill}%</div>
+        <div style="margin-top:auto;">
+          ${pBar(avgPct, '#0891b2')}
+          <div style="display:flex;justify-content:flex-end;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
+            <span>Target: 100%</span>
+          </div>
+        </div>
+      </div>
+      <div style="${CARD}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+          <div style="${LBL}">Skill Expired</div>
+          ${tip('จำนวน Trainer ที่มี Skill หมดอายุ อย่างน้อย 1 รายการ<br><span style="color:var(--text-muted)">นับ Trainer ที่มี expired = 1 และ eff > 0</span>')}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex:1;">
+          <div style="${VAL}margin-top:0;${expiredAll > 0 ? 'color:var(--danger);' : ''}">${expiredAll}</div>
+          ${RSUB(expiredByBu, 'var(--danger)')}
+        </div>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;">
       ${buStats.map(s => `
       <div style="${CARD}">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
           <span style="font-size:1.05rem;font-weight:700;color:${s.color};">${escapeHtml(s.bu)}</span>
-          <span style="font-size:0.82rem;color:#6b7280;">${s.total} คน</span>
+          <span style="font-size:0.82rem;color:var(--text-muted);">${s.total} คน</span>
         </div>
-        <div style="font-size:0.7rem;color:#6b7280;display:flex;flex-direction:column;gap:3px;margin-bottom:8px;">
-          <div style="display:flex;justify-content:space-between;"><span>★ Master Trainer</span><strong style="color:#7c3aed;">${s.master}</strong></div>
-          <div style="display:flex;justify-content:space-between;"><span>✓ Certified</span><strong style="color:#16a34a;">${s.certified}</strong></div>
-          <div style="display:flex;justify-content:space-between;"><span>○ On-Progress</span><strong style="color:#f59e0b;">${s.onProgress}</strong></div>
+        <div style="font-size:0.7rem;color:var(--text-muted);display:flex;flex-direction:column;gap:3px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;"><span>★ Master Trainer</span><strong style="color:var(--purple);">${s.master}</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>✓ Certified</span><strong style="color:var(--ok);">${s.certified}</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>○ On-Progress</span><strong style="color:var(--warn);">${s.onProgress}</strong></div>
         </div>
-        <div style="font-size:0.7rem;color:#6b7280;border-top:1px solid #f3f4f6;padding-top:6px;margin-top:auto;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span>Skill avg</span><strong style="color:#1f2937;">${s.avgSkill}</strong></div>
-          <div style="display:flex;justify-content:space-between;"><span>Expired</span><strong style="${s.expired > 0 ? 'color:#dc2626;' : 'color:#1f2937;'}">${s.expired}</strong></div>
+        <div style="font-size:0.7rem;color:var(--text-muted);border-top:1px solid var(--border-light);padding-top:6px;margin-top:auto;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span>Avg. Eff Pass Rate</span><strong style="color:var(--text);">${s.avgSkill}%</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>Expired (คน)</span><strong style="${s.expired > 0 ? 'color:var(--danger);' : 'color:var(--text);'}">${s.expired}</strong></div>
         </div>
       </div>`).join('')}
     </div>
     <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;">
-      ${buStats.map(s => `
+      ${buStats.map(s => {
+        const top3ByBu = (data.top3 || []).filter(t => t.bu === s.bu);
+        const trExcMaster = data.trainers.filter(t => t.bu === s.bu && t.status !== 'Master Trainer');
+        const top3Items = top3ByBu.map(t => {
+          const done = trExcMaster.reduce((acc, tr) =>
+            acc + (data.skills[tr.empid] || []).filter(sk => sk.productType === t.productType && sk.style === t.style && (sk.eff || 0) >= 75).length, 0);
+          const denom = t.totalSteps * trExcMaster.length;
+          const pct = denom > 0 ? Math.min(100, Math.round(done / denom * 100)) : null;
+          return { label: `${t.productType} / ${t.style}`, pct, productType: t.productType };
+        });
+        return `
       <div style="${CARD}min-height:80px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:0.9rem;font-weight:600;color:#6b7280;">${escapeHtml(s.bu)}</span>
-          <span style="color:#9ca3af;font-size:0.85rem;">⚙</span>
+        <div style="text-align:center;margin-bottom:10px;">
+          <span style="font-size:0.6rem;color:var(--text-muted);background:var(--surface2);padding:1px 5px;border-radius:10px;">🎯 Top 3 Priority</span>
         </div>
-        ${s.topPt.length === 0
-          ? `<div style="font-size:0.7rem;color:#9ca3af;text-align:center;padding:8px 0;">ไม่มีข้อมูล Setup</div>`
-          : s.topPt.map(x => `
+        ${top3Items.length === 0
+          ? `<div style="font-size:0.7rem;color:var(--text-muted);text-align:center;padding:8px 0;">ไม่มีข้อมูล top_3</div>`
+          : top3Items.map(x => `
             <div style="margin-bottom:6px;">
-              <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:#6b7280;margin-bottom:2px;">
-                <span>${escapeHtml(x.pt)}</span><span style="font-weight:600;color:#374151;">${x.pct}%</span>
+              <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-muted);margin-bottom:2px;">
+                <span>${escapeHtml(x.label)}</span>
+                <span style="font-weight:600;color:var(--text);">${x.pct === null ? '—' : x.pct + '%'}</span>
               </div>
-              ${pBar(x.pct, ptColor(x.pct))}
+              ${x.pct !== null ? pBar(x.pct, ptColorMap[x.productType] || ptColor(x.pct)) : ''}
             </div>`).join('')}
-      </div>`).join('')}
+      </div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -3053,9 +3343,10 @@ function _makeTrainerBuChart(data, mode) {
         })),
       },
       options: {
-        responsive: true, maintainAspectRatio: true,
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 400, easing: 'easeOutQuart' },
         plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } },
+        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '10%', ticks: { stepSize: 1 } } },
       },
     });
   } else {
@@ -3069,9 +3360,10 @@ function _makeTrainerBuChart(data, mode) {
           backgroundColor: sorted.map((_, i) => JUMPER_COLORS[i % JUMPER_COLORS.length]), borderRadius: 4 }],
       },
       options: {
-        responsive: true, maintainAspectRatio: true,
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 400, easing: 'easeOutQuart' },
         plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+        scales: { y: { beginAtZero: true, grace: '10%', ticks: { stepSize: 1 } } },
       },
     });
   }
@@ -3079,51 +3371,243 @@ function _makeTrainerBuChart(data, mode) {
 
 function _makeTrainerInsideChart(data, mode) {
   const id = 'trainer-insideChart';
-  if (!document.getElementById(id) || typeof Chart === 'undefined') return;
-  if (_trainerCharts[id]) _trainerCharts[id].destroy();
+  const canvas = document.getElementById(id);
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (_trainerCharts[id]) { _trainerCharts[id].destroy(); _trainerCharts[id] = null; }
+
+  const hint  = document.getElementById('trainer-insideChartHint');
+
   const bus       = [...new Set(data.trainers.map(t => t.bu))].sort();
   const allSkills = Object.values(data.skills).flat();
-  if (mode === 'grade') {
-    const grades = ['A', 'B', 'C', 'D'];
-    const gColors = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626'];
-    _trainerCharts[id] = new Chart(document.getElementById(id), {
+  const qualified = allSkills.filter(s => (s.eff || 0) >= 75);
+
+  // Hide hint by default (only shown in individual mode w/o BU)
+  if (hint) hint.classList.add('hidden');
+  canvas.style.display = '';
+
+  const baseOpts = {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 400, easing: 'easeOutQuart' },
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+  };
+
+  if (mode === 'status') {
+    // Stacked bar: Qualified / In-Progress / To-Train per BU
+    const rows = bus.map(bu => {
+      const ids = data.trainers.filter(t => t.bu === bu).map(t => t.empid);
+      const sks = allSkills.filter(s => ids.includes(s.empid));
+      return {
+        qual: sks.filter(s => (s.eff || 0) >= 75).length,
+        prog: sks.filter(s => (s.eff || 0) > 0 && (s.eff || 0) < 75).length,
+        todo: sks.filter(s => (s.eff || 0) === 0).length,
+      };
+    });
+    _trainerCharts[id] = new Chart(canvas, {
       type: 'bar',
       data: {
         labels: bus,
-        datasets: grades.map((g, i) => ({
-          label: `Grade ${g}`,
-          data: bus.map(bu => {
-            const ids = data.trainers.filter(t => t.bu === bu).map(t => t.empid);
-            return allSkills.filter(s => ids.includes(s.empid) && s.grade === g).length;
-          }),
-          backgroundColor: gColors[i], borderRadius: 3,
-        })),
+        datasets: [
+          { label: 'Qualified (≥75)', data: rows.map(r => r.qual), backgroundColor: '#16a34a', borderRadius: 3 },
+          { label: 'In-Progress',     data: rows.map(r => r.prog), backgroundColor: '#f59e0b', borderRadius: 3 },
+          { label: 'To-Train',        data: rows.map(r => r.todo), backgroundColor: '#94a3b8', borderRadius: 3 },
+        ],
       },
-      options: {
-        responsive: true, maintainAspectRatio: true,
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-        scales: { y: { beginAtZero: true } },
-      },
+      options: { ...baseOpts, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '10%' } } },
     });
-  } else {
-    const sorted = bus.map(bu => {
-      const ids = data.trainers.filter(t => t.bu === bu).map(t => t.empid);
-      const s   = allSkills.filter(r => ids.includes(r.empid) && (r.eff || 0) > 0);
-      return { bu, avg: s.length ? +(s.reduce((a, r) => a + r.eff, 0) / s.length).toFixed(1) : 0 };
-    }).sort((a, b) => b.avg - a.avg);
-    _trainerCharts[id] = new Chart(document.getElementById(id), {
+
+  } else if (mode === 'machine' || mode === 'product') {
+    // Horizontal stacked bar: Y = Machine / Product Type, X = qualified count, stacks = BU
+    const field = mode === 'machine' ? 'machineType' : 'productType';
+    const empBu = {};
+    for (const t of data.trainers) empBu[t.empid] = t.bu;
+    const totals = {};
+    for (const s of qualified) {
+      const k = s[field]; if (!k) continue;
+      totals[k] = (totals[k] || 0) + 1;
+    }
+    const TOP_N = mode === 'machine' ? 10 : 12;
+    const topItems = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, TOP_N).map(x => x[0]);
+    const datasets = bus.map((bu, i) => ({
+      label: bu,
+      data: topItems.map(it => qualified.filter(s => s[field] === it && empBu[s.empid] === bu).length),
+      backgroundColor: JUMPER_COLORS[i % JUMPER_COLORS.length],
+      borderRadius: 3,
+    }));
+    _trainerCharts[id] = new Chart(canvas, {
       type: 'bar',
-      data: {
-        labels: sorted.map(x => x.bu),
-        datasets: [{ label: 'Avg Skill Score', data: sorted.map(x => x.avg),
-          backgroundColor: sorted.map((_, i) => JUMPER_COLORS[i % JUMPER_COLORS.length]), borderRadius: 4 }],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: true,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true } },
-      },
+      data: { labels: topItems, datasets },
+      options: { ...baseOpts, indexAxis: 'y',
+        scales: { x: { stacked: true, beginAtZero: true, grace: '10%' }, y: { stacked: true } } },
     });
+
+  } else if (mode === 'individual') {
+    const selBu = _trainerIndividualBu;
+    if (!selBu) {
+      // No BU selected — show hint, hide canvas
+      canvas.style.display = 'none';
+      if (hint) { hint.classList.remove('hidden'); hint.textContent = 'กรุณาเลือก BU เพื่อดูทักษะของครูฝึกรายบุคคล'; }
+      return;
+    }
+    const trsInBu = data.trainers.filter(t => t.bu === selBu).sort((a, b) => a.name.localeCompare(b.name));
+    const ids = trsInBu.map(t => t.empid);
+    const buQual = qualified.filter(s => ids.includes(s.empid));
+    const pts = [...new Set(buQual.map(s => s.productType).filter(Boolean))].sort();
+    if (!trsInBu.length || !pts.length) {
+      canvas.style.display = 'none';
+      if (hint) { hint.classList.remove('hidden'); hint.textContent = 'ไม่มีทักษะ qualified ใน BU นี้'; }
+      return;
+    }
+    // Build consistent color map from ALL product types (all BUs) so same PT always gets same color
+    const allPts = [...new Set(qualified.map(s => s.productType).filter(Boolean))].sort();
+    const ptColorMap = {};
+    allPts.forEach((pt, i) => { ptColorMap[pt] = TRAINER_PT_COLORS[i % TRAINER_PT_COLORS.length]; });
+    const datasets = pts.map(pt => ({
+      label: pt,
+      data: trsInBu.map(t => buQual.filter(s => s.empid === t.empid && s.productType === pt).length),
+      backgroundColor: ptColorMap[pt] ?? JUMPER_COLORS[0],
+      borderRadius: 3,
+    }));
+    _trainerCharts[id] = new Chart(canvas, {
+      type: 'bar',
+      data: { labels: trsInBu.map(t => t.name), datasets },
+      options: { ...baseOpts,
+        scales: {
+          x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 0, minRotation: 0,
+            callback(value) {
+              const lbl = this.getLabelForValue(value);
+              return lbl.length > 8 ? lbl.slice(0, 8) + '…' : lbl;
+            } } },
+          y: { stacked: true, beginAtZero: true, grace: '10%', title: { display: true, text: 'จำนวนทักษะ (Qualified)' } },
+        } },
+    });
+
+  } else if (mode === 'ttt') {
+    const passLine = 70;
+    const trainersWithScore = data.trainers.filter(t => t.score != null && t.status !== 'Master Trainer');
+    const buList = [...new Set(trainersWithScore.map(t => t.bu))].sort();
+    const buColorMap = {};
+    buList.forEach((bu, i) => { buColorMap[bu] = JUMPER_COLORS[i % JUMPER_COLORS.length]; });
+
+    const annotationOpts = {
+      annotations: {
+        passLine: {
+          type: 'line', yMin: passLine, yMax: passLine,
+          borderColor: '#dc2626', borderWidth: 2, borderDash: [6, 4],
+        },
+      },
+    };
+    const passLegend = `<span style="display:inline-block;width:22px;border-bottom:2px dashed #dc2626;vertical-align:middle;margin-right:5px;"></span><span>เกณฑ์ผ่าน ${passLine}%</span>`;
+
+    if (!_trainerTttBu) {
+      // ── BU Overview ──
+      const avgScores = buList.map(bu => {
+        const inBu = trainersWithScore.filter(t => t.bu === bu);
+        return inBu.length ? +(inBu.reduce((s, t) => s + t.score, 0) / inBu.length).toFixed(1) : 0;
+      });
+
+      _trainerCharts[id] = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: buList,
+          datasets: [{
+            label: 'ค่าเฉลี่ย (%)',
+            data: avgScores,
+            backgroundColor: buList.map(bu => buColorMap[bu]),
+            borderRadius: 4,
+            barPercentage: 0.6,
+          }],
+        },
+        options: {
+          ...baseOpts,
+          onClick(evt, elems) {
+            if (!elems.length) return;
+            const idx = elems[0].index;
+            _trainerTttBu = buList[idx];
+            _makeTrainerInsideChart(data, 'ttt');
+          },
+          plugins: {
+            legend: { display: false },
+            annotation: annotationOpts,
+            tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw.toFixed(1)}%` } },
+          },
+          scales: {
+            x: { ticks: { font: { size: 12 }, maxRotation: 0, minRotation: 0 } },
+            y: { beginAtZero: true, max: 100,
+              title: { display: true, text: 'คะแนนเฉลี่ย (%)' },
+              ticks: { callback: v => v + '%' } },
+          },
+        },
+      });
+      if (hint) { hint.classList.remove('hidden'); hint.innerHTML = `${passLegend}<span style="color:var(--border-light);">|</span><span>คลิกที่แท่ง BU เพื่อดูรายบุคคล</span>`; }
+
+    } else {
+      // ── Individual drill-down for selected BU ──
+      const selBu = _trainerTttBu;
+      const inBu = trainersWithScore.filter(t => t.bu === selBu).sort((a, b) => b.score - a.score);
+      if (!inBu.length) {
+        canvas.style.display = 'none';
+        if (hint) { hint.classList.remove('hidden'); hint.textContent = 'ไม่มีข้อมูลคะแนนใน BU นี้'; }
+        return;
+      }
+      const labels = inBu.map(t => {
+        const n = t.name;
+        return n.length > 8 ? n.slice(0, 8) + '…' : n;
+      });
+      const scores = inBu.map(t => t.score);
+      const colors = scores.map(v => v >= passLine ? '#16a34a' : '#ef4444');
+
+      _trainerCharts[id] = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'คะแนน (%)',
+            data: scores,
+            backgroundColor: colors,
+            borderRadius: 4,
+            barPercentage: 0.6,
+          }],
+        },
+        options: {
+          ...baseOpts,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 },
+              generateLabels() {
+                return [
+                  { text: 'ผ่าน (≥70%)', fillStyle: '#16a34a', strokeStyle: '#16a34a', lineWidth: 0 },
+                  { text: 'ไม่ผ่าน (<70%)', fillStyle: '#ef4444', strokeStyle: '#ef4444', lineWidth: 0 },
+                ];
+              },
+            } },
+            annotation: annotationOpts,
+            tooltip: {
+              callbacks: {
+                title: ctx => inBu[ctx[0].dataIndex]?.name || '',
+                label: ctx => `${ctx.raw.toFixed(1)}%`,
+              },
+            },
+          },
+          scales: {
+            x: { ticks: { font: { size: 11 }, maxRotation: 0, minRotation: 0,
+              callback(value) {
+                const lbl = this.getLabelForValue(value);
+                return lbl.length > 8 ? lbl.slice(0, 8) + '…' : lbl;
+              } } },
+            y: { beginAtZero: true, max: 100,
+              title: { display: true, text: 'คะแนน (%)' },
+              ticks: { callback: v => v + '%' } },
+          },
+        },
+      });
+      if (hint) {
+        hint.classList.remove('hidden');
+        hint.innerHTML = `${passLegend}` +
+          `<span style="color:var(--border-light);">|</span>` +
+          `<button onclick="_trainerTttBu='';_makeTrainerInsideChart(window._tttData,'ttt');" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--text);font-size:0.82rem;">← ภาพรวม BU</button>` +
+          `<span style="font-size:0.82rem;">${escapeHtml(selBu)} — รายบุคคล</span>`;
+      }
+    }
+    window._tttData = data;
   }
 }
 
@@ -3134,15 +3618,15 @@ function renderTrainerCoverageMatrix(data) {
   if (!wrap) return;
   const { bus, productTypes, coverage } = _trainerCoverageData(data);
   if (!productTypes.length) {
-    wrap.innerHTML = '<p style="color:#9ca3af;font-size:0.85rem;text-align:center;padding:20px;">ยังไม่มีข้อมูล BUSetup — กรุณาสร้างตาราง BUSetup ในไฟล์ Excel</p>';
+    wrap.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;text-align:center;padding:20px;">ยังไม่มีข้อมูล BUSetup — กรุณาสร้างตาราง BUSetup ในไฟล์ Excel</p>';
     return;
   }
-  const cellBg = pct => {
+  const cellCls = pct => {
     if (pct === null) return '';
-    if (pct >= 80) return 'background:#bbf7d0;';
-    if (pct >= 60) return 'background:#dcfce7;';
-    if (pct >= 30) return 'background:#fef9c3;';
-    return 'background:#fecaca;';
+    if (pct >= 80) return 'cov-high';
+    if (pct >= 60) return 'cov-good';
+    if (pct >= 30) return 'cov-warn';
+    return 'cov-low';
   };
   const colAvg = productTypes.map(pt => {
     const v = bus.map(bu => coverage[bu][pt]).filter(x => x !== null);
@@ -3155,13 +3639,19 @@ function renderTrainerCoverageMatrix(data) {
   const allV = bus.flatMap(bu => productTypes.map(pt => coverage[bu][pt])).filter(x => x !== null);
   const grandAvg = allV.length ? Math.round(allV.reduce((s, x) => s + x, 0) / allV.length) : null;
 
-  const TH = 'padding:7px 10px;font-size:0.75rem;font-weight:600;background:var(--surface-alt,#f9fafb);text-align:center;white-space:nowrap;border:1px solid #e5e7eb;';
-  const TD = 'padding:6px 10px;font-size:0.75rem;text-align:center;border:1px solid #e5e7eb;';
+  const TH = 'padding:7px 10px;font-size:0.75rem;font-weight:600;background:var(--surface2);color:var(--text);text-align:center;white-space:nowrap;border:1px solid var(--border-light);';
+  const TD = 'padding:6px 10px;font-size:0.75rem;text-align:center;border:1px solid var(--border-light);color:var(--text);';
+  const ptColW = `${(80 / productTypes.length).toFixed(3)}%`;  // PT columns share 80% equally
   wrap.innerHTML = `
-    <table style="border-collapse:collapse;width:100%;min-width:500px;">
+    <table style="border-collapse:collapse;width:100%;min-width:500px;table-layout:fixed;">
+      <colgroup>
+        <col style="width:12%;">
+        ${productTypes.map(() => `<col style="width:${ptColW};">`).join('')}
+        <col style="width:8%;">
+      </colgroup>
       <thead><tr>
         <th style="${TH}text-align:left;">BU</th>
-        ${productTypes.map(pt => `<th style="${TH}">${escapeHtml(pt)}</th>`).join('')}
+        ${productTypes.map(pt => `<th style="${TH}word-break:break-word;white-space:normal;">${escapeHtml(pt)}</th>`).join('')}
         <th style="${TH}">x̄</th>
       </tr></thead>
       <tbody>
@@ -3170,11 +3660,12 @@ function renderTrainerCoverageMatrix(data) {
           <td style="${TD}text-align:left;font-weight:600;">${escapeHtml(bu)}</td>
           ${productTypes.map(pt => {
             const p = coverage[bu][pt];
-            return `<td style="${TD}${cellBg(p)}">${p === null ? '—' : p + '%'}</td>`;
+            const cls = cellCls(p);
+            return `<td class="${cls}" style="${TD}">${p === null ? '—' : p + '%'}</td>`;
           }).join('')}
           <td style="${TD}font-weight:700;">${rowAvg[i] === null ? '—' : rowAvg[i] + '%'}</td>
         </tr>`).join('')}
-        <tr style="border-top:2px solid #d1d5db;">
+        <tr style="border-top:2px solid var(--border);">
           <td style="${TD}text-align:left;font-weight:700;">x̄</td>
           ${colAvg.map(v => `<td style="${TD}font-weight:700;">${v === null ? '—' : v + '%'}</td>`).join('')}
           <td style="${TD}font-weight:700;">${grandAvg === null ? '—' : grandAvg + '%'}</td>
@@ -3188,59 +3679,72 @@ function renderTrainerCoverageMatrix(data) {
 function renderTrainerTable(data) {
   const wrap = document.getElementById('trainer-table');
   if (!wrap) return;
-  const { bu, style, status, search } = _trainerTableState.filters;
+  const { bu, productType, style, status, search } = _trainerTableState.filters;
   const q = search.toLowerCase();
-  const TH = 'padding:8px 10px;font-size:0.75rem;font-weight:600;background:var(--surface-alt,#f9fafb);text-align:left;white-space:nowrap;border-bottom:2px solid #e5e7eb;';
-  const TD = 'padding:7px 10px;font-size:0.8rem;border-bottom:1px solid #f3f4f6;';
 
   if (_trainerTableMode === 'person') {
-    let rows = data.trainers.map(t => {
-      const skills = (data.skills[t.empid] || []).filter(s => !style || s.style === style);
-      return {
-        empid: t.empid, name: t.name, bu: t.bu, status: t.status,
-        total: skills.length,
-        A:     skills.filter(s => s.grade === 'A').length,
-        B:     skills.filter(s => s.grade === 'B').length,
-        C:     skills.filter(s => s.grade === 'C').length,
-        D:     skills.filter(s => s.grade === 'D').length,
-        nullG: skills.filter(s => !s.grade || !['A','B','C','D'].includes(s.grade)).length,
-        exp:   skills.filter(s => Number(s.expired) === 1).length,
-      };
-    });
-    if (bu)     rows = rows.filter(r => r.bu === bu);
-    if (status) rows = rows.filter(r => r.status === status);
-    if (q)      rows = rows.filter(r => r.name.toLowerCase().includes(q) || r.empid.toLowerCase().includes(q));
+    let rows = [];
+    for (const t of data.trainers) {
+      if (bu && t.bu !== bu) continue;
+      if (status && t.status !== status) continue;
+      if (q && !t.name.toLowerCase().includes(q) && !t.empid.toLowerCase().includes(q)) continue;
+      const trSkills = (data.skills[t.empid] || []).filter(s =>
+        (s.eff || 0) > 0 &&
+        (!productType || s.productType === productType) &&
+        (!style || s.style === style)
+      );
+      for (const sk of trSkills) {
+        rows.push({
+          empid: t.empid, name: t.name, bu: t.bu, status: t.status,
+          processNo: sk.processNo, processName: sk.processName,
+          machineType: sk.machineType, grade: sk.grade,
+          smv: sk.smv, amv: sk.amv, eff: sk.eff,
+          productType: sk.productType, style: sk.style,
+          expired: sk.expired,
+        });
+      }
+    }
 
     const total = rows.length;
     const { page, pageSize } = _trainerTableState;
-    const pageCount  = Math.ceil(total / pageSize) || 1;
-    const start      = (page - 1) * pageSize;
-    const pageRows   = rows.slice(start, start + pageSize);
+    const pageCount = Math.ceil(total / pageSize) || 1;
+    const start     = (page - 1) * pageSize;
+    const pageRows  = rows.slice(start, start + pageSize);
+    const effColor  = eff => {
+      if (eff == null || isNaN(eff)) return 'var(--text-muted)';
+      if (eff >= 75) return 'var(--ok)';
+      const hue = Math.round((eff / 75) * 120);
+      return `hsl(${hue}, 80%, 38%)`;
+    };
 
-    wrap.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;">
+    if (!pageRows.length) {
+      wrap.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center;">ไม่พบข้อมูล</div>';
+    } else {
+      wrap.innerHTML = `<div style="overflow-x:auto"><table>
         <thead><tr>
-          <th style="${TH}">BU</th><th style="${TH}">รหัสพนักงาน</th><th style="${TH}">ชื่อ-สกุล</th>
-          <th style="${TH}text-align:right;">Skill รวม</th>
-          <th style="${TH}text-align:right;">A</th><th style="${TH}text-align:right;">B</th>
-          <th style="${TH}text-align:right;">C</th><th style="${TH}text-align:right;">D</th>
-          <th style="${TH}text-align:right;">Null</th><th style="${TH}text-align:center;">หมดอายุ</th>
+          <th>BU</th><th>รหัสพนักงาน</th><th>ชื่อ-สกุล</th>
+          <th>Process No</th><th>Process Name</th><th>Machine</th>
+          <th>SMV</th><th>AMV</th><th>Eff%</th>
+          <th>Product Type</th><th>Style</th><th>หมดอายุ</th>
         </tr></thead>
         <tbody>${pageRows.map(r => `
           <tr>
-            <td style="${TD}">${escapeHtml(r.bu)}</td>
-            <td style="${TD}">${escapeHtml(r.empid)}</td>
-            <td style="${TD}">${escapeHtml(r.name)}</td>
-            <td style="${TD}text-align:right;">${r.total}</td>
-            <td style="${TD}text-align:right;">${r.A}</td><td style="${TD}text-align:right;">${r.B}</td>
-            <td style="${TD}text-align:right;">${r.C}</td><td style="${TD}text-align:right;">${r.D}</td>
-            <td style="${TD}text-align:right;">${r.nullG}</td>
-            <td style="${TD}text-align:center;">${r.exp > 0
-              ? `<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:600;">${r.exp} หมดอายุ</span>`
-              : `<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:999px;font-size:0.7rem;font-weight:600;">ปกติ</span>`}</td>
+            <td>${escapeHtml(r.bu)}</td>
+            <td>${escapeHtml(r.empid)}</td>
+            <td>${escapeHtml(r.name)}</td>
+            <td>${escapeHtml(r.processNo || '—')}</td>
+            <td>${escapeHtml(r.processName || '—')}</td>
+            <td>${escapeHtml(r.machineType || '—')}</td>
+            <td style="text-align:right;">${r.smv ? r.smv.toFixed(2) : '—'}</td>
+            <td style="text-align:right;">${r.amv ? r.amv.toFixed(2) : '—'}</td>
+            <td style="text-align:right;font-weight:700;color:${effColor(r.eff)};">${r.eff ? r.eff.toFixed(1) + '%' : '—'}</td>
+            <td>${escapeHtml(r.productType || '—')}</td>
+            <td>${escapeHtml(r.style || '—')}</td>
+            <td><span class="badge ${Number(r.expired) === 1 ? 'warn' : 'ok'}">${Number(r.expired) === 1 ? 'หมดอายุ' : 'ปกติ'}</span></td>
           </tr>`).join('')}
         </tbody>
-      </table>`;
+      </table></div>`;
+    }
 
     const rl = document.getElementById('trainer-rangeLabel');
     const pl = document.getElementById('trainer-pageLabel');
@@ -3252,48 +3756,64 @@ function renderTrainerTable(data) {
     if (nv) nv.disabled = page >= pageCount;
 
   } else {
-    // By Skill Type — group by Product Type
-    const allSkills = Object.values(data.skills).flat();
-    const groups = {};
-    for (const s of allSkills) {
-      const t = data.trainers.find(x => x.empid === s.empid);
-      if (!t) continue;
-      if (bu && t.bu !== bu) continue;
-      if (style && s.style !== style) continue;
-      if (status && t.status !== status) continue;
-      if (q && !t.name.toLowerCase().includes(q) && !t.empid.toLowerCase().includes(q)) continue;
-      const key = s.productType || '—';
-      if (!groups[key]) groups[key] = { A:0, B:0, C:0, D:0, nullG:0, exp:0, total:0 };
-      groups[key].total++;
-      if (['A','B','C','D'].includes(s.grade)) groups[key][s.grade]++;
-      else groups[key].nullG++;
-      if (Number(s.expired) === 1) groups[key].exp++;
+    // By Skill Type — pivot: rows = trainers, columns = product types, cell = qualified skill count (eff >= 75)
+    const allPts = [...new Set(
+      Object.values(data.skills).flat().map(s => s.productType).filter(Boolean)
+    )].sort().filter(pt => !productType || pt === productType);
+
+    const filteredTrainers = data.trainers.filter(t => {
+      if (bu && t.bu !== bu) return false;
+      if (status && t.status !== status) return false;
+      if (q && !t.name.toLowerCase().includes(q) && !t.empid.toLowerCase().includes(q)) return false;
+      return true;
+    }).sort((a, b) => a.bu.localeCompare(b.bu) || a.name.localeCompare(b.name));
+
+    // pivot[empid][pt] = count of qualified skills (eff >= 75) in that product type
+    const pivot = {};
+    for (const t of filteredTrainers) {
+      pivot[t.empid] = {};
+      for (const pt of allPts) {
+        pivot[t.empid][pt] = (data.skills[t.empid] || []).filter(s =>
+          s.productType === pt && (s.eff || 0) >= 75 && (!style || s.style === style)
+        ).length;
+      }
     }
-    const ptRows = Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
-    wrap.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;">
+
+    const total = filteredTrainers.length;
+    const { page, pageSize } = _trainerTableState;
+    const pageCount = Math.ceil(total / pageSize) || 1;
+    const start     = (page - 1) * pageSize;
+    const pageRows  = filteredTrainers.slice(start, start + pageSize);
+
+    if (!total) {
+      wrap.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center;">ไม่พบข้อมูล</div>';
+    } else {
+      wrap.innerHTML = `<div style="overflow-x:auto"><table>
         <thead><tr>
-          <th style="${TH}">Product Type</th>
-          <th style="${TH}text-align:right;">Skill รวม</th>
-          <th style="${TH}text-align:right;">A</th><th style="${TH}text-align:right;">B</th>
-          <th style="${TH}text-align:right;">C</th><th style="${TH}text-align:right;">D</th>
-          <th style="${TH}text-align:right;">Null</th><th style="${TH}text-align:right;">หมดอายุ</th>
+          <th>BU</th><th>ชื่อ-สกุล</th>
+          ${allPts.map(pt => `<th style="text-align:center;">${escapeHtml(pt)}</th>`).join('')}
         </tr></thead>
-        <tbody>${ptRows.map(([pt, g]) => `
+        <tbody>${pageRows.map(t => `
           <tr>
-            <td style="${TD}">${escapeHtml(pt)}</td>
-            <td style="${TD}text-align:right;">${g.total}</td>
-            <td style="${TD}text-align:right;">${g.A}</td><td style="${TD}text-align:right;">${g.B}</td>
-            <td style="${TD}text-align:right;">${g.C}</td><td style="${TD}text-align:right;">${g.D}</td>
-            <td style="${TD}text-align:right;">${g.nullG}</td>
-            <td style="${TD}text-align:right;${g.exp>0?'color:#dc2626;font-weight:600;':''}">${g.exp}</td>
+            <td>${escapeHtml(t.bu)}</td>
+            <td>${escapeHtml(t.name)}</td>
+            ${allPts.map(pt => {
+              const cnt = pivot[t.empid][pt];
+              return `<td style="text-align:center;">${cnt > 0 ? `<strong>${cnt}</strong>` : '<span style="color:var(--text-muted);">—</span>'}</td>`;
+            }).join('')}
           </tr>`).join('')}
         </tbody>
-      </table>`;
+      </table></div>`;
+    }
+
     const rl = document.getElementById('trainer-rangeLabel');
     const pl = document.getElementById('trainer-pageLabel');
-    if (rl) rl.textContent = '';
-    if (pl) pl.textContent = '';
+    const pv = document.getElementById('trainer-prevPage');
+    const nv = document.getElementById('trainer-nextPage');
+    if (rl) rl.textContent = total > 0 ? `${start+1}–${Math.min(start+pageSize,total)} จาก ${total}` : '0 รายการ';
+    if (pl) pl.textContent = `${page} / ${pageCount}`;
+    if (pv) pv.disabled = page <= 1;
+    if (nv) nv.disabled = page >= pageCount;
   }
 }
 
@@ -3313,7 +3833,60 @@ function _wireTrainerControls(data) {
     });
   };
   wire('trainer-buChartToggle',      _trainerBuMode,     m => { _trainerBuMode = m; },     _makeTrainerBuChart);
-  wire('trainer-insideDataToggle',   _trainerInsideMode,  m => { _trainerInsideMode = m; },  _makeTrainerInsideChart);
+  wire('trainer-insideDataToggle',   _trainerInsideMode,  m => {
+    _trainerInsideMode = m;
+    if (m !== 'ttt') _trainerTttBu = '';
+    if (m !== 'individual') {
+      _trainerIndividualBu = '';
+      const ib = document.getElementById('trainer-individualBtn');
+      if (ib) ib.textContent = 'Individual';
+      const im = document.getElementById('trainer-individualMenu');
+      if (im) im.classList.add('hidden');
+    }
+  },  _makeTrainerInsideChart);
+
+  // Individual mode — floating BU sub-menu under the Individual button
+  const indBtn  = document.getElementById('trainer-individualBtn');
+  const indMenu = document.getElementById('trainer-individualMenu');
+  if (indBtn && indMenu) {
+    const bus = [...new Set(data.trainers.map(t => t.bu))].sort();
+    indMenu.innerHTML = bus.map(b =>
+      `<button type="button" class="individual-menu-item${b === _trainerIndividualBu ? ' active' : ''}" data-bu="${escapeHtml(b)}">${escapeHtml(b)}</button>`
+    ).join('');
+
+    // Override the generic toggle handler: activate mode AND open/close the menu
+    indBtn.onclick = (e) => {
+      e.stopPropagation();
+      _trainerInsideMode = 'individual';
+      document.querySelectorAll('#trainer-insideDataToggle .toggle-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.mode === 'individual'));
+      _makeTrainerInsideChart(data, 'individual');
+      indMenu.classList.toggle('hidden');
+    };
+
+    indMenu.querySelectorAll('.individual-menu-item').forEach(item => {
+      item.onclick = (e) => {
+        e.stopPropagation();
+        _trainerIndividualBu = item.dataset.bu;
+        indMenu.querySelectorAll('.individual-menu-item').forEach(i =>
+          i.classList.toggle('active', i.dataset.bu === _trainerIndividualBu));
+        indBtn.textContent = `Individual: ${_trainerIndividualBu} ▾`;
+        indMenu.classList.add('hidden');
+        _makeTrainerInsideChart(data, 'individual');
+      };
+    });
+
+    // Close the menu when clicking anywhere else (incl. other toggle buttons)
+    if (!window._trainerIndMenuCloser) {
+      window._trainerIndMenuCloser = true;
+      document.addEventListener('click', (e) => {
+        const menu = document.getElementById('trainer-individualMenu');
+        if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target)) {
+          menu.classList.add('hidden');
+        }
+      });
+    }
+  }
 
   const tableToggle = document.getElementById('trainer-tableToggle');
   if (tableToggle) {
@@ -3339,6 +3912,7 @@ function _wireTrainerControls(data) {
   }
 
   const buSel     = document.getElementById('trainer-filterBu');
+  const ptSel     = document.getElementById('trainer-filterProductType');
   const styleSel  = document.getElementById('trainer-filterStyle');
   const statusSel = document.getElementById('trainer-filterStatus');
   const searchInp = document.getElementById('trainer-filterSearch');
@@ -3352,10 +3926,32 @@ function _wireTrainerControls(data) {
       bus.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
     buSel.onchange = () => { _trainerTableState.filters.bu = buSel.value; _trainerTableState.page = 1; renderTrainerTable(data); };
   }
-  if (styleSel) {
-    const styles = [...new Set(Object.values(data.skills).flat().map(s => s.style).filter(Boolean))].sort();
+  const populateStyles = (forPt) => {
+    if (!styleSel) return;
+    const styles = [...new Set(
+      Object.values(data.skills).flat()
+        .filter(s => !forPt || s.productType === forPt)
+        .map(s => s.style)
+        .filter(Boolean)
+    )].sort();
     styleSel.innerHTML = '<option value="">ทุก Style</option>' +
       styles.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  };
+
+  if (ptSel) {
+    const pts = [...new Set(Object.values(data.skills).flat().map(s => s.productType).filter(Boolean))].sort();
+    ptSel.innerHTML = '<option value="">ทุก Product Type</option>' +
+      pts.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+    ptSel.onchange = () => {
+      _trainerTableState.filters.productType = ptSel.value;
+      _trainerTableState.filters.style = '';
+      populateStyles(ptSel.value);
+      _trainerTableState.page = 1;
+      renderTrainerTable(data);
+    };
+  }
+  if (styleSel) {
+    populateStyles('');
     styleSel.onchange = () => { _trainerTableState.filters.style = styleSel.value; _trainerTableState.page = 1; renderTrainerTable(data); };
   }
   if (statusSel) {
@@ -3413,4 +4009,5 @@ async function initTrainerTab() {
 init().catch(err => {
   console.error(err);
   show($('loginPanel'));
+  startLoginParticles();
 });

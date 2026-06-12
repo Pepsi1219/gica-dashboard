@@ -123,7 +123,13 @@ TRAINER_EXCEL_SHARE_URL = (
     "IQCW0mCMNqBZSqtqevcc5wwsAYU-dtFGqH1f478vgj7qoXY?e=VMlBrv"
 )
 TRAINER_LIST_TABLE  = "TrainerListAll"
-TRAINER_LIST_COLS   = ["Employee ID", "Employee Name", "BU", "Status"]
+TRAINER_LIST_COLS   = ["EMPID", "Employee Name", "BU", "Status", "Position", "Score"]
 TRAINER_SETUP_TABLE = "BUSetup"
 TRAINER_SETUP_COLS  = ["BU", "Product Type", "Style", "Total Steps"]
-TRAINER_SKILL_COLS  = ["Employee ID", "Product Type", "Style", "grade", "expired", "eff"]
+TRAINER_TOP3_TABLE  = "top_3"
+TRAINER_TOP3_COLS   = ["BU", "Product Type", "Style", "Total Steps"]
+TRAINER_SKILL_COLS  = [
+    "EMPID", "process_no", "gsd_code", "process_name", "machinetype",
+    "grade", "smv", "amv", "last_update", "lead_time",
+    "csa_approve", "expired", "eff", "PRODUCT_TYPE", "STYLE", "total_count",
+]
