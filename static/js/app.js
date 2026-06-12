@@ -742,21 +742,6 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// ── sessionStorage cache helpers (TTL in seconds) ─────────────────────────────
-function _ssGet(key, ttlSec) {
-  try {
-    const raw = sessionStorage.getItem('_cc_' + key);
-    if (!raw) return null;
-    const { ts, data } = JSON.parse(raw);
-    if (Date.now() - ts > ttlSec * 1000) { sessionStorage.removeItem('_cc_' + key); return null; }
-    return data;
-  } catch { return null; }
-}
-function _ssSet(key, data) {
-  try { sessionStorage.setItem('_cc_' + key, JSON.stringify({ ts: Date.now(), data })); }
-  catch {} // silently ignore if storage quota exceeded
-}
-
 function normalizeDateForInput(value) {
   if (value === null || value === undefined || value === '' || value === 0) return '';
   if (typeof value === 'number') {
@@ -3066,31 +3051,24 @@ async function initJumperTab() {
   const errorEl   = document.getElementById('jumper-error');
   const dashEl    = document.getElementById('jumper-dashboard');
 
-  const _applyJumperData = (data) => {
-    _jumperByBu  = applyBuAliases(data.jumper        || {});
-    _jumperSewOp = applyBuAliases(data.sewingOperator || {});
-    _jumperRows  = normalizeJumperRows(_jumperByBu);
-    _jumperLoaded = true;
-    if (loadingEl) loadingEl.classList.add('hidden');
-    if (dashEl)    dashEl.classList.remove('hidden');
-    renderJumperSummaryCards();
-    renderJumperCharts();
-    renderJumperTable();
-    _wireJumperControls();
-  };
-
-  // Serve from sessionStorage if fresh (TTL 5 min, matches backend cache)
-  const cached = _ssGet('jumper-excel', 300);
-  if (cached) { _applyJumperData(cached); return; }
-
   if (loadingEl) loadingEl.classList.remove('hidden');
   if (errorEl)   errorEl.classList.add('hidden');
   if (dashEl)    dashEl.classList.add('hidden');
 
   try {
     const data = await api('/api/jumper-excel');
-    _ssSet('jumper-excel', data);
-    _applyJumperData(data);
+    _jumperByBu  = applyBuAliases(data.jumper        || {});
+    _jumperSewOp = applyBuAliases(data.sewingOperator || {});
+    _jumperRows  = normalizeJumperRows(_jumperByBu);
+    _jumperLoaded = true;
+
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (dashEl)    dashEl.classList.remove('hidden');
+
+    renderJumperSummaryCards();
+    renderJumperCharts();
+    renderJumperTable();
+    _wireJumperControls();
   } catch (err) {
     if (loadingEl) loadingEl.classList.add('hidden');
     if (errorEl) {
@@ -4016,9 +3994,11 @@ async function initTrainerTab() {
   const loadingEl = document.getElementById('trainer-loading');
   const errorEl   = document.getElementById('trainer-error');
   const dashEl    = document.getElementById('trainer-dashboard');
-
-  const _applyTrainerData = (data) => {
-    _trainerData   = data;
+  try {
+    const res = await fetch('/api/trainer-excel');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    _trainerData = await res.json();
+    if (_trainerData.error) throw new Error(_trainerData.error);
     _trainerLoaded = true;
     if (loadingEl) loadingEl.classList.add('hidden');
     if (dashEl)    dashEl.classList.remove('hidden');
@@ -4027,22 +4007,6 @@ async function initTrainerTab() {
     renderTrainerCoverageMatrix(_trainerData);
     renderTrainerTable(_trainerData);
     _wireTrainerControls(_trainerData);
-  };
-
-  // Serve from sessionStorage if fresh (TTL 5 min, matches backend cache)
-  const cached = _ssGet('trainer-excel', 300);
-  if (cached) { _applyTrainerData(cached); return; }
-
-  if (loadingEl) loadingEl.classList.remove('hidden');
-  if (dashEl)    dashEl.classList.add('hidden');
-
-  try {
-    const res = await fetch('/api/trainer-excel');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    _ssSet('trainer-excel', data);
-    _applyTrainerData(data);
   } catch (err) {
     if (loadingEl) loadingEl.classList.add('hidden');
     if (errorEl) {
