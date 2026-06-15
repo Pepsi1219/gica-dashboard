@@ -133,3 +133,19 @@ TRAINER_SKILL_COLS  = [
     "grade", "smv", "amv", "last_update", "lead_time",
     "csa_approve", "expired", "eff", "PRODUCT_TYPE", "STYLE", "total_count",
 ]
+
+# ── GICA Assessment Excel ─────────────────────────────────────────────────────
+# Named tables per BU: GICA_G1, GICA_G3, … (auto-discovered via /workbook/tables).
+# Each row has 15 test slots; latest non-empty result = current status.
+GICA_EXCEL_SHARE_URL = (
+    "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/"
+    "pongsathon_s_nanyangtextile_com/"
+    "IQB-f6_7UzyGRov5bH30_tdxAfELOuKcgkN9lChBvw_wr4E?e=srksPb"
+)
+GICA_TABLE_PREFIX = "GICA_"
+GICA_MAX_TESTS    = 15
+GICA_COLS         = ["bu", "empid", "name", "deptname", "position"] + [
+    f"{field}{i}"
+    for i in range(1, GICA_MAX_TESTS + 1)
+    for field in ("result", "grade", "date")
+]

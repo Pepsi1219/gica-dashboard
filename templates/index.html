@@ -16,6 +16,7 @@
   <!-- Chart.js — used by Jumper Skill tab -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 </head>
 <body>
   <header class="topbar">
@@ -53,6 +54,7 @@
     <button class="tab-btn" data-tab="jumper" data-i18n="tabJumper">Jumper</button>
     <button class="tab-btn" data-tab="trainer" data-i18n="tabTrainer">Trainer</button>
     <button class="tab-btn" data-tab="sewingOperator" data-i18n="tabSewingOperator">Sewing Operator</button>
+    <button class="tab-btn" data-tab="gica">GICA</button>
   </nav>
 
   <!-- Register Modal -->
@@ -331,6 +333,7 @@
         </div>
       </section>
     </section>
+    <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Update Real time</p>
   </main>
 
   <!-- Jumper Skill Tab -->
@@ -424,6 +427,7 @@
           </div>
         </section>
 
+        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Last update 11 June 2026</p>
       </div><!-- /#jumper-dashboard -->
     </main>
   </div>
@@ -547,6 +551,7 @@
           </div>
         </div>
 
+        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Last update 11 June 2026</p>
       </div><!-- /#trainer-dashboard -->
     </main>
   </div>
@@ -561,6 +566,130 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=93"></script>
+  <!-- GICA Tab -->
+  <div id="tabContent-gica" class="tab-content hidden">
+    <main class="container">
+
+      <div id="gica-loading" class="sk-screen">
+        <div class="jtp-row2">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div><div class="sk-bar" style="margin-top:auto;"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-bar"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div><div class="sk-text"></div></div>
+        </div>
+        <div class="jtp-row2">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+        </div>
+        <div class="sk-row">
+          <div class="sk-card" style="min-height:220px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+          <div class="sk-card" style="min-height:220px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+        </div>
+        <div class="sk-card" style="min-height:140px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+      </div>
+      <div id="gica-error" class="card hero hidden" style="text-align:center;padding:40px;"></div>
+
+      <div id="gica-dashboard" class="hidden">
+
+        <!-- KPI + BU breakdown (filled by JS) -->
+        <div id="gica-summary"></div>
+
+<div class="charts" style="display: flex; gap: 16px;">
+  
+  <div class="card" style="padding:16px; flex: 1; display: flex; flex-direction: column;">
+    <div class="chart-header" style="display:flex; align-items:center; min-height: 50px; margin-bottom:12px;">
+      <h3 style="margin:0; font-size:1rem; color:var(--text);">Grade distribution by BU</h3>
+    </div>
+    <div class="chart-canvas-wrap" style="flex-grow: 1;"><canvas id="gica-gradeDistChart"></canvas></div>
+  </div>
+
+  <div class="card" style="padding:16px; flex: 1; display: flex; flex-direction: column;">
+    <div class="chart-header" style="display:flex; align-items:center; justify-content:space-between; min-height: 50px; margin-bottom:12px;">
+      <h3 style="margin:0; font-size:1rem; color:var(--text);">Inside Data</h3>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <select id="gica-insideBuFilter" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer;">
+          <option value="">ทุก BU</option>
+        </select>
+        <div id="gica-insideToggle" class="toggle-group">
+          <button class="toggle-btn active" data-mode="score" type="button">Score Distribution</button>
+          <button class="toggle-btn" data-mode="dept" type="button">Grade by Dept</button>
+          <button class="toggle-btn" data-mode="improve" type="button">Retest Improvement</button>
+          <button class="toggle-btn" data-mode="attempt" type="button">Attempt Count</button>
+        </div>
+      </div>
+    </div>
+    <div class="chart-canvas-wrap" style="position:relative; flex-grow: 1;"><canvas id="gica-insideChart"></canvas></div>
+    <div id="gica-insideHint" class="hidden" style="padding:6px 0 0; font-size:0.82rem; color:var(--text-muted); min-height:24px;"></div>
+  </div>
+  
+</div>
+
+        <!-- Upcoming test schedule -->
+        <div class="card" style="padding:16px;margin-top:-16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+            <h3 style="margin:0;font-size:1rem;color:var(--text);">Upcoming test schedule</h3>
+            <div id="gica-schedToggle" class="toggle-group">
+              <button class="toggle-btn active" data-mode="all"    type="button">All</button>
+              <button class="toggle-btn"        data-mode="Retest" type="button">Retest</button>
+              <button class="toggle-btn"        data-mode="Review" type="button">Review</button>
+            </div>
+          </div>
+          <div id="gica-schedSummary"></div>
+          <div id="gica-schedChartWrap" style="display:grid;gap:12px;">
+            <div>
+              <div id="gica-schedLabelLeft" style="display:none;font-size:0.82rem;font-weight:700;color:#dc2626;margin-bottom:6px;">Retest (B/C/D)</div>
+              <div class="chart-canvas-wrap"><canvas id="gica-scheduleChart"></canvas></div>
+            </div>
+            <div id="gica-schedRightWrap" style="display:none;">
+              <div style="font-size:0.82rem;font-weight:700;color:#2563eb;margin-bottom:6px;">Review (A)</div>
+              <div class="chart-canvas-wrap"><canvas id="gica-scheduleChartRight"></canvas></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;margin-top:10px;font-size:0.72rem;color:var(--text-muted);flex-wrap:wrap;">
+            <div id="gica-schedBuLegend" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
+            <span style="font-style:italic;">คลิกที่แท่ง → ดูรายชื่อด้านล่าง</span>
+          </div>
+          <div id="gica-scheduleDrill" style="margin-top:14px;"></div>
+        </div>
+
+        <!-- Employee data table -->
+        <div class="card" style="padding:16px;margin-top:-16px;">
+          <h3 style="margin:0 0 12px;font-size:1rem;font-weight:700;color:var(--text);">รายชื่อพนักงาน (ผลล่าสุด)</h3>
+          <div class="filters">
+            <select id="gica-filterBu"><option value="">ทุก BU</option></select>
+            <select id="gica-filterGrade"><option value="">ทุกเกรด</option></select>
+            <select id="gica-filterDept"><option value="">ทุกแผนก</option></select>
+            <select id="gica-filterType"><option value="">ประเภท</option></select>
+            <input type="text" id="gica-filterSearch" placeholder="ค้นหาชื่อ / รหัสพนักงาน" />
+          </div>
+          <div id="gica-table"></div>
+          <div class="jtp-pagination">
+            <span id="gica-rangeLabel" class="jtp-range-label"></span>
+            <div class="jtp-page-size-group">
+              <label class="jtp-page-size-label" for="gica-pageSize">แสดงต่อหน้า</label>
+              <select id="gica-pageSize" class="jtp-page-size-select">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+            <div class="jtp-page-nav">
+              <button id="gica-prevPage" class="jtp-nav-btn">‹</button>
+              <span id="gica-pageLabel" class="jtp-page-label"></span>
+              <button id="gica-nextPage" class="jtp-nav-btn">›</button>
+            </div>
+          </div>
+        </div>
+
+        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Update Real time</p>
+      </div><!-- /#gica-dashboard -->
+    </main>
+  </div>
+
+  <script src="/static/js/app.js?v=115"></script>
 </body>
 </html>

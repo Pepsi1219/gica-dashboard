@@ -3,7 +3,7 @@ import re as _re
 import time
 import urllib.parse as _urllib_parse
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime as _datetime, timedelta
 
 import requests as _requests
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -16,6 +16,10 @@ from config import (
     CLIENT_SECRET,
     DEPARTMENTS,
     FLASK_SECRET_KEY,
+    GICA_COLS,
+    GICA_EXCEL_SHARE_URL,
+    GICA_MAX_TESTS,
+    GICA_TABLE_PREFIX,
     JUMPER_BU_TABLES,
     JUMPER_EXCEL_COLS,
     JUMPER_EXCEL_SHARE_URL,
@@ -856,6 +860,136 @@ def api_trainer_excel():
         return jsonify(payload)
     except Exception as exc:
         print(f'[TRAINER-EXCEL] error: {exc}')
+        return jsonify({'error': str(exc)}), 500
+
+
+# ── GICA Assessment ───────────────────────────────────────────────────────────
+_GICA_CACHE: dict = {}
+
+
+def _gica_to_iso(v) -> str:
+    """Excel serial number or string → 'YYYY-MM-DD' (or None if empty)."""
+    if v in (None, '', 'null'):
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        return s[:10] if len(s) >= 10 and s[4:5] == '-' else (s or None)
+    try:
+        d = _datetime(1899, 12, 30) + timedelta(days=float(v))
+        return d.strftime('%Y-%m-%d')
+    except (ValueError, TypeError):
+        return None
+
+
+def _gica_num(v):
+    try:
+        return float(v) if v not in (None, '', 'null') else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _fetch_gica_excel_data(token: str) -> list:
+    """Resolve GICA.xlsx, auto-discover GICA_* tables, read them in parallel."""
+    share_id = encode_sharing_url(GICA_EXCEL_SHARE_URL)
+    item = graph_request(
+        token, 'GET', f'/shares/{share_id}/driveItem',
+        headers={'Prefer': 'redeemSharingLinkIfNecessary'},
+    )
+    drive_id = item['parentReference']['driveId']
+    item_id  = item['id']
+
+    tbl_resp = graph_request(
+        token, 'GET',
+        f'/drives/{drive_id}/items/{item_id}/workbook/tables?$select=name',
+    )
+    table_names = [
+        t['name'] for t in tbl_resp.get('value', [])
+        if str(t.get('name', '')).startswith(GICA_TABLE_PREFIX)
+    ]
+
+    def _read_one(tname):
+        bu_tag = tname[len(GICA_TABLE_PREFIX):]  # 'G1' from 'GICA_G1', 'TRM' from 'GICA_TRM'
+        try:
+            rows = _read_excel_table(token, drive_id, item_id, tname, GICA_COLS)
+            for r in rows:
+                r['_bu'] = bu_tag
+            print(f'[GICA] {tname}: {len(rows)} rows', flush=True)
+            return rows
+        except Exception as exc:
+            print(f'[GICA] {tname} skipped: {exc}', flush=True)
+            return []
+
+    all_rows = []
+    with _ThreadPoolExecutor(max_workers=max(len(table_names), 1)) as ex:
+        for rows in ex.map(_read_one, table_names):
+            all_rows.extend(rows)
+    return all_rows
+
+
+def _build_gica_payload(rows: list) -> dict:
+    """Per employee: pick the latest non-empty test slot (#15 → #1) as current
+    status; next test date is the formula cell date{N+1} (already computed)."""
+    employees = []
+    for r in rows:
+        latest = 0
+        for i in range(GICA_MAX_TESTS, 0, -1):
+            if r.get(f'result{i}', '') not in (None, '', 'null'):
+                latest = i
+                break
+        if latest == 0:
+            continue
+
+        history = []
+        for i in range(1, latest + 1):
+            res = r.get(f'result{i}', '')
+            if res in (None, '', 'null'):
+                continue
+            history.append({
+                'n':     i,
+                'score': _gica_num(res),
+                'grade': str(r.get(f'grade{i}', '') or '').strip(),
+                'date':  _gica_to_iso(r.get(f'date{i}', '')),
+            })
+
+        cur   = history[-1]
+        grade = cur['grade']
+        next_date = (_gica_to_iso(r.get(f'date{latest + 1}', ''))
+                     if latest < GICA_MAX_TESTS else None)
+
+        employees.append({
+            'bu':       (str(r.get('bu', '') or '').strip() or str(r.get('_bu', '') or '').strip()),
+            'empid':    str(r.get('empid', '') or '').strip(),
+            'name':     str(r.get('name', '') or '').strip(),
+            'deptname': str(r.get('deptname', '') or '').strip(),
+            'position': str(r.get('position', '') or '').strip(),
+            'attempt':  latest,
+            'score':    cur['score'],
+            'grade':    grade,
+            'lastDate': cur['date'],
+            'nextDate': next_date,
+            'nextType': 'Review' if grade == 'A' else 'Retest',
+            'history':  history,
+        })
+
+    bus = sorted({e['bu'] for e in employees if e['bu']})
+    return {'employees': employees, 'bus': bus}
+
+
+@app.route('/api/gica-excel')
+def api_gica_excel():
+    """Return GICA assessment data from GICA.xlsx on OneDrive. Cached 5 min."""
+    global _GICA_CACHE
+    now = time.time()
+    if _GICA_CACHE.get('data') and now < _GICA_CACHE.get('exp', 0):
+        return jsonify(_GICA_CACHE['data'])
+    try:
+        token   = _get_manager_access_token()
+        rows    = _fetch_gica_excel_data(token)
+        payload = _build_gica_payload(rows)
+        _GICA_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(payload)
+    except Exception as exc:
+        print(f'[GICA] /api/gica-excel error: {exc}')
         return jsonify({'error': str(exc)}), 500
 
 

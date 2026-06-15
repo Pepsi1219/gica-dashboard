@@ -1656,7 +1656,7 @@ tbody tr:hover { filter: brightness(.97); }
 }
 
 /* Dashboard top-level container spacing — uniform gap between sections */
-#jumper-dashboard, #trainer-dashboard {
+#jumper-dashboard, #trainer-dashboard, #gica-dashboard {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1858,4 +1858,21 @@ tbody tr:hover { filter: brightness(.97); }
   font-weight: 600;
   min-width: 72px;
   text-align: center;
+}
+
+/* ===== PRINT (GICA schedule drill-down report) ===== */
+.gica-print-header { display: none; }
+.no-print { }
+@media print {
+  body * { visibility: hidden !important; }
+  #gica-scheduleDrill, #gica-scheduleDrill * { visibility: visible !important; }
+  #gica-scheduleDrill {
+    position: absolute !important;
+    top: 0; left: 0;
+    width: 100% !important;
+    padding: 24px !important;
+    box-sizing: border-box !important;
+  }
+  .no-print { display: none !important; }
+  .gica-print-header { display: block !important; margin-bottom: 16px; }
 }
