@@ -4022,11 +4022,13 @@ const GICA_GRADES        = ['A', 'B', 'C', 'D'];
 const GICA_GRADE_RANK    = { A: 4, B: 3, C: 2, D: 1 };
 const GICA_GRADE_COLORS  = { A: '#16a34a', B: '#2563eb', C: '#f59e0b', D: '#dc2626' };
 const GICA_GRADE_BG      = { A: '#dcfce7', B: '#dbeafe', C: '#fef3c7', D: '#fee2e2' };
+const GICA_LEVEL_ORDER   = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head','Supervisor','Officer','Worker'];
 const GICA_GRADE_TEXT    = { A: '#15803d', B: '#1d4ed8', C: '#b45309', D: '#b91c1c' };
 
 let _gicaData       = null;
 let _gicaLoaded     = false;
 let _gicaCharts     = {};
+let _gicaDistMode   = 'bu';
 let _gicaInsideMode = 'score';
 let _gicaInsideBu   = '';
 let _gicaSchedMode  = 'all';
@@ -4129,9 +4131,17 @@ async function initGicaTab() {
 function _computeGicaSummary(emps, busRaw) {
   const total = emps.length;
   const byGrade = { A: 0, B: 0, C: 0, D: 0 };
-  emps.forEach(e => { if (byGrade[e.grade] != null) byGrade[e.grade]++; });
+  // Grade distribution split by sub-test: Measurement = grade{i}-1, Inspection = grade{i}-2
+  const byGradeMeasure = { A: 0, B: 0, C: 0, D: 0 };
+  const byGradeInspect = { A: 0, B: 0, C: 0, D: 0 };
+  emps.forEach(e => {
+    if (byGrade[e.grade] != null) byGrade[e.grade]++;
+    if (byGradeMeasure[e.grade1] != null) byGradeMeasure[e.grade1]++;
+    if (byGradeInspect[e.grade2] != null) byGradeInspect[e.grade2]++;
+  });
+  const _sum = o => o.A + o.B + o.C + o.D;
 
-  const aCount   = byGrade.A;
+  const totMeasure = _sum(byGradeMeasure), totInspect = _sum(byGradeInspect);
   const avgScore = total ? emps.reduce((s, e) => s + (e.score || 0), 0) / total : 0;
 
   const bus = sortBus(busRaw);
@@ -4143,19 +4153,70 @@ function _computeGicaSummary(emps, busRaw) {
   const buCards = BU_ORDER.map(bu => {
     const inBu = emps.filter(e => e.bu === bu);
     if (!inBu.length) return { bu, empty: true };
-    const cnt = { A: 0, B: 0, C: 0, D: 0 };
-    inBu.forEach(e => { if (cnt[e.grade] != null) cnt[e.grade]++; });
-    const avg = inBu.reduce((s, e) => s + (e.score || 0), 0) / inBu.length;
+    const cnt         = { A: 0, B: 0, C: 0, D: 0 };
+    const cntMeasure  = { A: 0, B: 0, C: 0, D: 0 };
+    const cntInspect  = { A: 0, B: 0, C: 0, D: 0 };
+    inBu.forEach(e => {
+      if (cnt[e.grade]         != null) cnt[e.grade]++;
+      if (cntMeasure[e.grade1] != null) cntMeasure[e.grade1]++;
+      if (cntInspect[e.grade2] != null) cntInspect[e.grade2]++;
+    });
+    const avg        = inBu.reduce((s, e) => s + (e.score  || 0), 0) / inBu.length;
+    const avgMeasure = inBu.reduce((s, e) => s + (e.score1 || 0), 0) / inBu.length;
+    const avgInspect = inBu.reduce((s, e) => s + (e.score2 || 0), 0) / inBu.length;
+    const totM = _sum(cntMeasure), totI = _sum(cntInspect);
+    const deptMap = {}, levelMap = {};
+    inBu.forEach(e => {
+      if (e.deptname) deptMap[e.deptname] = (deptMap[e.deptname] || 0) + 1;
+      if (e.level)    levelMap[e.level]    = (levelMap[e.level]    || 0) + 1;
+    });
+    const deptRows  = Object.entries(deptMap).sort((a, b) => a[0].localeCompare(b[0]));
+    const levelRows = Object.entries(levelMap).sort((a, b) => {
+      const ia = GICA_LEVEL_ORDER.indexOf(a[0]), ib = GICA_LEVEL_ORDER.indexOf(b[0]);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return  1;
+      return a[0].localeCompare(b[0]);
+    });
     return {
       bu, empty: false, count: inBu.length, cnt,
       avgPct: Math.round(avg * 100), avgGrade: _gicaScoreToGrade(avg),
       aTargetPct: Math.min(100, Math.round(cnt.A / (inBu.length * 0.8) * 100)),
+      cntMeasure, totMeasureBu: totM,
+      avgMeasurePct: Math.round(avgMeasure * 100), avgMeasureGrade: _gicaScoreToGrade(avgMeasure),
+      aMeasureBuPct: totM ? Math.round(cntMeasure.A / totM * 100) : 0,
+      cntInspect, totInspectBu: totI,
+      avgInspectPct: Math.round(avgInspect * 100), avgInspectGrade: _gicaScoreToGrade(avgInspect),
+      aInspectBuPct: totI ? Math.round(cntInspect.A / totI * 100) : 0,
+      deptRows, levelRows,
+      ...(() => {
+        const withDate = inBu.filter(e => e.nextDate);
+        const onTime   = withDate.filter(e => _gicaDaysUntil(e.nextDate) > 0);
+        const overdue  = withDate.filter(e => _gicaDaysUntil(e.nextDate) <= 0);
+        const total    = withDate.length;
+        const onTimePct = total ? Math.round(onTime.length / total * 100) : 0;
+        const retest   = withDate.filter(e => e.nextType === 'Retest');
+        const review   = withDate.filter(e => e.nextType === 'Review');
+        const retestOn = retest.filter(e => _gicaDaysUntil(e.nextDate) > 0).length;
+        const retestOv = retest.length - retestOn;
+        const reviewOn = review.filter(e => _gicaDaysUntil(e.nextDate) > 0).length;
+        const reviewOv = review.length - reviewOn;
+        return {
+          schedTotal: total, schedOnTime: onTime.length, schedOverdue: overdue.length, schedOnTimePct: onTimePct,
+          retestOn, retestOv, retestTotal: retest.length,
+          reviewOn, reviewOv, reviewTotal: review.length,
+        };
+      })(),
     };
   });
 
   return {
-    total, byGrade, aCount,
-    passPct:  total ? Math.round(aCount / total * 100) : 0,
+    total, byGrade,
+    byGradeMeasure, byGradeInspect, totMeasure, totInspect,
+    aMeasure: byGradeMeasure.A,
+    aInspect: byGradeInspect.A,
+    aMeasurePct: totMeasure ? Math.round(byGradeMeasure.A / totMeasure * 100) : 0,
+    aInspectPct: totInspect ? Math.round(byGradeInspect.A / totInspect * 100) : 0,
     avgPct:   Math.round(avgScore * 100),
     avgGrade: _gicaScoreToGrade(avgScore),
     needRetest: emps.filter(e => e.grade && e.grade !== 'A').length,
@@ -4177,7 +4238,7 @@ function _gicaSummaryHtml(vm) {
   };
   // Grade-distribution donut (SVG, theme-aware via CSS vars — no Chart.js lifecycle)
   const donut = (counts, tot) => {
-    const R = 40, sw = 16, CIRC = 2 * Math.PI * R, gap = tot ? 1.5 : 0;
+    const R = 40, sw = 20, CIRC = 2 * Math.PI * R, gap = tot ? 1.5 : 0;
     let acc = 0;
     const ring = GICA_GRADES.map(g => {
       const v = counts[g] || 0;
@@ -4194,9 +4255,6 @@ function _gicaSummaryHtml(vm) {
           <circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
           ${ring}
         </svg>
-        <div class="donut-center">
-          <span class="donut-count">${tot}</span>
-        </div>
       </div>`;
   };
   const legend = cnt => `
@@ -4276,22 +4334,21 @@ function _gicaSummaryHtml(vm) {
         ${buBarChart(vm.buCards)}
       </div>
 
-      <!-- Overall Score: grade-distribution donut + legend (right) -->
+      <!-- Overall Score (Measurement): grade{i}-1 distribution -->
       <div class="stat-card">
-        <div class="stat-card__label">Overall Score</div>
+        <div class="stat-card__label">Overall Score (Measurement)</div>
         <div class="stat-card__donut-row">
-          ${donut(vm.byGrade, vm.total)}
-          ${legend(vm.byGrade)}
+          ${donut(vm.byGradeMeasure, vm.totMeasure)}
+          ${legend(vm.byGradeMeasure)}
         </div>
       </div>
 
-      <!-- Grade A — Pass -->
+      <!-- Overall Score (Inspection): grade{i}-2 distribution -->
       <div class="stat-card">
-        <div class="stat-card__label">Grade A</div>
-        <div class="stat-card__value" style="color:${GICA_GRADE_COLORS.A};margin-bottom:8px;">${vm.aCount}</div>
-        ${_gicaPBar(vm.passPct, GICA_GRADE_COLORS.A)}
-        <div class="u-between u-muted stat-foot">
-          <span>${vm.passPct}%</span><span>Target: ${vm.total}</span>
+        <div class="stat-card__label">Overall Score (Inspection)</div>
+        <div class="stat-card__donut-row">
+          ${donut(vm.byGradeInspect, vm.totInspect)}
+          ${legend(vm.byGradeInspect)}
         </div>
       </div>
 
@@ -4323,49 +4380,127 @@ function _gicaSummaryHtml(vm) {
 
     </div>`;
 
-  const buCards = vm.buCards.map(c => {
-    if (c.empty) {
-      return `<div class="stat-card stat-card--empty">
-        <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
-        <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
-      </div>`;
-    }
-    const buColor = GICA_BU_COLORS[c.bu] || 'var(--text)';
-    return `<div class="stat-card" style="min-width:0;">
+  const faceHtml = (isFront, c, buColor, cnt, tot, avgPct, avgGrade, aGaugePct, label, flipLabel) => `
+    <div class="${isFront ? 'flip-card-front' : 'flip-card-back'} stat-card" style="min-width:0;">
+      <div class="flip-card-type">${label}</div>
       <div class="bu-head">
         <span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span>
-        <span class="u-muted bu-count">${c.count} คน</span>
       </div>
       <div class="bu-card__donut-row">
-        ${buDonut(c.cnt, c.count)}
-        ${buLegend(c.cnt)}
+        ${buDonut(cnt, tot)}
+        ${buLegend(cnt)}
       </div>
       <div class="stat-card__footer">
         <div class="bu-gauge-col">
           <div class="bu-gauge-row">
-            <div class="u-between"><span class="u-muted">Avg Score</span><span>${c.avgPct}%</span></div>
-            <div class="pbar pbar--6"><div class="pbar__fill" style="background:${GICA_GRADE_COLORS[c.avgGrade]};width:${c.avgPct}%;"></div></div>
+            <div class="u-between"><span class="u-muted">Avg Score</span><span>${avgPct}%</span></div>
+            <div class="pbar pbar--6"><div class="pbar__fill" style="background:${GICA_GRADE_COLORS[avgGrade]};width:${avgPct}%;"></div></div>
           </div>
           <div class="bu-gauge-row">
-            <div class="u-between"><span class="u-muted">Grade A ≥80%</span><span>${c.aTargetPct}%</span></div>
-            <div class="pbar pbar--6"><div class="pbar__fill" style="background:${GICA_GRADE_COLORS.A};width:${c.aTargetPct}%;"></div></div>
+            <div class="u-between"><span class="u-muted">Grade A</span><span>${aGaugePct}%</span></div>
+            <div class="pbar pbar--6"><div class="pbar__fill" style="background:${GICA_GRADE_COLORS.A};width:${aGaugePct}%;"></div></div>
           </div>
         </div>
       </div>
+      <div class="flip-indicator">↻ ${flipLabel}</div>
     </div>`;
-  }).join('');
+
+  const renderFlipCard = c => {
+    if (c.empty) return `<div class="stat-card stat-card--empty" style="min-width:0;">
+      <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
+      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+    </div>`;
+    const buColor = GICA_BU_COLORS[c.bu] || 'var(--text)';
+    return `<div class="flip-card-wrap" data-bu="${escapeHtml(c.bu)}">
+      <div class="flip-card-inner">
+        ${faceHtml(true,  c, buColor, c.cntMeasure, c.totMeasureBu, c.avgMeasurePct, c.avgMeasureGrade, c.aMeasureBuPct, 'Score (Measurement)', 'ดู Inspection')}
+        ${faceHtml(false, c, buColor, c.cntInspect,  c.totInspectBu,  c.avgInspectPct,  c.avgInspectGrade,  c.aInspectBuPct,  'Score (Inspection)',  'ดู Measurement')}
+      </div>
+    </div>`;
+  };
+
+  const schedDonut = (pct) => {
+    const R = 26, CIRC = 2 * Math.PI * R;
+    const fill = (CIRC * pct / 100).toFixed(1);
+    const gap  = (CIRC - CIRC * pct / 100).toFixed(1);
+    const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626';
+    return `<svg class="sched-donut" viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="9"/>
+      <circle cx="40" cy="40" r="${R}" fill="none" stroke="${color}" stroke-width="9"
+        stroke-dasharray="${fill} ${gap}" transform="rotate(-90 40 40)" stroke-linecap="round"/>
+      <text x="40" y="38" text-anchor="middle" font-size="16" font-weight="600" style="fill:var(--text);">${pct}%</text>
+      <text x="40" y="50" text-anchor="middle" font-size="7" style="fill:var(--text-muted);">on schedule</text>
+    </svg>`;
+  };
+
+  const splitBar = (ok, ov, total) => {
+    if (!total) return `<div class="u-muted" style="font-size:0.68rem;">— no data —</div>`;
+    const okPct = Math.round(ok / total * 100);
+    return `<div class="sched-split-track">
+      <div class="sched-split-fill sched-split-fill--ok" style="width:${okPct}%"></div>
+      <div class="sched-split-fill sched-split-fill--ov" style="width:${100 - okPct}%"></div>
+    </div>
+    <div class="sched-split-labels">
+      <span class="sched-split-val sched-split-val--ok">${ok} on time</span>
+      <span class="sched-split-val sched-split-val--ov">${ov} overdue</span>
+    </div>`;
+  };
+
+  const renderSchedCard = c => {
+    if (c.empty) return `<div class="stat-card stat-card--empty" style="min-width:0;">
+      <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
+      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+    </div>`;
+    const buColor = GICA_BU_COLORS[c.bu] || 'var(--text)';
+    return `<div class="stat-card" style="min-width:0;">
+      <div class="flip-card-type">Schedule</div>
+      <div class="bu-head"><span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span></div>
+      <div class="sched-type-section">
+        <div class="sched-type-label">Retest</div>
+        ${splitBar(c.retestOn, c.retestOv, c.retestTotal)}
+      </div>
+      <div class="sched-type-section">
+        <div class="sched-type-label">Review</div>
+        ${splitBar(c.reviewOn, c.reviewOv, c.reviewTotal)}
+      </div>
+    </div>`;
+  };
+
+  const buFlipCards = vm.buCards.map(renderFlipCard).join('');
+  const schedCards  = vm.buCards.map(renderSchedCard).join('');
 
   return `${kpi}
-    <div class="stat-grid stat-grid--6">${buCards}</div>`;
+    <div class="gica-bu-row">
+      <div class="stat-grid stat-grid--6">${buFlipCards}</div>
+      <button id="gica-flip-all" class="gica-flip-btn" data-flipped="0" aria-label="พลิกการ์ดแถว 2 ทั้งหมด">
+        <span class="gica-flip-btn__icon" aria-hidden="true">↻</span>
+        <span class="gica-flip-btn__label">ดู Inspection</span>
+      </button>
+    </div>
+    <div class="stat-grid stat-grid--6">${schedCards}</div>`;
 }
 
 function _mountGicaSummary(html) {
   const container = $('gica-summary');
   if (!container) return;
   container.innerHTML = html;
-  // No internal event handlers to re-wire: GICA controls live in static HTML and
-  // are wired once by _wireGicaControls(). This is the place to re-wire should the
-  // summary ever gain its own interactive elements.
+  container.querySelectorAll('.flip-card-wrap[data-bu]').forEach(card => {
+    card.addEventListener('click', () => card.classList.toggle('is-flipped'));
+  });
+  const wireFlipAll = (btnId, selector, labelA, labelB) => {
+    const btn = container.querySelector(btnId);
+    if (!btn) return;
+    const labelEl = btn.querySelector('.gica-flip-btn__label');
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const flipping = btn.dataset.flipped !== '1';
+      container.querySelectorAll(selector)
+        .forEach(c => c.classList.toggle('is-flipped', flipping));
+      btn.dataset.flipped = flipping ? '1' : '0';
+      if (labelEl) labelEl.textContent = flipping ? labelB : labelA;
+    });
+  };
+  wireFlipAll('#gica-flip-all', '.flip-card-wrap[data-bu]', 'ดู Inspection', 'ดู Measurement');
 }
 
 function renderGicaSummary() {
@@ -4373,31 +4508,84 @@ function renderGicaSummary() {
   _mountGicaSummary(_gicaSummaryHtml(vm));
 }
 
-// ── Chart: grade distribution by BU (stacked) ─────────────────────────────────
+// ── Chart: grade distribution — BU (dual) / Department / Level ────────────────
 function renderGicaGradeDistChart() {
-  const id = 'gica-gradeDistChart';
-  const canvas = $(id);
-  if (!canvas || typeof Chart === 'undefined') return;
-  if (_gicaCharts[id]) { _gicaCharts[id].destroy(); _gicaCharts[id] = null; }
-  const emps = _gicaData.employees || [];
-  const bus  = sortBus(_gicaData.bus || []);
-  _gicaCharts[id] = new Chart(canvas, {
-    type: 'bar',
-    data: {
-      labels: bus,
-      datasets: GICA_GRADES.map(g => ({
-        label: g,
-        data: bus.map(bu => emps.filter(e => e.bu === bu && e.grade === g).length),
-        backgroundColor: GICA_GRADE_COLORS[g],
-        borderRadius: 3,
-      })),
-    },
-    options: {
+  const idM = 'gica-gradeDistM';
+  const idI = 'gica-gradeDistI';
+  const idS = 'gica-gradeDistChart';
+  [idM, idI, idS].forEach(k => {
+    if (_gicaCharts[k]) { _gicaCharts[k].destroy(); _gicaCharts[k] = null; }
+  });
+  if (typeof Chart === 'undefined') return;
+
+  const emps     = _gicaData.employees || [];
+  const titleEl  = $('gica-gradeDistTitle');
+  const dualEl   = $('gica-distDual');
+  const singleEl = $('gica-distSingle');
+  const stackOpts = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '10%', ticks: { precision: 0 } } },
+  };
+  const mkDs = (labels, gradeKey, filterFn) => GICA_GRADES.map(g => ({
+    label: g,
+    data: labels.map(lbl => emps.filter(e => filterFn(e, lbl) && e[gradeKey] === g).length),
+    backgroundColor: GICA_GRADE_COLORS[g], borderRadius: 3,
+  }));
+
+  if (_gicaDistMode === 'bu') {
+    if (titleEl)  titleEl.textContent = 'Grade distribution ราย BU';
+    if (dualEl)   dualEl.classList.remove('hidden');
+    if (singleEl) singleEl.classList.add('hidden');
+    const bus = sortBus(_gicaData.bus || []);
+    const stackTotal = (key) => bus.map(bu =>
+      GICA_GRADES.reduce((s, g) => s + emps.filter(e => e.bu === bu && e[key] === g).length, 0));
+    const yMax = Math.max(...stackTotal('grade1'), ...stackTotal('grade2'), 1);
+    const syncY = { stacked: true, beginAtZero: true, suggestedMax: yMax, grace: '5%', ticks: { precision: 0 } };
+    const noLegend = { ...stackOpts, scales: { ...stackOpts.scales, y: syncY }, plugins: { legend: { display: false } } };
+    const canvasM = $(idM), canvasI = $(idI);
+    if (canvasM) {
+      _gicaCharts[idM] = new Chart(canvasM, {
+        type: 'bar', data: { labels: bus, datasets: mkDs(bus, 'grade1', (e, bu) => e.bu === bu) },
+        options: noLegend,
+      });
+    }
+    if (canvasI) {
+      _gicaCharts[idI] = new Chart(canvasI, {
+        type: 'bar', data: { labels: bus, datasets: mkDs(bus, 'grade2', (e, bu) => e.bu === bu) },
+        options: noLegend,
+      });
+    }
+
+  } else {
+    if (dualEl)   dualEl.classList.add('hidden');
+    if (singleEl) singleEl.classList.remove('hidden');
+    const canvas = $(idS);
+    if (!canvas) return;
+
+    const barOpts = {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '10%', ticks: { precision: 0 } } },
-    },
-  });
+      scales: { x: { ticks: { maxRotation: 45 } }, y: { beginAtZero: true, grace: '10%', ticks: { precision: 0 } } },
+    };
+    if (_gicaDistMode === 'dept') {
+      if (titleEl) titleEl.textContent = 'จำนวนคนต่อ Department';
+      const labels = [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort();
+      _gicaCharts[idS] = new Chart(canvas, {
+        type: 'bar',
+        data: { labels, datasets: mkDs(labels, 'grade', (e, d) => e.deptname === d) },
+        options: barOpts,
+      });
+    } else {
+      if (titleEl) titleEl.textContent = 'จำนวนคนต่อ Level';
+      const labels = GICA_LEVEL_ORDER.filter(lv => emps.some(e => e.level === lv));
+      _gicaCharts[idS] = new Chart(canvas, {
+        type: 'bar',
+        data: { labels, datasets: mkDs(labels, 'grade', (e, lv) => e.level === lv) },
+        options: { ...barOpts, scales: { ...barOpts.scales, x: { ticks: { maxRotation: 30 } } } },
+      });
+    }
+  }
 }
 
 // ── Chart: Inside Data (4 modes) ──────────────────────────────────────────────
@@ -4761,6 +4949,16 @@ function _wireGicaControls() {
     const pages = Math.max(1, Math.ceil(_gicaFilteredEmployees().length / _gicaTableState.pageSize));
     if (_gicaTableState.page < pages) { _gicaTableState.page++; renderGicaTable(); }
   };
+
+  // Grade distribution toggle
+  const distTg = $('gica-distToggle');
+  if (distTg) distTg.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.onclick = () => {
+      _gicaDistMode = btn.dataset.mode;
+      distTg.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === _gicaDistMode));
+      renderGicaGradeDistChart();
+    };
+  });
 
   // Inside Data toggle
   const insideTg = $('gica-insideToggle');

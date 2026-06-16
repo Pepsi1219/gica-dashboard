@@ -1816,6 +1816,55 @@ tbody tr:hover { filter: brightness(.97); }
 .card--chart { padding: 16px; flex: 1; display: flex; flex-direction: column; margin-bottom: 0; }
 .card--section { padding: 16px; margin-bottom: 0; }
 .chart-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 50px; margin-bottom: 12px; flex-wrap: wrap; }
+.gica-row-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+.flip-card-wrap { perspective: 900px; cursor: pointer; min-width: 0; }
+.flip-card-inner { position: relative; transform-style: preserve-3d; transition: transform 0.42s ease; }
+.flip-card-wrap.is-flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.flip-card-back { position: absolute; inset: 0; transform: rotateY(180deg); }
+.flip-card-type { font-size: 0.7rem; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+.flip-indicator { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text-muted); margin-top: 8px; justify-content: flex-end; }
+.gica-bu-row { display: flex; align-items: stretch; gap: 10px; }
+.gica-bu-row .stat-grid { flex: 1; min-width: 0; }
+.gica-flip-btn {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 40px;
+  border: none;
+  border-radius: 20px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  padding: 16px 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.gica-flip-btn:hover { opacity: 0.82; transform: scaleY(1.03); }
+.gica-flip-btn:active { transform: scaleY(0.97); }
+.gica-flip-btn__icon { font-size: 1.15rem; line-height: 1; }
+.gica-flip-btn__label { writing-mode: vertical-rl; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; white-space: nowrap; }
+.gica-dist-dual   { display: flex; gap: 12px; flex: 1; }
+.gica-dist-half   { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gica-dist-label  { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-align: center; margin-bottom: 4px; }
+.gica-dist-legend { display: flex; justify-content: center; gap: 16px; padding-top: 8px; }
+.gica-dist-legend__item { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); }
+.gica-dist-legend__dot  { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+/* Row 3: schedule adherence cards */
+.sched-donut { display: block; width: 66px; height: 66px; margin: 0 auto; }
+.sched-counts { display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 600; margin-top: 4px; }
+.sched-counts__ok { color: #16a34a; }
+.sched-counts__ov { color: #dc2626; }
+.sched-type-section { margin-bottom: 8px; }
+.sched-type-label { font-size: 0.68rem; font-weight: 600; color: var(--text-muted); margin-bottom: 2px; }
+.sched-split-track { height: 7px; border-radius: 4px; overflow: hidden; display: flex; margin: 3px 0 2px; }
+.sched-split-fill--ok { background: #16a34a; }
+.sched-split-fill--ov { background: #dc2626; }
+.sched-split-labels { display: flex; justify-content: space-between; font-size: 0.6rem; }
+.sched-split-val--ok { color: #16a34a; font-weight: 600; }
+.sched-split-val--ov { color: #dc2626; font-weight: 600; }
 
 /* — GICA Overall Score donut card — */
 .stat-card__donut-row { display:flex; align-items:center; gap:14px; margin-top:8px; flex:1; }

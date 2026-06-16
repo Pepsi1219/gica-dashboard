@@ -18,6 +18,9 @@ from config import (
     FLASK_SECRET_KEY,
     GICA_COLS,
     GICA_EXCEL_SHARE_URL,
+    GICA_FREQ_COLS,
+    GICA_FREQ_TABLE,
+    GICA_GRADE_ORDER,
     GICA_MAX_TESTS,
     GICA_TABLE_PREFIX,
     JUMPER_BU_TABLES,
@@ -888,8 +891,11 @@ def _gica_num(v):
         return None
 
 
-def _fetch_gica_excel_data(token: str) -> list:
-    """Resolve GICA.xlsx, auto-discover GICA_* tables, read them in parallel."""
+def _fetch_gica_excel_data(token: str) -> tuple:
+    """Resolve GICA.xlsx, auto-discover GICA_* tables + read Table_freq, in parallel.
+
+    Returns (employee_rows, freq_rows).
+    """
     share_id = encode_sharing_url(GICA_EXCEL_SHARE_URL)
     item = graph_request(
         token, 'GET', f'/shares/{share_id}/driveItem',
@@ -923,17 +929,65 @@ def _fetch_gica_excel_data(token: str) -> list:
     with _ThreadPoolExecutor(max_workers=max(len(table_names), 1)) as ex:
         for rows in ex.map(_read_one, table_names):
             all_rows.extend(rows)
-    return all_rows
+
+    try:
+        freq_rows = _read_excel_table(token, drive_id, item_id,
+                                      GICA_FREQ_TABLE, GICA_FREQ_COLS)
+        print(f'[GICA] {GICA_FREQ_TABLE}: {len(freq_rows)} rows', flush=True)
+    except Exception as exc:
+        print(f'[GICA] {GICA_FREQ_TABLE} skipped: {exc}', flush=True)
+        freq_rows = []
+
+    return all_rows, freq_rows
 
 
-def _build_gica_payload(rows: list) -> dict:
-    """Per employee: pick the latest non-empty test slot (#15 → #1) as current
-    status; next test date is the formula cell date{N+1} (already computed)."""
+def _gica_rank(grade) -> int:
+    """Grade letter → numeric rank (A=4 … D=1); unknown → 0."""
+    return GICA_GRADE_ORDER.get(str(grade or '').strip().upper(), 0)
+
+
+def _gica_avg(a, b):
+    """Average of two sub-scores; tolerate one being missing."""
+    nums = [x for x in (_gica_num(a), _gica_num(b)) if x is not None]
+    return round(sum(nums) / len(nums), 4) if nums else None
+
+
+def _build_gica_freq_lookup(freq_rows: list) -> dict:
+    """(department, level, role) → {exp1, exp2, freqMonths}.
+
+    Keys are lower-cased + trimmed so lookups survive stray casing/whitespace.
+    """
+    lookup = {}
+    for r in freq_rows:
+        key = (
+            str(r.get('department', '') or '').strip().lower(),
+            str(r.get('level', '') or '').strip().lower(),
+            str(r.get('role', '') or '').strip().lower(),
+        )
+        try:
+            freq_months = int(float(r.get('frquency (months)')))
+        except (ValueError, TypeError):
+            freq_months = None
+        lookup[key] = {
+            'exp1': str(r.get('expectation1', '') or '').strip().upper(),
+            'exp2': str(r.get('expectation2', '') or '').strip().upper(),
+            'freqMonths': freq_months,
+        }
+    return lookup
+
+
+def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
+    """Per employee: pick the latest non-empty test slot (#12 → #1) as current
+    status. Each test has two sub-parts (result/grade {i}-1 and {i}-2). A person
+    "passes" when each sub-grade meets its per-role expectation from Table_freq
+    (looked up by deptname + level + position). Next test date is the formula
+    cell date{N+1} (already computed in Excel)."""
+    freq_lookup = _build_gica_freq_lookup(freq_rows or [])
     employees = []
     for r in rows:
         latest = 0
         for i in range(GICA_MAX_TESTS, 0, -1):
-            if r.get(f'result{i}', '') not in (None, '', 'null'):
+            if r.get(f'result{i}-1', '') not in (None, '', 'null'):
                 latest = i
                 break
         if latest == 0:
@@ -941,18 +995,43 @@ def _build_gica_payload(rows: list) -> dict:
 
         history = []
         for i in range(1, latest + 1):
-            res = r.get(f'result{i}', '')
-            if res in (None, '', 'null'):
+            r1 = r.get(f'result{i}-1', '')
+            r2 = r.get(f'result{i}-2', '')
+            if r1 in (None, '', 'null') and r2 in (None, '', 'null'):
                 continue
+            g1 = str(r.get(f'grade{i}-1', '') or '').strip().upper()
+            g2 = str(r.get(f'grade{i}-2', '') or '').strip().upper()
+            # Legacy single grade = the weaker of the two sub-grades (limiting factor).
+            worse = min([g for g in (g1, g2) if g] or [''],
+                        key=lambda g: _gica_rank(g)) if (g1 or g2) else ''
             history.append({
-                'n':     i,
-                'score': _gica_num(res),
-                'grade': str(r.get(f'grade{i}', '') or '').strip(),
-                'date':  _gica_to_iso(r.get(f'date{i}', '')),
+                'n':      i,
+                'score':  _gica_avg(r1, r2),
+                'score1': _gica_num(r1),
+                'score2': _gica_num(r2),
+                'grade':  worse,
+                'grade1': g1,
+                'grade2': g2,
+                'date':   _gica_to_iso(r.get(f'date{i}', '')),
             })
 
-        cur   = history[-1]
-        grade = cur['grade']
+        cur = history[-1]
+
+        dept  = str(r.get('deptname', '') or '').strip()
+        level = str(r.get('level', '') or '').strip()
+        pos   = str(r.get('position', '') or '').strip()
+        crit  = freq_lookup.get((dept.lower(), level.lower(), pos.lower()))
+        exp1  = crit['exp1'] if crit else ''
+        exp2  = crit['exp2'] if crit else ''
+        freq_months = crit['freqMonths'] if crit else None
+
+        g1, g2 = cur['grade1'], cur['grade2']
+        if crit and exp1 and exp2 and g1 and g2:
+            passed = (_gica_rank(g1) >= _gica_rank(exp1)
+                      and _gica_rank(g2) >= _gica_rank(exp2))
+        else:
+            passed = None  # no criteria match → undetermined
+
         next_date = (_gica_to_iso(r.get(f'date{latest + 1}', ''))
                      if latest < GICA_MAX_TESTS else None)
 
@@ -960,14 +1039,25 @@ def _build_gica_payload(rows: list) -> dict:
             'bu':       (str(r.get('bu', '') or '').strip() or str(r.get('_bu', '') or '').strip()),
             'empid':    str(r.get('empid', '') or '').strip(),
             'name':     str(r.get('name', '') or '').strip(),
-            'deptname': str(r.get('deptname', '') or '').strip(),
-            'position': str(r.get('position', '') or '').strip(),
+            'deptname': dept,
+            'level':    level,
+            'position': pos,
             'attempt':  latest,
+            # Legacy bridge fields (kept so the current dashboard renders unchanged):
             'score':    cur['score'],
-            'grade':    grade,
+            'grade':    cur['grade'],
+            # New authoritative fields:
+            'score1':   cur['score1'],
+            'score2':   cur['score2'],
+            'grade1':   g1,
+            'grade2':   g2,
+            'exp1':     exp1,
+            'exp2':     exp2,
+            'passed':   passed,
+            'freqMonths': freq_months,
             'lastDate': cur['date'],
             'nextDate': next_date,
-            'nextType': 'Review' if grade == 'A' else 'Retest',
+            'nextType': 'Review' if passed else 'Retest',
             'history':  history,
         })
 
@@ -984,8 +1074,8 @@ def api_gica_excel():
         return jsonify(_GICA_CACHE['data'])
     try:
         token   = _get_manager_access_token()
-        rows    = _fetch_gica_excel_data(token)
-        payload = _build_gica_payload(rows)
+        rows, freq_rows = _fetch_gica_excel_data(token)
+        payload = _build_gica_payload(rows, freq_rows)
         _GICA_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
         return jsonify(payload)
     except Exception as exc:

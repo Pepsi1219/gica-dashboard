@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/styles.css?v=71" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=79" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -602,9 +602,34 @@
 
   <div class="card card--chart">
     <div class="chart-header">
-      <h3 style="margin:0; font-size:1rem; color:var(--text);">Grade distribution by BU</h3>
+      <h3 id="gica-gradeDistTitle" style="margin:0; font-size:1rem; color:var(--text);">Grade distribution ราย BU</h3>
+      <div id="gica-distToggle" class="toggle-group">
+        <button class="toggle-btn active" data-mode="bu"    type="button">BU</button>
+        <button class="toggle-btn"        data-mode="dept"  type="button">Department</button>
+        <button class="toggle-btn"        data-mode="level" type="button">Level</button>
+      </div>
     </div>
-    <div class="chart-canvas-wrap"><canvas id="gica-gradeDistChart"></canvas></div>
+    <div id="gica-distDual">
+      <div class="gica-dist-dual">
+        <div class="gica-dist-half">
+          <div class="gica-dist-label">Measurement</div>
+          <div class="chart-canvas-wrap"><canvas id="gica-gradeDistM"></canvas></div>
+        </div>
+        <div class="gica-dist-half">
+          <div class="gica-dist-label">Inspection</div>
+          <div class="chart-canvas-wrap"><canvas id="gica-gradeDistI"></canvas></div>
+        </div>
+      </div>
+      <div class="gica-dist-legend">
+        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#16a34a;"></span>A</span>
+        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#2563eb;"></span>B</span>
+        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#f59e0b;"></span>C</span>
+        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#dc2626;"></span>D</span>
+      </div>
+    </div>
+    <div id="gica-distSingle" class="chart-canvas-wrap hidden">
+      <canvas id="gica-gradeDistChart"></canvas>
+    </div>
   </div>
 
   <div class="card card--chart">
@@ -690,6 +715,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=140"></script>
+  <script src="/static/js/app.js?v=153"></script>
 </body>
 </html>

@@ -143,9 +143,25 @@ GICA_EXCEL_SHARE_URL = (
     "IQB-f6_7UzyGRov5bH30_tdxAfELOuKcgkN9lChBvw_wr4E?e=srksPb"
 )
 GICA_TABLE_PREFIX = "GICA_"
-GICA_MAX_TESTS    = 15
-GICA_COLS         = ["bu", "empid", "name", "deptname", "position"] + [
-    f"{field}{i}"
+GICA_MAX_TESTS    = 12
+# Each test now has TWO sub-parts: result{i}-1/-2 (scores) + grade{i}-1/-2 (letters),
+# plus a single date{i}. Meta columns add `level`. Order here is informational only —
+# _read_excel_table maps by header name, so column order in Excel can differ.
+GICA_COLS = ["bu", "empid", "name", "deptname", "level", "position"] + [
+    f"{field}{i}{suffix}"
     for i in range(1, GICA_MAX_TESTS + 1)
-    for field in ("result", "grade", "date")
+    for field, suffix in (
+        ("result", "-1"), ("result", "-2"),
+        ("grade", "-1"),  ("grade", "-2"),
+        ("date", ""),
+    )
 ]
+
+# ── GICA frequency / expectation reference table (same workbook) ───────────────
+# Maps (department, level, role) → how often a person is tested and the minimum
+# grade each sub-test must reach to "pass". Lookup key = (deptname, level, position).
+GICA_FREQ_TABLE = "Table_freq"
+GICA_FREQ_COLS  = ["department", "level", "role", "frquency (months)",
+                   "expectation1", "expectation2"]
+# Grade ranking for pass comparison: a grade passes when its rank >= expectation rank.
+GICA_GRADE_ORDER = {"A": 4, "B": 3, "C": 2, "D": 1}
