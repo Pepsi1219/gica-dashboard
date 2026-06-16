@@ -636,6 +636,9 @@ function applyTheme(theme) {
   localStorage.setItem('theme', theme);
   if (typeof Chart !== 'undefined') {
     Chart.defaults.color = theme === 'dark' ? '#94a3b8' : '#6b7280';
+    ['gica-scheduleChart', 'gica-scheduleChartRight'].forEach(id => {
+      if (_gicaCharts[id]) _gicaCharts[id].update();
+    });
   }
 }
 
@@ -2732,27 +2735,24 @@ function _makeJumperPositionChart(canvasId, bus, cA, iA, sewCounts) {
 
 // ── Summary cards (3 rows) ────────────────────────────────────────────────────
 
-function renderJumperSummaryCards() {
-  const allRows = _jumperRows;
-  const bus     = sortBus(Object.keys(_jumperByBu));
-  const sewOpByBu = _jumperSewOp || {};
-
-  const totalAll    = allRows.length;
-  const centerAll   = allRows.filter(r => r.position === JUMPER_POSITIONS[0]).length;
-  const inlineAll   = allRows.filter(r => r.position === JUMPER_POSITIONS[1]).length;
-  const avgSkillAll = totalAll ? (allRows.reduce((s, r) => s + r.skill, 0) / totalAll).toFixed(1) : '0';
-  const expiredAll  = allRows.filter(r => r.expired > 0).length;
+function _computeJumperSummary(rows, busKeys, sewOpByBu) {
+  const bus       = sortBus(busKeys);
+  const totalAll  = rows.length;
+  const centerAll = rows.filter(r => r.position === JUMPER_POSITIONS[0]).length;
+  const inlineAll = rows.filter(r => r.position === JUMPER_POSITIONS[1]).length;
+  const avgSkillAll = totalAll ? (rows.reduce((s, r) => s + r.skill, 0) / totalAll).toFixed(1) : '0';
+  const expiredAll  = rows.filter(r => r.expired > 0).length;
 
   let centerTarget = 0, inlineTarget = 0;
   bus.forEach(bu => {
     centerTarget += Math.round((sewOpByBu[bu] || []).length * 0.025);
     inlineTarget += Math.round((sewOpByBu[bu] || []).length * 0.05);
   });
-  const centerFilled  = centerTarget > 0 ? Math.min(100, Math.round(centerAll / centerTarget * 100)) : 0;
-  const inlineFilled  = inlineTarget  > 0 ? Math.min(100, Math.round(inlineAll / inlineTarget  * 100)) : 0;
+  const centerFilled = centerTarget > 0 ? Math.min(100, Math.round(centerAll / centerTarget * 100)) : 0;
+  const inlineFilled = inlineTarget  > 0 ? Math.min(100, Math.round(inlineAll / inlineTarget  * 100)) : 0;
 
   const buStats = bus.map((bu, i) => {
-    const bRows      = allRows.filter(r => r.bu === bu);
+    const bRows      = rows.filter(r => r.bu === bu);
     const bCenter    = bRows.filter(r => r.position === JUMPER_POSITIONS[0]).length;
     const bInline    = bRows.filter(r => r.position === JUMPER_POSITIONS[1]).length;
     const bSewCnt    = (sewOpByBu[bu] || []).length;
@@ -2762,107 +2762,104 @@ function renderJumperSummaryCards() {
       bu, total: bRows.length,
       center: bCenter, centerTgt: bCenterTgt,
       centerPct: bCenterTgt > 0 ? Math.min(100, Math.round(bCenter / bCenterTgt * 100)) : 0,
-      inline: bInline,  inlineTgt: bInlineTgt,
-      inlinePct:  bInlineTgt  > 0 ? Math.min(100, Math.round(bInline  / bInlineTgt  * 100)) : 0,
+      inline: bInline, inlineTgt: bInlineTgt,
+      inlinePct: bInlineTgt > 0 ? Math.min(100, Math.round(bInline / bInlineTgt * 100)) : 0,
       avgSkill: bRows.length ? (bRows.reduce((s, r) => s + r.skill, 0) / bRows.length).toFixed(1) : '0',
       expired: bRows.filter(r => r.expired > 0).length,
       color: JUMPER_COLORS[i % JUMPER_COLORS.length],
     };
   });
 
+  return { bus, totalAll, centerAll, inlineAll, avgSkillAll, expiredAll, centerTarget, inlineTarget, centerFilled, inlineFilled, buStats };
+}
+
+function _jumperSummaryHtml(vm) {
   const pBar = (pct, color) => `
-    <div style="background:#e5e7eb;border-radius:999px;height:6px;overflow:hidden;">
-      <div style="background:${pct >= 100 ? '#16a34a' : color};width:${pct}%;height:100%;border-radius:999px;transition:width .3s;"></div>
+    <div class="pbar pbar--6">
+      <div class="pbar__fill" style="background:${pct >= 100 ? '#16a34a' : color};width:${pct}%;"></div>
     </div>`;
+  const tip = (html) => `<div class="crd-tip"><span class="crd-tip-i">ℹ</span><div class="crd-tip-box">${html}</div></div>`;
 
-  const CARD = 'background:var(--surface);border-radius:10px;box-shadow:0 1px 3px var(--shadow);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
-  const LBL  = 'font-size:0.85rem;color:var(--text-muted);';
-  const VAL  = 'font-size:1.8rem;font-weight:700;margin-top:4px;';
-
-  const container = document.getElementById('jtp-summary');
-  if (!container) return;
-  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
-  const jtpTip = (html) => `<div class="crd-tip"><span class="crd-tip-i">ℹ</span><div class="crd-tip-box">${html}</div></div>`;
-  container.innerHTML = `
+  return `
     <!-- Row 1: 5 overview cards -->
     <div class="jtp-row1">
-      <div style="${CARD}min-height:100px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-          <div style="${LBL}">Jumper ทั้งหมด</div>
-          ${jtpTip('จำนวน Jumper ทั้งหมดในทุก BU<br><span style="color:var(--text-muted)">นับทุก record ใน Jumper table</span>')}
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head">
+          <div class="stat-card__label">Jumper ทั้งหมด</div>
+          ${tip('จำนวน Jumper ทั้งหมดในทุก BU<br><span style="color:var(--text-muted)">นับทุก record ใน Jumper table</span>')}
         </div>
-        <div style="${VAL}">${totalAll}</div>
+        <div class="stat-card__value">${vm.totalAll}</div>
       </div>
-      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-          <div style="${LBL}">Jumper Center</div>
-          ${jtpTip('Jumper ตำแหน่ง Center<br><span style="color:var(--text-muted)">Target: 2.5% × จำนวน Sewing Operator ต่อ BU</span>')}
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head kpi-head--6">
+          <div class="stat-card__label">Jumper Center</div>
+          ${tip('Jumper ตำแหน่ง Center<br><span style="color:var(--text-muted)">Target: 2.5% × จำนวน Sewing Operator ต่อ BU</span>')}
         </div>
-        <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${centerAll}</div>
-        ${centerTarget > 0 ? `<div style="margin-top:auto;">
-          ${pBar(centerFilled, '#2563eb')}
-          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
-            <span>${centerFilled}%</span><span>Target: ${centerTarget}</span>
+        <div class="stat-card__value--md">${vm.centerAll}</div>
+        ${vm.centerTarget > 0 ? `<div class="u-mt-auto">
+          ${pBar(vm.centerFilled, '#2563eb')}
+          <div class="u-between u-muted stat-foot">
+            <span>${vm.centerFilled}%</span><span>Target: ${vm.centerTarget}</span>
           </div>
         </div>` : ''}
       </div>
-      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-          <div style="${LBL}">Jumper Inline</div>
-          ${jtpTip('Jumper ตำแหน่ง Inline<br><span style="color:var(--text-muted)">Target: 5.0% × จำนวน Sewing Operator ต่อ BU</span>')}
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head kpi-head--6">
+          <div class="stat-card__label">Jumper Inline</div>
+          ${tip('Jumper ตำแหน่ง Inline<br><span style="color:var(--text-muted)">Target: 5.0% × จำนวน Sewing Operator ต่อ BU</span>')}
         </div>
-        <div style="font-size:1.6rem;font-weight:700;margin-bottom:6px;">${inlineAll}</div>
-        ${inlineTarget > 0 ? `<div style="margin-top:auto;">
-          ${pBar(inlineFilled, '#16a34a')}
-          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
-            <span>${inlineFilled}%</span><span>Target: ${inlineTarget}</span>
+        <div class="stat-card__value--md">${vm.inlineAll}</div>
+        ${vm.inlineTarget > 0 ? `<div class="u-mt-auto">
+          ${pBar(vm.inlineFilled, '#16a34a')}
+          <div class="u-between u-muted stat-foot">
+            <span>${vm.inlineFilled}%</span><span>Target: ${vm.inlineTarget}</span>
           </div>
         </div>` : ''}
       </div>
-      <div style="${CARD}min-height:100px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-          <div style="${LBL}">Avg. Skill Score / Person</div>
-          ${jtpTip('ค่าเฉลี่ย Skill Count ต่อ 1 คน<br><span style="color:var(--text-muted)">avg ของ Skill Count ของทุก Jumper</span>')}
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head">
+          <div class="stat-card__label">Avg. Skill Score / Person</div>
+          ${tip('ค่าเฉลี่ย Skill Count ต่อ 1 คน<br><span style="color:var(--text-muted)">avg ของ Skill Count ของทุก Jumper</span>')}
         </div>
-        <div style="${VAL}">${avgSkillAll}</div>
+        <div class="stat-card__value">${vm.avgSkillAll}</div>
       </div>
-      <div style="${CARD}min-height:100px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-          <div style="${LBL}">Skill Expired</div>
-          ${jtpTip('จำนวน Jumper ที่มี Skill หมดอายุ อย่างน้อย 1 รายการ<br><span style="color:var(--text-muted)">นับ Jumper ที่ Expired Count > 0</span>')}
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head">
+          <div class="stat-card__label">Skill Expired</div>
+          ${tip('จำนวน Jumper ที่มี Skill หมดอายุ อย่างน้อย 1 รายการ<br><span style="color:var(--text-muted)">นับ Jumper ที่ Expired Count > 0</span>')}
         </div>
-        <div style="${VAL}${expiredAll > 0 ? 'color:#dc2626;' : ''}">${expiredAll}</div>
+        <div class="stat-card__value"${vm.expiredAll > 0 ? ' style="color:#dc2626;"' : ''}>${vm.expiredAll}</div>
       </div>
     </div>
 
     <!-- Row 2 + Row 3: BU mini-cards + Training Progress donuts (combined section) -->
-    <div style="display:flex;flex-direction:column;gap:10px;">
+    <div class="stat-section">
     <div class="jtp-row2">
-      ${buStats.map(s => `
-      <div style="${CARD}min-width:0;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
-          <span style="font-size:1.05rem;font-weight:700;color:${s.color};">${escapeHtml(s.bu)}</span>
-          <span style="font-size:0.82rem;color:var(--text-muted);">${s.total} คน</span>
+      ${vm.buStats.map(s => `
+      <div class="stat-card" style="min-width:0;">
+        <div class="bu-head">
+          <span class="bu-name" style="color:${s.color};">${escapeHtml(s.bu)}</span>
+          <span class="u-muted bu-count">${s.total} คน</span>
         </div>
         <div style="margin-bottom:5px;">
-          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);margin-bottom:2px;">
+          <div class="u-between u-muted" style="font-size:0.7rem;margin-bottom:2px;">
             <span>Center</span>
-            <span style="font-weight:600;color:var(--text);">${s.centerTgt > 0 ? `${s.center}/${s.centerTgt}` : s.center}</span>
+            <span class="u-text" style="font-weight:600;">${s.centerTgt > 0 ? `${s.center}/${s.centerTgt}` : s.center}</span>
           </div>
           ${s.centerTgt > 0 ? pBar(s.centerPct, s.color) : ''}
         </div>
         <div style="margin-bottom:8px;">
-          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);margin-bottom:2px;">
+          <div class="u-between u-muted" style="font-size:0.7rem;margin-bottom:2px;">
             <span>Inline</span>
-            <span style="font-weight:600;color:var(--text);">${s.inlineTgt > 0 ? `${s.inline}/${s.inlineTgt}` : s.inline}</span>
+            <span class="u-text" style="font-weight:600;">${s.inlineTgt > 0 ? `${s.inline}/${s.inlineTgt}` : s.inline}</span>
           </div>
           ${s.inlineTgt > 0 ? pBar(s.inlinePct, hexToRgba(s.color, 0.6)) : ''}
         </div>
-        <div style="font-size:0.7rem;color:var(--text-muted);border-top:1px solid var(--border-light);padding-top:6px;margin-top:auto;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-            <span>Skill avg</span><strong style="color:var(--text);">${s.avgSkill}</strong>
+        <div class="u-muted stat-card__footer">
+          <div class="u-between" style="margin-bottom:2px;">
+            <span>Skill avg</span><strong class="u-text">${s.avgSkill}</strong>
           </div>
-          <div style="display:flex;justify-content:space-between;">
+          <div class="u-between">
             <span>Expired</span><strong style="${s.expired > 0 ? 'color:#dc2626;' : 'color:var(--text);'}">${s.expired}</strong>
           </div>
         </div>
@@ -2872,8 +2869,21 @@ function renderJumperSummaryCards() {
     <!-- Row 3: Training Progress donuts — filled by JT_PROD.init() -->
     <div id="jtp-row3" class="jtp-row3"></div>
     </div>`;
+}
 
-  JT_PROD.init(bus, allRows);
+function _mountJumperSummary(html, bus, rows) {
+  const container = document.getElementById('jtp-summary');
+  if (!container) return;
+  container.innerHTML = html;
+  JT_PROD.init(bus, rows);  // must run after innerHTML (#jtp-row3 is created above)
+}
+
+function renderJumperSummaryCards() {
+  const rows      = _jumperRows;
+  const busKeys   = Object.keys(_jumperByBu);
+  const sewOpByBu = _jumperSewOp || {};
+  const vm = _computeJumperSummary(rows, busKeys, sewOpByBu);
+  _mountJumperSummary(_jumperSummaryHtml(vm), vm.bus, rows);
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────────
@@ -3123,212 +3133,194 @@ function _trainerCoverageData(data) {
 
 // ── Summary cards (Rows 1–3) ─────────────────────────────────────────────────
 
-function renderTrainerSummaryCards(data) {
+function _computeTrainerSummary(data) {
   const { bus, productTypes, coverage } = _trainerCoverageData(data);
   const ptColorMap = {};
   productTypes.forEach((pt, i) => { ptColorMap[pt] = TRAINER_PT_COLORS[i % TRAINER_PT_COLORS.length]; });
-  const allSkills      = Object.values(data.skills).flat();
-  const trainedSkills  = allSkills.filter(r => (r.eff || 0) > 0);
-  const totalTr     = data.trainers.length;
+
+  const totalTr      = data.trainers.length;
   const masterCount  = data.trainers.filter(t => t.status === 'Master Trainer').length;
   const certCount    = data.trainers.filter(t => t.status === 'Certified').length;
   const masterTarget = data.trainers.filter(t => t.position === 'Master Trainer').length;
   const certTarget   = totalTr;
   const masterFilled = masterTarget > 0 ? Math.min(100, Math.round(masterCount / masterTarget * 100)) : 0;
-  const certFilled   = certTarget  > 0 ? Math.min(100, Math.round(certCount  / certTarget  * 100)) : 0;
+  const certFilled   = certTarget   > 0 ? Math.min(100, Math.round(certCount   / certTarget   * 100)) : 0;
 
-  // Avg Qualified Rate / Person: avg of (qualified skills / total assigned skills) per trainer
   const trainerRates = data.trainers.map(t => {
     const sk = (data.skills[t.empid] || []);
     return sk.length ? sk.filter(r => (r.eff || 0) >= 75).length / sk.length * 100 : null;
   }).filter(v => v !== null);
-  const avgSkill    = trainerRates.length
+  const avgSkill = trainerRates.length
     ? (trainerRates.reduce((s, v) => s + v, 0) / trainerRates.length).toFixed(1) : '0.0';
   const avgPct = Math.min(100, parseFloat(avgSkill) || 0);
 
-  // Expired: count trainers (persons) per BU that have ≥1 expired skill row
   const expiredAll  = data.trainers.filter(t => (data.skills[t.empid] || []).some(r => (r.eff || 0) > 0 && Number(r.expired) === 1)).length;
   const expiredByBu = {};
   data.trainers.forEach(t => {
-    const hasExp = (data.skills[t.empid] || []).some(r => (r.eff || 0) > 0 && Number(r.expired) === 1);
-    if (hasExp) expiredByBu[t.bu] = (expiredByBu[t.bu] || 0) + 1;
-  });
-
-  // Master Trainer breakdown by BU
-  const masterByBu = {};
-  data.trainers.filter(t => t.status === 'Master Trainer').forEach(t => {
-    masterByBu[t.bu] = (masterByBu[t.bu] || 0) + 1;
+    if ((data.skills[t.empid] || []).some(r => (r.eff || 0) > 0 && Number(r.expired) === 1))
+      expiredByBu[t.bu] = (expiredByBu[t.bu] || 0) + 1;
   });
 
   const buStats = bus.map((bu, i) => {
-    const trs       = data.trainers.filter(t => t.bu === bu);
-    const buTrained = trs.flatMap(t => (data.skills[t.empid] || []).filter(r => (r.eff || 0) > 0));
-    // Avg. Efficiency Pass Rate per BU: avg of (qualified/total assigned) per trainer
+    const trs     = data.trainers.filter(t => t.bu === bu);
     const buRates = trs.map(t => {
       const sk = (data.skills[t.empid] || []);
       return sk.length ? sk.filter(r => (r.eff || 0) >= 75).length / sk.length * 100 : null;
     }).filter(v => v !== null);
     const bAvg = buRates.length
       ? (buRates.reduce((s, v) => s + v, 0) / buRates.length).toFixed(1) : '0.0';
-    // Expired: number of persons with ≥1 expired skill
     const bExp = trs.filter(t => (data.skills[t.empid] || []).some(r => (r.eff || 0) > 0 && Number(r.expired) === 1)).length;
-    const topPt    = productTypes
-      .map(pt => ({ pt, pct: coverage[bu][pt] }))
-      .filter(x => x.pct !== null)
-      .sort((a, b) => b.pct - a.pct)
-      .slice(0, 3);
+
+    const trExcMaster = trs.filter(t => t.status !== 'Master Trainer');
+    const top3Items = (data.top3 || []).filter(t => t.bu === bu).map(t => {
+      const done = trExcMaster.reduce((acc, tr) =>
+        acc + (data.skills[tr.empid] || []).filter(sk =>
+          sk.productType === t.productType && sk.style === t.style && (sk.eff || 0) >= 75
+        ).length, 0);
+      const denom = t.totalSteps * trExcMaster.length;
+      const pct = denom > 0 ? Math.min(100, Math.round(done / denom * 100)) : null;
+      return { label: `${t.productType} / ${t.style}`, pct, productType: t.productType };
+    });
+
     return {
       bu, color: JUMPER_COLORS[i % JUMPER_COLORS.length],
       total:      trs.length,
       master:     trs.filter(t => t.status === 'Master Trainer').length,
       certified:  trs.filter(t => t.status === 'Certified').length,
       onProgress: trs.filter(t => t.status === 'On-Progress').length,
-      avgSkill: bAvg, expired: bExp, topPt,
+      avgSkill: bAvg, expired: bExp, top3Items,
     };
   });
 
-  const CARD = 'background:var(--surface);border-radius:10px;box-shadow:0 1px 3px var(--shadow);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
-  const LBL  = 'font-size:0.85rem;color:var(--text-muted);';
-  const VAL  = 'font-size:1.8rem;font-weight:700;margin-top:4px;';
+  return { bus, totalTr, masterCount, certCount, masterTarget, certTarget, masterFilled, certFilled, avgSkill, avgPct, expiredAll, expiredByBu, buStats, ptColorMap };
+}
+
+function _trainerSummaryHtml(vm) {
   const pBar = (pct, color) => `
-    <div style="background:var(--progress-track);border-radius:999px;height:5px;overflow:hidden;margin-top:3px;">
-      <div style="background:${color};width:${pct}%;height:100%;border-radius:999px;transition:width .3s;"></div>
+    <div class="pbar pbar--5">
+      <div class="pbar__fill" style="background:${color};width:${pct}%;"></div>
     </div>`;
   const ptColor = pct => pct >= 80 ? '#16a34a' : pct >= 60 ? '#22d3ee' : pct >= 30 ? '#f59e0b' : '#ef4444';
-
-  const container = document.getElementById('trainer-summary');
-  if (!container) return;
-  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+  const tip = (html) => `<div class="crd-tip"><span class="crd-tip-i">ℹ</span><div class="crd-tip-box">${html}</div></div>`;
   const RSUB = (entries, color) => {
     if (!Object.keys(entries).length) return '';
     const rows = Object.entries(entries).map(([bu, n]) =>
-      `<div style="display:flex;justify-content:space-between;gap:8px;white-space:nowrap;"><span>${escapeHtml(bu)}</span><strong style="color:${color};">${n}</strong></div>`
+      `<div class="u-between" style="gap:8px;white-space:nowrap;"><span>${escapeHtml(bu)}</span><strong style="color:${color};">${n}</strong></div>`
     ).join('');
-    return `<div style="font-size:0.68rem;color:var(--text-muted);display:flex;flex-direction:column;gap:2px;justify-content:center;">${rows}</div>`;
+    return `<div class="u-muted rsub">${rows}</div>`;
   };
 
-  const cardWithSub = (label, valHtml, subHtml) => `
-    <div style="${CARD}">
-      <div style="${LBL}">${label}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px;flex:1;">
-        <div style="${VAL}margin-top:0;">${valHtml}</div>
-        ${subHtml}
-      </div>
-    </div>`;
-
-  const tip = (html) => `<div class="crd-tip"><span class="crd-tip-i">ℹ</span><div class="crd-tip-box">${html}</div></div>`;
-
-  container.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
-      <div style="${CARD}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-          <div style="${LBL}">Total Trainer</div>
+  return `
+    <div class="stat-grid stat-grid--5">
+      <div class="stat-card">
+        <div class="u-between kpi-head">
+          <div class="stat-card__label">Total Trainer</div>
           ${tip('จำนวน Trainer ทั้งหมดในทีม<br><span style="color:var(--text-muted)">นับทุก record ใน TrainerListAll</span>')}
         </div>
-        <div style="${VAL}">${totalTr}</div>
+        <div class="stat-card__value">${vm.totalTr}</div>
       </div>
-      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-          <div style="${LBL}">Master Trainer</div>
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head kpi-head--6">
+          <div class="stat-card__label">Master Trainer</div>
           ${tip('Trainer ที่ได้รับการรับรองระดับสูงสุด<br><span style="color:var(--text-muted)">ปัจจุบัน: Column <strong>Status</strong> = "Master Trainer"<br>Target: Column <strong>Position</strong> = "Master Trainer"</span>')}
         </div>
         <div style="flex:1;">
-          <div style="font-size:1.6rem;font-weight:700;color:var(--purple);margin-bottom:6px;">${masterCount}</div>
-          ${masterTarget > 0 ? `<div>
-            ${pBar(masterFilled, 'var(--purple)')}
-            <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
-              <span>${masterFilled}%</span><span>Target: ${masterTarget}</span>
+          <div class="stat-card__value--md" style="color:var(--purple);">${vm.masterCount}</div>
+          ${vm.masterTarget > 0 ? `<div>
+            ${pBar(vm.masterFilled, 'var(--purple)')}
+            <div class="u-between u-muted stat-foot">
+              <span>${vm.masterFilled}%</span><span>Target: ${vm.masterTarget}</span>
             </div>
           </div>` : ''}
         </div>
       </div>
-      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-          <div style="${LBL}">Certified</div>
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head kpi-head--6">
+          <div class="stat-card__label">Certified</div>
           ${tip('Trainer ที่ได้รับการรับรองระดับ Certified<br><span style="color:var(--text-muted)">ปัจจุบัน: Column <strong>Status</strong> = "Certified"<br>Target: จำนวน Trainer ทั้งหมด</span>')}
         </div>
-        <div style="font-size:1.6rem;font-weight:700;color:var(--ok);margin-bottom:6px;">${certCount}</div>
-        ${certTarget > 0 ? `<div style="margin-top:auto;">
-          ${pBar(certFilled, 'var(--ok)')}
-          <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
-            <span>${certFilled}%</span><span>Target: ${certTarget}</span>
+        <div class="stat-card__value--md" style="color:var(--ok);">${vm.certCount}</div>
+        ${vm.certTarget > 0 ? `<div class="u-mt-auto">
+          ${pBar(vm.certFilled, 'var(--ok)')}
+          <div class="u-between u-muted stat-foot">
+            <span>${vm.certFilled}%</span><span>Target: ${vm.certTarget}</span>
           </div>
         </div>` : ''}
       </div>
-      <div style="${CARD}min-height:100px;display:flex;flex-direction:column;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-          <div style="${LBL}">Avg. Efficiency Pass Rate / Person</div>
+      <div class="stat-card" style="min-height:100px;">
+        <div class="u-between kpi-head kpi-head--6">
+          <div class="stat-card__label">Avg. Efficiency Pass Rate / Person</div>
           ${tip('ค่าเฉลี่ยอัตราการผ่านมาตรฐาน Efficiency ของ Trainer แต่ละคน<br><span style="color:var(--text-muted)">สูตร: (Skill ที่ eff ≥ 75) / (Skill ทั้งหมดของคนนั้น) × 100 → avg ทุกคน<br>Target: 100%</span>')}
         </div>
-        <div style="font-size:1.6rem;font-weight:700;color:#0891b2;margin-bottom:6px;">${avgSkill}%</div>
-        <div style="margin-top:auto;">
-          ${pBar(avgPct, '#0891b2')}
-          <div style="display:flex;justify-content:flex-end;font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
+        <div class="stat-card__value--md" style="color:#0891b2;">${vm.avgSkill}%</div>
+        <div class="u-mt-auto">
+          ${pBar(vm.avgPct, '#0891b2')}
+          <div class="u-muted u-end stat-foot">
             <span>Target: 100%</span>
           </div>
         </div>
       </div>
-      <div style="${CARD}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-          <div style="${LBL}">Skill Expired</div>
+      <div class="stat-card">
+        <div class="u-between kpi-head">
+          <div class="stat-card__label">Skill Expired</div>
           ${tip('จำนวน Trainer ที่มี Skill หมดอายุ อย่างน้อย 1 รายการ<br><span style="color:var(--text-muted)">นับ Trainer ที่มี expired = 1 และ eff > 0</span>')}
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex:1;">
-          <div style="${VAL}margin-top:0;${expiredAll > 0 ? 'color:var(--danger);' : ''}">${expiredAll}</div>
-          ${RSUB(expiredByBu, 'var(--danger)')}
+        <div class="u-between" style="align-items:center;gap:8px;flex:1;">
+          <div class="stat-card__value stat-card__value--flush"${vm.expiredAll > 0 ? ' style="color:var(--danger);"' : ''}>${vm.expiredAll}</div>
+          ${RSUB(vm.expiredByBu, 'var(--danger)')}
         </div>
       </div>
     </div>
     <!-- Row 2 + Row 3: BU mini-cards + Top 3 Priority (combined section) -->
-    <div style="display:flex;flex-direction:column;gap:10px;">
-    <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;">
-      ${buStats.map(s => `
-      <div style="${CARD}">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
-          <span style="font-size:1.05rem;font-weight:700;color:${s.color};">${escapeHtml(s.bu)}</span>
-          <span style="font-size:0.82rem;color:var(--text-muted);">${s.total} คน</span>
+    <div class="stat-section">
+    <div class="stat-grid" style="grid-template-columns:repeat(${vm.bus.length || 1},1fr);">
+      ${vm.buStats.map(s => `
+      <div class="stat-card">
+        <div class="bu-head">
+          <span class="bu-name" style="color:${s.color};">${escapeHtml(s.bu)}</span>
+          <span class="u-muted bu-count">${s.total} คน</span>
         </div>
-        <div style="font-size:0.7rem;color:var(--text-muted);display:flex;flex-direction:column;gap:3px;margin-bottom:8px;">
-          <div style="display:flex;justify-content:space-between;"><span>★ Master Trainer</span><strong style="color:var(--purple);">${s.master}</strong></div>
-          <div style="display:flex;justify-content:space-between;"><span>✓ Certified</span><strong style="color:var(--ok);">${s.certified}</strong></div>
-          <div style="display:flex;justify-content:space-between;"><span>○ On-Progress</span><strong style="color:var(--warn);">${s.onProgress}</strong></div>
+        <div class="u-muted stat-status-list">
+          <div class="u-between"><span>★ Master Trainer</span><strong style="color:var(--purple);">${s.master}</strong></div>
+          <div class="u-between"><span>✓ Certified</span><strong style="color:var(--ok);">${s.certified}</strong></div>
+          <div class="u-between"><span>○ On-Progress</span><strong style="color:var(--warn);">${s.onProgress}</strong></div>
         </div>
-        <div style="font-size:0.7rem;color:var(--text-muted);border-top:1px solid var(--border-light);padding-top:6px;margin-top:auto;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:2px;"><span>Avg. Eff Pass Rate</span><strong style="color:var(--text);">${s.avgSkill}%</strong></div>
-          <div style="display:flex;justify-content:space-between;"><span>Expired (คน)</span><strong style="${s.expired > 0 ? 'color:var(--danger);' : 'color:var(--text);'}">${s.expired}</strong></div>
+        <div class="u-muted stat-card__footer">
+          <div class="u-between" style="margin-bottom:2px;"><span>Avg. Eff Pass Rate</span><strong class="u-text">${s.avgSkill}%</strong></div>
+          <div class="u-between"><span>Expired (คน)</span><strong style="${s.expired > 0 ? 'color:var(--danger);' : 'color:var(--text);'}">${s.expired}</strong></div>
         </div>
       </div>`).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(${bus.length || 1},1fr);gap:12px;">
-      ${buStats.map(s => {
-        const top3ByBu = (data.top3 || []).filter(t => t.bu === s.bu);
-        const trExcMaster = data.trainers.filter(t => t.bu === s.bu && t.status !== 'Master Trainer');
-        const top3Items = top3ByBu.map(t => {
-          const done = trExcMaster.reduce((acc, tr) =>
-            acc + (data.skills[tr.empid] || []).filter(sk => sk.productType === t.productType && sk.style === t.style && (sk.eff || 0) >= 75).length, 0);
-          const denom = t.totalSteps * trExcMaster.length;
-          const pct = denom > 0 ? Math.min(100, Math.round(done / denom * 100)) : null;
-          return { label: `${t.productType} / ${t.style}`, pct, productType: t.productType };
-        });
-        return `
-      <div style="${CARD}min-height:80px;">
+    <div class="stat-grid" style="grid-template-columns:repeat(${vm.bus.length || 1},1fr);">
+      ${vm.buStats.map(s => `
+      <div class="stat-card" style="min-height:80px;">
         <div style="text-align:center;margin-bottom:10px;">
-          <span style="font-size:0.6rem;color:var(--text-muted);background:var(--surface2);padding:1px 5px;border-radius:10px;">🎯 Top 3 Priority</span>
+          <span class="u-muted" style="font-size:0.6rem;background:var(--surface2);padding:1px 5px;border-radius:10px;">🎯 Top 3 Priority</span>
         </div>
-        ${top3Items.length === 0
-          ? `<div style="font-size:0.7rem;color:var(--text-muted);text-align:center;padding:8px 0;">ไม่มีข้อมูล top_3</div>`
-          : top3Items.map(x => `
+        ${s.top3Items.length === 0
+          ? `<div class="u-muted" style="font-size:0.7rem;text-align:center;padding:8px 0;">ไม่มีข้อมูล top_3</div>`
+          : s.top3Items.map(x => `
             <div style="margin-bottom:6px;">
-              <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-muted);margin-bottom:2px;">
+              <div class="u-between u-muted" style="font-size:0.68rem;margin-bottom:2px;">
                 <span>${escapeHtml(x.label)}</span>
-                <span style="font-weight:600;color:var(--text);">${x.pct === null ? '—' : x.pct + '%'}</span>
+                <span class="u-text" style="font-weight:600;">${x.pct === null ? '—' : x.pct + '%'}</span>
               </div>
-              ${x.pct !== null ? pBar(x.pct, ptColorMap[x.productType] || ptColor(x.pct)) : ''}
+              ${x.pct !== null ? pBar(x.pct, vm.ptColorMap[x.productType] || ptColor(x.pct)) : ''}
             </div>`).join('')}
-      </div>`;
-      }).join('')}
+      </div>`).join('')}
     </div>
     </div>`;
+}
+
+function _mountTrainerSummary(html) {
+  const container = document.getElementById('trainer-summary');
+  if (!container) return;
+  container.innerHTML = html;
+}
+
+function renderTrainerSummaryCards(data) {
+  const vm = _computeTrainerSummary(data);
+  _mountTrainerSummary(_trainerSummaryHtml(vm));
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────────
@@ -4129,125 +4121,256 @@ async function initGicaTab() {
 }
 
 // ── Summary: KPI cards + BU breakdown ─────────────────────────────────────────
-function renderGicaSummary() {
-  const container = $('gica-summary');
-  if (!container) return;
-  const CARD = 'background:var(--surface);border-radius:10px;box-shadow:0 1px 3px var(--shadow);display:flex;flex-direction:column;padding:16px;box-sizing:border-box;';
-  const LBL  = 'font-size:0.85rem;color:var(--text-muted);';
-  const VAL  = 'font-size:1.8rem;font-weight:700;margin-top:4px;color:var(--text);';
-
-  const emps  = _gicaData.employees || [];
+// Functional core / imperative shell:
+//   _computeGicaSummary → viewModel   (pure: data in → plain object out)
+//   _gicaSummaryHtml    → html string (pure: viewModel in → string out; no DOM, no globals)
+//   _mountGicaSummary   → DOM         (imperative shell: the only DOM touch)
+//   renderGicaSummary   → orchestrator that wires the three together
+function _computeGicaSummary(emps, busRaw) {
   const total = emps.length;
   const byGrade = { A: 0, B: 0, C: 0, D: 0 };
   emps.forEach(e => { if (byGrade[e.grade] != null) byGrade[e.grade]++; });
 
-  const aCount     = byGrade.A;
-  const passPct    = total ? Math.round(aCount / total * 100) : 0;
-  const avgScore   = total ? emps.reduce((s, e) => s + (e.score || 0), 0) / total : 0;
-  const avgPct     = Math.round(avgScore * 100);
-  const avgGrade   = _gicaScoreToGrade(avgScore);
-  const needRetest = emps.filter(e => e.grade && e.grade !== 'A').length;
+  const aCount   = byGrade.A;
+  const avgScore = total ? emps.reduce((s, e) => s + (e.score || 0), 0) / total : 0;
 
-  const bus = sortBus(_gicaData.bus || []);
-  const retestBuRows = bus.map(bu => ({ bu, n: emps.filter(e => e.bu === bu && e.grade && e.grade !== 'A').length }));
+  const bus = sortBus(busRaw);
+  const retestBuRows = bus.map(bu => ({
+    bu,
+    n: emps.filter(e => e.bu === bu && e.grade && e.grade !== 'A').length,
+  }));
 
-  const gauge = (counts, tot) => {
-    if (!tot) return '<div style="height:7px;background:var(--border-light);border-radius:4px;"></div>';
-    return `<div style="display:flex;height:7px;border-radius:4px;overflow:hidden;gap:1px;">
-      ${GICA_GRADES.map(g => counts[g] ? `<div style="flex:${counts[g]};background:${GICA_GRADE_COLORS[g]};"></div>` : '').join('')}
+  const buCards = BU_ORDER.map(bu => {
+    const inBu = emps.filter(e => e.bu === bu);
+    if (!inBu.length) return { bu, empty: true };
+    const cnt = { A: 0, B: 0, C: 0, D: 0 };
+    inBu.forEach(e => { if (cnt[e.grade] != null) cnt[e.grade]++; });
+    const avg = inBu.reduce((s, e) => s + (e.score || 0), 0) / inBu.length;
+    return {
+      bu, empty: false, count: inBu.length, cnt,
+      avgPct: Math.round(avg * 100), avgGrade: _gicaScoreToGrade(avg),
+      aTargetPct: Math.min(100, Math.round(cnt.A / (inBu.length * 0.8) * 100)),
+    };
+  });
+
+  return {
+    total, byGrade, aCount,
+    passPct:  total ? Math.round(aCount / total * 100) : 0,
+    avgPct:   Math.round(avgScore * 100),
+    avgGrade: _gicaScoreToGrade(avgScore),
+    needRetest: emps.filter(e => e.grade && e.grade !== 'A').length,
+    retestBuRows, buCards,
+  };
+}
+
+function _gicaSummaryHtml(vm) {
+  const miniBar = rows => {
+    const mx = Math.max(...rows.map(r => r.n), 1);
+    return rows.map(r => `
+      <div class="mini-bar__row">
+        <span class="mini-bar__bu">${escapeHtml(r.bu)}</span>
+        <div class="mini-bar__track">
+          <div class="mini-bar__fill" style="width:${Math.round(r.n / mx * 100)}%;background:${GICA_BU_COLORS[r.bu] || '#6b7280'};"></div>
+        </div>
+        <span class="mini-bar__count">${r.n}</span>
+      </div>`).join('');
+  };
+  // Grade-distribution donut (SVG, theme-aware via CSS vars — no Chart.js lifecycle)
+  const donut = (counts, tot) => {
+    const R = 40, sw = 16, CIRC = 2 * Math.PI * R, gap = tot ? 1.5 : 0;
+    let acc = 0;
+    const ring = GICA_GRADES.map(g => {
+      const v = counts[g] || 0;
+      if (!v || !tot) return '';
+      const len  = v / tot * CIRC;
+      const dash = Math.max(len - gap, 0.5);
+      const seg  = `<circle cx="50" cy="50" r="${R}" fill="none" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 50 50)"></circle>`;
+      acc += len;
+      return seg;
+    }).join('');
+    return `
+      <div class="donut-wrap">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
+          ${ring}
+        </svg>
+        <div class="donut-center">
+          <span class="donut-count">${tot}</span>
+        </div>
+      </div>`;
+  };
+  const legend = cnt => `
+    <div class="donut-legend">
+      ${GICA_GRADES.map(g => `
+        <div class="donut-legend__row">
+          <span class="donut-legend__dot" style="background:${GICA_GRADE_COLORS[g]};"></span>
+          <span class="u-muted donut-legend__grade">Grade ${g}</span>
+          <span class="donut-legend__count">${cnt[g]}</span>
+        </div>`).join('')}
+    </div>`;
+
+  const buDonut = (cnt, tot) => {
+    const R = 40, sw = 18, CIRC = 2 * Math.PI * R, gap = tot ? 1.5 : 0;
+    let acc = 0;
+    const ring = GICA_GRADES.map(g => {
+      const v = cnt[g] || 0;
+      if (!v || !tot) return '';
+      const len  = v / tot * CIRC;
+      const dash = Math.max(len - gap, 0.5);
+      const seg  = `<circle cx="50" cy="50" r="${R}" fill="none" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 50 50)"></circle>`;
+      acc += len;
+      return seg;
+    }).join('');
+    return `<div class="donut-wrap--sm">
+      <svg viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
+        ${ring}
+      </svg>
+      <div class="donut-center">
+        <span class="donut-count--sm">${tot || '—'}</span>
+      </div>
     </div>`;
   };
+  const buLegend = cnt => `
+    <div class="donut-legend donut-legend--sm">
+      ${GICA_GRADES.filter(g => (cnt[g] || 0) > 0).map(g => `
+        <div class="donut-legend__row">
+          <span class="donut-legend__dot" style="background:${GICA_GRADE_COLORS[g]};"></span>
+          <span class="u-muted donut-legend__grade">Grade ${g}</span>
+          <span class="donut-legend__count">${cnt[g]}</span>
+        </div>`).join('')}
+    </div>`;
 
-  const GRADE_COL = `display:flex;flex-direction:column;gap:2px;font-size:0.65rem;font-weight:600;color:var(--text);`;
+  const buBarChart = buCards => {
+    const active = buCards.filter(c => !c.empty);
+    if (!active.length) return '';
+    const maxN = Math.max(...active.map(c => c.count), 1);
+    const W = 220, CH = 70, PAD = 8, LH = 16, TPAD = 14;
+    const n = active.length;
+    const slot = (W - PAD * 2) / n;
+    const bw = Math.round(slot * 0.62);
+    const bo = (slot - bw) / 2;
+    const bars = active.map((c, i) => {
+      const bh = Math.max(Math.round(c.count / maxN * CH), 3);
+      const x = Math.round(PAD + i * slot + bo);
+      const barY = TPAD + (CH - bh);
+      const cx = Math.round(x + bw / 2);
+      const color = GICA_BU_COLORS[c.bu] || '#6b7280';
+      return `<rect x="${x}" y="${barY}" width="${bw}" height="${bh}" rx="3" fill="${color}"></rect>
+        <text x="${cx}" y="${barY - 4}" text-anchor="middle" font-size="8" font-weight="700" fill="${color}">${c.count}</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
+      <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
+      ${bars}
+    </svg>`;
+  };
+
   const kpi = `
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">
+    <div class="stat-grid stat-grid--5">
 
-      <!-- Total employees: label + big number only -->
-      <div style="${CARD}">
-        <div style="${LBL}">Total employees</div>
-        <div style="${VAL}">${total}</div>
+      <!-- Total employees: BU bar chart -->
+      <div class="stat-card">
+        <div class="stat-card__label">Total employees</div>
+        <div class="stat-card__value">${vm.total}</div>
+        ${buBarChart(vm.buCards)}
       </div>
 
-      <!-- Overall Score: A/B/C/D breakdown + gauge at bottom -->
-      <div style="${CARD}">
-        <div style="${LBL}">Overall Score</div>
-        <div style="display:flex;flex-direction:column;gap:2px;margin-top:8px;flex:1;">
-          ${['A','B','C','D'].map(g => `<div style="display:flex;justify-content:space-between;font-size:0.65rem;font-weight:600;"><span style="color:${GICA_GRADE_COLORS[g]};">${g}</span><span style="color:var(--text);">${byGrade[g]}</span></div>`).join('')}
+      <!-- Overall Score: grade-distribution donut + legend (right) -->
+      <div class="stat-card">
+        <div class="stat-card__label">Overall Score</div>
+        <div class="stat-card__donut-row">
+          ${donut(vm.byGrade, vm.total)}
+          ${legend(vm.byGrade)}
         </div>
-        <div style="margin-top:8px;">${gauge(byGrade, total)}</div>
       </div>
 
       <!-- Grade A — Pass -->
-      <div style="${CARD}">
-        <div style="${LBL}">Grade A — Pass</div>
-        <div style="font-size:1.8rem;font-weight:700;margin:4px 0 8px;color:${GICA_GRADE_COLORS.A};">${aCount}</div>
-        ${_gicaPBar(passPct, GICA_GRADE_COLORS.A)}
-        <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-top:5px;">
-          <span>${passPct}%</span><span>Target: ${total}</span>
+      <div class="stat-card">
+        <div class="stat-card__label">Grade A</div>
+        <div class="stat-card__value" style="color:${GICA_GRADE_COLORS.A};margin-bottom:8px;">${vm.aCount}</div>
+        ${_gicaPBar(vm.passPct, GICA_GRADE_COLORS.A)}
+        <div class="u-between u-muted stat-foot">
+          <span>${vm.passPct}%</span><span>Target: ${vm.total}</span>
         </div>
       </div>
 
       <!-- Avg score -->
-      <div style="${CARD}">
-        <div style="${LBL}">Avg score</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
-          <span style="font-size:1.8rem;font-weight:700;color:var(--text);">${avgPct}%</span>
-          <span>≈ ${_gicaGradeBadge(avgGrade)}</span>
+      <div class="stat-card">
+        <div class="stat-card__label">Avg score</div>
+        <div class="stat-card__val-row">
+          <span class="stat-card__value stat-card__value--flush">${vm.avgPct}%</span>
+          <span>≈ ${_gicaGradeBadge(vm.avgGrade)}</span>
+        </div>
+        <div style="margin-top:8px;">${_gicaPBar(vm.avgPct, GICA_GRADE_COLORS[vm.avgGrade])}</div>
+        <div class="criteria-list">
+          <span class="u-muted criteria-list__head">Criteria</span>
+          ${[{g:'A',r:'85 – 100%'},{g:'B',r:'65 – 84%'},{g:'C',r:'50 – 64%'},{g:'D',r:'≤ 49%'}]
+            .map(c => `<div class="criteria-list__row">
+              <span class="donut-legend__dot" style="background:${GICA_GRADE_COLORS[c.g]};"></span>
+              <span class="u-muted">Grade ${c.g}</span>
+              <span class="criteria-list__range">${c.r}</span>
+            </div>`).join('')}
         </div>
       </div>
 
-      <!-- Need retest: label+number left, mini bar chart right -->
-      <div style="${CARD}flex-direction:row;gap:12px;align-items:flex-start;">
-        <div style="min-width:0;">
-          <div style="${LBL}">Need retest</div>
-          <div style="${VAL}${needRetest > 0 ? 'color:#dc2626;' : ''}">${needRetest}</div>
-        </div>
-        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;margin-top:2px;">
-          ${(() => { const mx = Math.max(...retestBuRows.map(r => r.n), 1); return retestBuRows.map(r => `
-            <div style="display:flex;align-items:center;gap:5px;font-size:0.62rem;font-weight:600;">
-              <span style="min-width:26px;color:var(--text);">${escapeHtml(r.bu)}</span>
-              <div style="flex:1;height:5px;background:var(--border-light);border-radius:3px;overflow:hidden;">
-                <div style="width:${Math.round(r.n/mx*100)}%;height:100%;background:${GICA_BU_COLORS[r.bu]||'#6b7280'};border-radius:3px;"></div>
-              </div>
-              <span style="min-width:16px;text-align:right;color:var(--text);">${r.n}</span>
-            </div>`).join(''); })()}
-        </div>
+      <!-- Need retest -->
+      <div class="stat-card">
+        <div class="stat-card__label">Need retest</div>
+        <div class="stat-card__value"${vm.needRetest > 0 ? ' style="color:#dc2626;"' : ''}>${vm.needRetest}</div>
+        ${buBarChart(vm.retestBuRows.map(r => ({ bu: r.bu, count: r.n, empty: r.n === 0 })))}
       </div>
 
     </div>`;
 
-  const buCards = BU_ORDER.map(bu => {
-    const inBu = emps.filter(e => e.bu === bu);
-    if (!inBu.length) {
-      return `<div style="${CARD}opacity:0.45;">
-        <div style="font-size:1.05rem;font-weight:700;color:var(--text-muted);">${escapeHtml(bu)}</div>
-        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:12px;">— no data —</div>
+  const buCards = vm.buCards.map(c => {
+    if (c.empty) {
+      return `<div class="stat-card stat-card--empty">
+        <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
+        <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
       </div>`;
     }
-    const cnt = { A: 0, B: 0, C: 0, D: 0 };
-    inBu.forEach(e => { if (cnt[e.grade] != null) cnt[e.grade]++; });
-    const avg = inBu.reduce((s, e) => s + (e.score || 0), 0) / inBu.length;
-    const avgG = _gicaScoreToGrade(avg);
-    const buColor = GICA_BU_COLORS[bu] || 'var(--text)';
-    return `<div style="${CARD}min-width:0;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
-        <span style="font-size:1.05rem;font-weight:700;color:${buColor};">${escapeHtml(bu)}</span>
-        <span style="font-size:0.82rem;color:var(--text-muted);">${inBu.length} คน</span>
+    const buColor = GICA_BU_COLORS[c.bu] || 'var(--text)';
+    return `<div class="stat-card" style="min-width:0;">
+      <div class="bu-head">
+        <span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+        <span class="u-muted bu-count">${c.count} คน</span>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;">
-        <span>Avg</span><strong style="color:var(--text);">${Math.round(avg * 100)}% (${avgG})</strong>
+      <div class="bu-card__donut-row">
+        ${buDonut(c.cnt, c.count)}
+        ${buLegend(c.cnt)}
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px;font-size:0.72rem;margin-bottom:8px;">
-        ${['A','B','C','D'].map(g => `<div style="display:flex;justify-content:space-between;font-size:0.65rem;font-weight:600;"><span style="color:${GICA_GRADE_COLORS[g]};">${g}</span><span style="color:var(--text);">${cnt[g]}</span></div>`).join('')}
+      <div class="stat-card__footer">
+        <div class="bu-gauge-col">
+          <div class="bu-gauge-row">
+            <div class="u-between"><span class="u-muted">Avg Score</span><span>${c.avgPct}%</span></div>
+            <div class="pbar pbar--6"><div class="pbar__fill" style="background:${GICA_GRADE_COLORS[c.avgGrade]};width:${c.avgPct}%;"></div></div>
+          </div>
+          <div class="bu-gauge-row">
+            <div class="u-between"><span class="u-muted">Grade A ≥80%</span><span>${c.aTargetPct}%</span></div>
+            <div class="pbar pbar--6"><div class="pbar__fill" style="background:${GICA_GRADE_COLORS.A};width:${c.aTargetPct}%;"></div></div>
+          </div>
+        </div>
       </div>
-      ${gauge(cnt, inBu.length)}
     </div>`;
   }).join('');
 
-  container.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
-  container.innerHTML = `
-    ${kpi}
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;">${buCards}</div>`;
+  return `${kpi}
+    <div class="stat-grid stat-grid--6">${buCards}</div>`;
+}
+
+function _mountGicaSummary(html) {
+  const container = $('gica-summary');
+  if (!container) return;
+  container.innerHTML = html;
+  // No internal event handlers to re-wire: GICA controls live in static HTML and
+  // are wired once by _wireGicaControls(). This is the place to re-wire should the
+  // summary ever gain its own interactive elements.
+}
+
+function renderGicaSummary() {
+  const vm = _computeGicaSummary(_gicaData.employees || [], _gicaData.bus || []);
+  _mountGicaSummary(_gicaSummaryHtml(vm));
 }
 
 // ── Chart: grade distribution by BU (stacked) ─────────────────────────────────
@@ -4436,7 +4559,7 @@ function renderGicaScheduleChart() {
         plugins: {
           legend: { display: false },
           datalabels: {
-            color: document.documentElement.dataset.theme === 'dark' ? '#ffffff' : '#000000',
+            color: () => document.documentElement.dataset.theme === 'dark' ? '#ffffff' : '#000000',
             font: { size: 10, weight: '700' },
             anchor: 'end',
             align: 'end',
@@ -4489,8 +4612,6 @@ function renderGicaScheduleDrill() {
   const buLabel = _gicaSchedBu ? ` · <span style="color:${GICA_BU_COLORS[_gicaSchedBu] || 'var(--accent)'};">${escapeHtml(_gicaSchedBu)}</span>` : '';
   const typeLabel = _gicaSchedMode !== 'all' ? ` (${_gicaSchedMode})` : '';
   const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-  const TH = 'padding:6px 9px;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-align:left;border-bottom:1px solid var(--border-light);';
-  const TD = 'padding:6px 9px;font-size:0.78rem;color:var(--text);border-bottom:1px solid var(--border-light);';
   wrap.innerHTML = `
     <div class="gica-print-header" style="margin-bottom:16px;">
       <div style="font-size:1.1rem;font-weight:700;">รายชื่อพนักงานที่ต้องสอบ GICA${typeLabel}</div>
@@ -4504,18 +4625,18 @@ function renderGicaScheduleDrill() {
     </div>
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
       <thead><tr>
-        <th style="${TH}">BU</th><th style="${TH}">ชื่อ</th><th style="${TH}">แผนก</th>
-        <th style="${TH}">เกรดล่าสุด</th><th style="${TH}">ครั้งที่</th><th style="${TH}">ประเภท</th><th style="${TH}">เหลือ</th>
+        <th class="drill-th">BU</th><th class="drill-th">ชื่อ</th><th class="drill-th">แผนก</th>
+        <th class="drill-th">เกรดล่าสุด</th><th class="drill-th">ครั้งที่</th><th class="drill-th">ประเภท</th><th class="drill-th">เหลือ</th>
       </tr></thead>
       <tbody>
         ${rows.map(e => `<tr>
-          <td style="${TD}">${escapeHtml(e.bu)}</td>
-          <td style="${TD}font-weight:600;">${escapeHtml(e.name)}</td>
-          <td style="${TD}color:var(--text-muted);">${escapeHtml(e.deptname)}</td>
-          <td style="${TD}">${_gicaGradeBadge(e.grade)} ${e.score != null ? Math.round(e.score * 100) + '%' : ''}</td>
-          <td style="${TD}text-align:center;">${e.attempt}</td>
-          <td style="${TD}">${_gicaTypeBadge(e.nextType)}</td>
-          <td style="${TD}">${_gicaDaysBadge(e.nextDate)}</td>
+          <td class="drill-td">${escapeHtml(e.bu)}</td>
+          <td class="drill-td" style="font-weight:600;">${escapeHtml(e.name)}</td>
+          <td class="drill-td u-muted">${escapeHtml(e.deptname)}</td>
+          <td class="drill-td">${_gicaGradeBadge(e.grade)} ${e.score != null ? Math.round(e.score * 100) + '%' : ''}</td>
+          <td class="drill-td" style="text-align:center;">${e.attempt}</td>
+          <td class="drill-td">${_gicaTypeBadge(e.nextType)}</td>
+          <td class="drill-td">${_gicaDaysBadge(e.nextDate)}</td>
         </tr>`).join('')}
       </tbody>
     </table></div>`;

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/styles.css?v=56" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=71" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -598,17 +598,17 @@
         <!-- KPI + BU breakdown (filled by JS) -->
         <div id="gica-summary"></div>
 
-<div class="charts" style="display: flex; gap: 16px;">
-  
-  <div class="card" style="padding:16px; flex: 1; display: flex; flex-direction: column;">
-    <div class="chart-header" style="display:flex; align-items:center; min-height: 50px; margin-bottom:12px;">
+<div class="charts charts--flex">
+
+  <div class="card card--chart">
+    <div class="chart-header">
       <h3 style="margin:0; font-size:1rem; color:var(--text);">Grade distribution by BU</h3>
     </div>
-    <div class="chart-canvas-wrap" style="flex-grow: 1;"><canvas id="gica-gradeDistChart"></canvas></div>
+    <div class="chart-canvas-wrap"><canvas id="gica-gradeDistChart"></canvas></div>
   </div>
 
-  <div class="card" style="padding:16px; flex: 1; display: flex; flex-direction: column;">
-    <div class="chart-header" style="display:flex; align-items:center; justify-content:space-between; min-height: 50px; margin-bottom:12px;">
+  <div class="card card--chart">
+    <div class="chart-header">
       <h3 style="margin:0; font-size:1rem; color:var(--text);">Inside Data</h3>
       <div style="display:flex; align-items:center; gap:8px;">
         <select id="gica-insideBuFilter" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer;">
@@ -622,14 +622,14 @@
         </div>
       </div>
     </div>
-    <div class="chart-canvas-wrap" style="position:relative; flex-grow: 1;"><canvas id="gica-insideChart"></canvas></div>
+    <div class="chart-canvas-wrap"><canvas id="gica-insideChart"></canvas></div>
     <div id="gica-insideHint" class="hidden" style="padding:6px 0 0; font-size:0.82rem; color:var(--text-muted); min-height:24px;"></div>
   </div>
-  
+
 </div>
 
         <!-- Upcoming test schedule -->
-        <div class="card" style="padding:16px;margin-top:-16px;">
+        <div class="card card--section">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
             <h3 style="margin:0;font-size:1rem;color:var(--text);">Upcoming test schedule</h3>
             <div id="gica-schedToggle" class="toggle-group">
@@ -657,7 +657,7 @@
         </div>
 
         <!-- Employee data table -->
-        <div class="card" style="padding:16px;margin-top:-16px;">
+        <div class="card card--section">
           <h3 style="margin:0 0 12px;font-size:1rem;font-weight:700;color:var(--text);">รายชื่อพนักงาน (ผลล่าสุด)</h3>
           <div class="filters">
             <select id="gica-filterBu"><option value="">ทุก BU</option></select>
@@ -690,6 +690,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=115"></script>
+  <script src="/static/js/app.js?v=140"></script>
 </body>
 </html>

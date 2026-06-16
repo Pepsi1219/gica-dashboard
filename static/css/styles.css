@@ -1703,6 +1703,7 @@ tbody tr:hover { filter: brightness(.97); }
 .chart-canvas-wrap {
   position: relative;
   height: 280px;
+  flex-grow: 1;
 }
 .chart-canvas-wrap > canvas {
   position: absolute !important;
@@ -1734,6 +1735,207 @@ tbody tr:hover { filter: brightness(.97); }
   border-color: var(--blue2);
   color: #fff;
 }
+
+/* ============================================================================
+   DASHBOARD TOOLBOX — reusable component classes for JS-rendered summary cards
+   ----------------------------------------------------------------------------
+   Single source of truth for the dashboard card UI. These mirror the inline
+   "style constants" that are currently duplicated inside app.js
+   (CARD / LBL / VAL / GRADE_COL across renderJumperSummary / renderTrainerSummary
+   / renderGicaSummary). Prefer these classes over inline styles in new code.
+   Existing inline styles will be migrated onto them incrementally — until then
+   nothing here is referenced yet, so adding them changes no current rendering.
+   ============================================================================ */
+
+/* — Card grid (KPI row / BU row) — */
+.stat-grid { display: grid; gap: 12px; }
+.stat-grid--3 { grid-template-columns: repeat(3, 1fr); }
+.stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.stat-grid--5 { grid-template-columns: repeat(5, 1fr); }
+.stat-grid--6 { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 860px) {
+  .stat-grid--3, .stat-grid--4, .stat-grid--5, .stat-grid--6 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* — Stat card (replaces JS `CARD` constant) — */
+.stat-card {
+  background: var(--surface);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.stat-card--row { flex-direction: row; gap: 12px; align-items: flex-start; }
+
+.stat-card__label {                             /* replaces JS `LBL` */
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.stat-card__value {                             /* replaces JS `VAL` */
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-top: 4px;
+  color: var(--text);
+}
+.stat-card__value--flush { margin-top: 0; }     /* value placed inline beside other content */
+
+/* — Dashboard summary containers (replace JS container.style.cssText) — */
+#gica-summary, #jtp-summary, #trainer-summary { display: flex; flex-direction: column; gap: 12px; }
+
+/* — Card header row; min-height keeps chart canvases aligned across columns — */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.card-head h3 { margin: 0; font-size: 1rem; color: var(--text); }
+
+/* — Grade A/B/C/D breakdown (replaces JS `GRADE_COL`) — */
+.grade-list { display: flex; flex-direction: column; gap: 2px; }
+.grade-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+.grade-row > span:last-child { color: var(--text); }  /* count keeps body color; letter gets grade color inline */
+
+/* — Utilities for the most-repeated inline patterns (34× / 52× in app.js) — */
+.u-between { display: flex; justify-content: space-between; }
+.u-muted   { color: var(--text-muted); }
+.u-mt-auto { margin-top: auto; }
+.drill-th { padding:6px 9px; font-size:0.72rem; font-weight:600; color:var(--text-muted); text-align:left; border-bottom:1px solid var(--border-light); }
+.drill-td { padding:6px 9px; font-size:0.78rem; color:var(--text); border-bottom:1px solid var(--border-light); }
+.charts--flex { display: flex; gap: 16px; }
+.card--chart { padding: 16px; flex: 1; display: flex; flex-direction: column; margin-bottom: 0; }
+.card--section { padding: 16px; margin-bottom: 0; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 50px; margin-bottom: 12px; flex-wrap: wrap; }
+
+/* — GICA Overall Score donut card — */
+.stat-card__donut-row { display:flex; align-items:center; gap:14px; margin-top:8px; flex:1; }
+.donut-wrap {
+   position:relative; 
+   width:100px; 
+   height:100px; 
+   flex-shrink:0;
+   display: flex;
+   justify-content: center;
+   align-items: center;
+   margin-left: 20px;
+   }
+.donut-wrap > svg { 
+  display:block; 
+  width:100px; 
+  height:100px; 
+}
+.donut-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
+.donut-count { font-size:1.45rem; font-weight:800; color:var(--text); line-height:1; }
+.donut-unit { font-size:0.6rem; margin-top:1px; }
+.donut-legend { 
+  display:flex; 
+  flex-direction:column; 
+  gap:8px; 
+  flex: 0 0 auto; 
+  min-width:0;
+  margin-left: auto; }
+.donut-legend__row { display:flex; align-items:center; gap:8px; font-size:0.74rem; }
+.donut-legend--sm { gap:5px; }
+.donut-legend--sm .donut-legend__row { font-size:0.65rem; }
+.donut-legend--sm .donut-legend__grade { min-width:36px; margin-right:auto; }
+.donut-legend--sm .donut-legend__count { margin-left:2px; min-width:18px; }
+.donut-legend__dot {
+  width:9px;
+  height:9px;
+  border-radius:3px;
+  flex-shrink:0; }
+.donut-legend__grade {
+  min-width:9px; 
+}
+.donut-legend__count { 
+  font-weight:700; 
+  color:var(--text);
+  margin-left: auto;
+  text-align: right;
+ }
+/* — Gauge bar (GICA BU card grade distribution) — */
+.gauge-bar { display:flex; height:7px; border-radius:4px; overflow:hidden; gap:1px; }
+.gauge-bar--empty { height:7px; background:var(--border-light); border-radius:4px; }
+/* — Mini bar (GICA Need Retest horizontal bar chart) — */
+.mini-bar__row { display:flex; align-items:center; gap:5px; font-size:0.62rem; font-weight:600; }
+.mini-bar__bu { min-width:26px; color:var(--text); }
+.mini-bar__track { flex:1; height:5px; background:var(--border-light); border-radius:3px; overflow:hidden; }
+.mini-bar__fill { height:100%; border-radius:3px; }
+.mini-bar__count { min-width:16px; text-align:right; color:var(--text); }
+/* — Summary progress bar (Jumper + Trainer stat cards) — */
+.pbar { background:var(--progress-track); border-radius:999px; overflow:hidden; }
+.pbar--6 { height:6px; }
+.pbar--5 { height:5px; margin-top:3px; }
+.pbar__fill { height:100%; border-radius:999px; transition:width .3s; }
+/* — Summary stat card sub-components — */
+.stat-card__value--md { font-size:1.6rem; font-weight:700; margin-bottom:6px; }
+.stat-foot { font-size:0.72rem; margin-top:4px; }
+.stat-card__footer { font-size:0.7rem; border-top:1px solid var(--border-light); padding-top:6px; margin-top:auto; }
+.stat-section { display:flex; flex-direction:column; gap:10px; }
+.stat-card--empty { opacity:0.45; }
+.stat-status-list { font-size:0.7rem; display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
+/* — BU sub-card shared patterns — */
+.bu-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+.bu-name { font-size:1.05rem; font-weight:700; }
+.bu-count { font-size:0.82rem; }
+/* — Trainer RSUB helper — */
+.rsub { font-size:0.68rem; display:flex; flex-direction:column; gap:2px; justify-content:center; }
+/* — KPI card header (label row in summary KPI cards) — */
+.kpi-head { align-items:flex-start; margin-bottom:4px; }
+.kpi-head--6 { margin-bottom:6px; }
+/* — GICA sub-card layout helpers — */
+.stat-card__val-row { display:flex; align-items:center; gap:8px; margin-top:4px; }
+.stat-card__mini-col { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; margin-top:2px; }
+.stat-card__mini-col--value-top { margin-top:21px; }
+/* — GICA Avg score criteria list — */
+.criteria-list { display:flex; flex-direction:column; gap:2px; margin-top:10px; border-top:1px solid var(--border-light); padding-top:7px; }
+.criteria-list__head { font-size:0.6rem; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:3px; }
+.criteria-list__row { display:flex; align-items:center; gap:5px; font-size:0.64rem; }
+.criteria-list__range { margin-left:auto; font-weight:600; color:var(--text); }
+/* — BU donut (compact variant for 6-column Individual BU cards) — */
+.donut-wrap--sm { 
+  position: relative; 
+  width: 80px; 
+  height: 80px; 
+  flex-shrink: 0; 
+  display: flex;          /* เพิ่มเพื่อใช้จัดกลางภายในวง */
+  justify-content: center; /* จัดโดนัทให้อยู่กลางพื้นที่ 80px ของมันเอง */
+  align-items: center;
+  margin-left: 20px;
+}
+.donut-wrap--sm > svg { 
+  display:block; 
+  width:80px; 
+  height:80px; }
+.donut-count--sm { 
+  font-size:1rem; 
+  font-weight:800; 
+  color:var(--text); 
+  line-height:1; }
+.bu-card__donut-row { 
+  display:flex; 
+  align-items:center; 
+  justify-content: flex-start;
+  gap:16px; 
+  margin-top:4px;
+  width: 100%;
+ }
+/* — BU card gauge section — */
+.bu-gauge-col { display:flex; flex-direction:column; gap:6px; }
+.bu-gauge-row { display:flex; flex-direction:column; gap:3px; }
+/* — Utilities — */
+.u-text { color:var(--text); }
+.u-end { display:flex; justify-content:flex-end; }
 
 /* Individual BU floating sub-menu (under the Individual toggle button) */
 .individual-wrap { position: relative; display: inline-block; }
