@@ -4142,7 +4142,7 @@ async function initGicaTab() {
 //   _gicaSummaryHtml    → html string (pure: viewModel in → string out; no DOM, no globals)
 //   _mountGicaSummary   → DOM         (imperative shell: the only DOM touch)
 //   renderGicaSummary   → orchestrator that wires the three together
-function _computeGicaQuadrant(emps, groupId, buFilter) {
+function _computeGicaQuadrant(emps, groupId, buSet, deptSet) {
   const grp = GICA_QUAD_GROUPS.find(g => g.id === groupId) || GICA_QUAD_GROUPS[0];
   const xT  = grp.expM ? GICA_GRADE_THRESH[grp.expM] : null;
   const yT  = grp.expI ? GICA_GRADE_THRESH[grp.expI] : null;
@@ -4155,7 +4155,8 @@ function _computeGicaQuadrant(emps, groupId, buFilter) {
   const points = [];
   emps.forEach((e, i) => {
     if (!e.score1 && !e.score2) return;
-    if (buFilter !== 'all' && e.bu !== buFilter) return;
+    if (buSet.size   > 0 && !buSet.has(e.bu))         return;
+    if (deptSet.size > 0 && !deptSet.has(e.deptname)) return;
     if (grp.levels && !grp.levels.includes(e.level)) return;
     const rx = e.score1 || 0, ry = e.score2 || 0;
     const x  = Math.max(0.0, Math.min(1.0, rx + jitter(i, 0)));
@@ -4364,7 +4365,8 @@ function _computeGicaSummary(emps, busRaw) {
     needRetest: emps.filter(e => e.grade && e.grade !== 'A').length,
     retestBuRows, buCards,
     expMatrix, expMatrixDept,
-    expMatrixBus: BU_ORDER.filter(bu => emps.some(e => e.bu === bu)),
+    expMatrixBus:   BU_ORDER.filter(bu => emps.some(e => e.bu === bu)),
+    expMatrixDepts: [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort(),
   };
 }
 
@@ -4733,11 +4735,17 @@ function _gicaSummaryHtml(vm) {
     <div class="card card--section" id="gica-quad-section" style="margin-top:12px;">
       <div class="chart-header">
         <h3 style="margin:0;font-size:1rem;color:var(--text);">Quadrant Analysis</h3>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <select class="quad-bu-select" id="quad-bu-select">
-            <option value="all">BU: ทั้งหมด</option>
-            ${vm.expMatrixBus.map(bu => `<option value="${escapeHtml(bu)}">${escapeHtml(bu)}</option>`).join('')}
-          </select>
+      </div>
+      <div class="quad-filter-bar">
+        <div class="quad-filter-row" id="quad-bu-row">
+          <span class="quad-filter-label">BU :</span>
+          <button class="quad-btn quad-btn--active" data-bu="all">ทั้งหมด</button>
+          ${vm.expMatrixBus.map(bu => `<button class="quad-btn" data-bu="${escapeHtml(bu)}">${escapeHtml(bu)}</button>`).join('')}
+        </div>
+        <div class="quad-filter-row" id="quad-dept-row">
+          <span class="quad-filter-label">แผนก :</span>
+          <button class="quad-btn quad-btn--active" data-dept="all">ทั้งหมด</button>
+          ${vm.expMatrixDepts.map(d => `<button class="quad-btn" data-dept="${escapeHtml(d)}">${escapeHtml(d)}</button>`).join('')}
         </div>
       </div>
       <div class="quad-grid">
@@ -4774,15 +4782,16 @@ function _mountGicaQuadrant(container, emps) {
     III: { bg: 'rgba(99,102,241,0.65)', bd: '#4338ca', desc: 'Meas. Pass / Insp. Fail' },
     IV:  { bg: 'rgba(220,38,38,0.65)',  bd: '#b91c1c', desc: 'Fail Both'               },
   };
-  const _charts = {};
-  let _bu = 'all';
+  const _charts  = {};
+  const _buSet   = new Set();
+  const _deptSet = new Set();
 
   const buildOne = grp => {
     const canvas = section.querySelector(`#gica-quad-canvas-${grp.id}`);
     if (!canvas) return;
     if (_charts[grp.id]) { _charts[grp.id].destroy(); delete _charts[grp.id]; }
 
-    const vm = _computeGicaQuadrant(emps, grp.id, _bu);
+    const vm = _computeGicaQuadrant(emps, grp.id, _buSet, _deptSet);
     const grouped = {};
     vm.points.forEach(p => { (grouped[p.quad] = grouped[p.quad] || []).push(p); });
     const datasets = ['I','III','II','IV'].filter(q => grouped[q]?.length).map(q => ({
@@ -4873,8 +4882,28 @@ function _mountGicaQuadrant(container, emps) {
 
   const buildAll = () => GICA_QUAD_GROUPS.forEach(buildOne);
 
-  const select = section.querySelector('#quad-bu-select');
-  if (select) select.addEventListener('change', () => { _bu = select.value; buildAll(); });
+  const wireMultiFilter = (rowId, dataKey, targetSet) => {
+    const row = section.querySelector(`#${rowId}`);
+    if (!row) return;
+    row.addEventListener('click', e => {
+      const btn = e.target.closest(`.quad-btn[data-${dataKey}]`);
+      if (!btn) return;
+      const val = btn.dataset[dataKey];
+      if (val === 'all') {
+        targetSet.clear();
+      } else {
+        targetSet.has(val) ? targetSet.delete(val) : targetSet.add(val);
+      }
+      row.querySelectorAll(`.quad-btn[data-${dataKey}]`).forEach(b => {
+        const v = b.dataset[dataKey];
+        b.classList.toggle('quad-btn--active', v === 'all' ? targetSet.size === 0 : targetSet.has(v));
+      });
+      buildAll();
+    });
+  };
+
+  wireMultiFilter('quad-bu-row',   'bu',   _buSet);
+  wireMultiFilter('quad-dept-row', 'dept', _deptSet);
 
   buildAll();
 }
