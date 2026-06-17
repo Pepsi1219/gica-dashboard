@@ -4022,7 +4022,16 @@ const GICA_GRADES        = ['A', 'B', 'C', 'D'];
 const GICA_GRADE_RANK    = { A: 4, B: 3, C: 2, D: 1 };
 const GICA_GRADE_COLORS  = { A: '#16a34a', B: '#2563eb', C: '#f59e0b', D: '#dc2626' };
 const GICA_GRADE_BG      = { A: '#dcfce7', B: '#dbeafe', C: '#fef3c7', D: '#fee2e2' };
-const GICA_LEVEL_ORDER   = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head','Supervisor','Officer','Worker'];
+const GICA_LEVEL_ORDER   = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head','Supervisor*','Supervisor','Officer','Worker'];
+const GICA_QUAD_GROUPS = [
+  { id: 'g-qdm',  label: 'QEDM / AQEDM / DVM / ADVM', levels: ['QEDM','AQEDM','DVM','ADVM'], expM: 'B', expI: 'C' },
+  { id: 'g-dpm',  label: 'DPM / ADPM',                 levels: ['DPM','ADPM'],                 expM: 'B', expI: 'B' },
+  { id: 'g-sups', label: 'Supervisor*',                 levels: ['Supervisor*'],                expM: 'A', expI: 'B' },
+  { id: 'g-sup',  label: 'Supervisor',                  levels: ['Supervisor'],                 expM: 'A', expI: 'A' },
+  { id: 'g-off',  label: 'Officer',                     levels: ['Officer'],                    expM: 'A', expI: 'A' },
+  { id: 'g-wkr',  label: 'Worker',                      levels: ['Worker'],                     expM: 'A', expI: 'A' },
+];
+const GICA_GRADE_THRESH = { A: 0.85, B: 0.65, C: 0.50, D: 0.00 };
 const GICA_GRADE_TEXT    = { A: '#15803d', B: '#1d4ed8', C: '#b45309', D: '#b91c1c' };
 
 let _gicaData       = null;
@@ -4088,6 +4097,11 @@ function _gicaPBar(pct, color) {
   return `<div style="height:7px;background:var(--border-light);border-radius:4px;overflow:hidden;">
     <div style="height:100%;width:${p}%;background:${color};border-radius:4px;"></div></div>`;
 }
+function _gicaExpBadge(g) {
+  return g && GICA_GRADE_COLORS[g]
+    ? `<span class="exp-badge exp-badge--${g}">${g}</span>`
+    : `<span class="exp-badge exp-badge--expect">—</span>`;
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 async function initGicaTab() {
@@ -4128,6 +4142,36 @@ async function initGicaTab() {
 //   _gicaSummaryHtml    → html string (pure: viewModel in → string out; no DOM, no globals)
 //   _mountGicaSummary   → DOM         (imperative shell: the only DOM touch)
 //   renderGicaSummary   → orchestrator that wires the three together
+function _computeGicaQuadrant(emps, groupId, buFilter) {
+  const grp = GICA_QUAD_GROUPS.find(g => g.id === groupId) || GICA_QUAD_GROUPS[0];
+  const xT  = grp.expM ? GICA_GRADE_THRESH[grp.expM] : null;
+  const yT  = grp.expI ? GICA_GRADE_THRESH[grp.expI] : null;
+
+  const jitter = (i, axis) => {
+    const h = Math.sin(i * 127.1 + axis * 311.7) * 43758.5453;
+    return (h - Math.floor(h) - 0.5) * 0.03;
+  };
+
+  const points = [];
+  emps.forEach((e, i) => {
+    if (!e.score1 && !e.score2) return;
+    if (buFilter !== 'all' && e.bu !== buFilter) return;
+    if (grp.levels && !grp.levels.includes(e.level)) return;
+    const rx = e.score1 || 0, ry = e.score2 || 0;
+    const x  = Math.max(0.0, Math.min(1.0, rx + jitter(i, 0)));
+    const y  = Math.max(0.0, Math.min(1.0, ry + jitter(i, 1)));
+    const quad = xT !== null
+      ? (x >= xT && y >= yT ? 'I' : x < xT && y >= yT ? 'II' : x >= xT ? 'III' : 'IV')
+      : (e.passed === true ? 'pass' : e.passed === false ? 'fail' : 'na');
+    points.push({ x, y, raw1: rx, raw2: ry, quad,
+      name: e.name, bu: e.bu, level: e.level, grade1: e.grade1, grade2: e.grade2 });
+  });
+
+  const counts = {};
+  points.forEach(p => { counts[p.quad] = (counts[p.quad] || 0) + 1; });
+  return { points, xT, yT, counts, grp, total: points.length };
+}
+
 function _computeGicaSummary(emps, busRaw) {
   const total = emps.length;
   const byGrade = { A: 0, B: 0, C: 0, D: 0 };
@@ -4210,6 +4254,104 @@ function _computeGicaSummary(emps, busRaw) {
     };
   });
 
+  // Expectation matrix: BU × Level — cell aggregates pass% + avg grade vs expectation
+  const _avgGrade = arr => {
+    if (!arr.length) return null;
+    const ranks = arr.map(g => GICA_GRADE_RANK[g] || 0).filter(r => r > 0);
+    if (!ranks.length) return null;
+    const avg = ranks.reduce((s, r) => s + r, 0) / ranks.length;
+    return Object.keys(GICA_GRADE_RANK).reduce((best, g) =>
+      Math.abs(GICA_GRADE_RANK[g] - avg) < Math.abs(GICA_GRADE_RANK[best] - avg) ? g : best, 'D');
+  };
+  const _mode = arr => {
+    const cnt = {};
+    arr.forEach(v => { if (v) cnt[v] = (cnt[v] || 0) + 1; });
+    let best = '', max = 0;
+    Object.entries(cnt).forEach(([k, v]) => { if (v > max) { best = k; max = v; } });
+    return best;
+  };
+  const expMatrix = GICA_LEVEL_ORDER
+    .filter(lv => emps.some(e => e.level === lv))
+    .map(lv => {
+      const atLevel = emps.filter(e => e.level === lv);
+      const expM = _mode(atLevel.map(e => e.exp1));
+      const expI = _mode(atLevel.map(e => e.exp2));
+      const cells = {};
+      BU_ORDER.forEach(bu => {
+        const cell = atLevel.filter(e => e.bu === bu);
+        if (!cell.length) { cells[bu] = { empty: true }; return; }
+        const passBoth = cell.filter(e => e.passed === true).length;
+        const passMcnt = cell.filter(e =>
+          e.exp1 && e.grade1 && (GICA_GRADE_RANK[e.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0)).length;
+        const passIcnt = cell.filter(e =>
+          e.exp2 && e.grade2 && (GICA_GRADE_RANK[e.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0)).length;
+        const avgM = _avgGrade(cell.map(e => e.grade1));
+        const avgI = _avgGrade(cell.map(e => e.grade2));
+        cells[bu] = {
+          empty: false, count: cell.length,
+          avgM, avgI,
+          passBothCount: passBoth,
+          passBothPct: Math.round(passBoth / cell.length * 100),
+          passMPct: Math.round(passMcnt / cell.length * 100),
+          passIPct: Math.round(passIcnt / cell.length * 100),
+          passOkM: avgM && expM && (GICA_GRADE_RANK[avgM] || 0) >= (GICA_GRADE_RANK[expM] || 0),
+          passOkI: avgI && expI && (GICA_GRADE_RANK[avgI] || 0) >= (GICA_GRADE_RANK[expI] || 0),
+        };
+      });
+      return { level: lv, expM, expI, cells };
+    });
+
+  const _cellForGroup = (group, expM, expI) => {
+    const cells = {};
+    BU_ORDER.forEach(bu => {
+      const cell = group.filter(e => e.bu === bu);
+      if (!cell.length) { cells[bu] = { empty: true }; return; }
+      const passBoth = cell.filter(e => e.passed === true).length;
+      const passMcnt = cell.filter(e =>
+        e.exp1 && e.grade1 && (GICA_GRADE_RANK[e.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0)).length;
+      const passIcnt = cell.filter(e =>
+        e.exp2 && e.grade2 && (GICA_GRADE_RANK[e.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0)).length;
+      const avgM = _avgGrade(cell.map(e => e.grade1));
+      const avgI = _avgGrade(cell.map(e => e.grade2));
+      cells[bu] = {
+        empty: false, count: cell.length,
+        avgM, avgI,
+        passBothCount: passBoth,
+        passBothPct: Math.round(passBoth / cell.length * 100),
+        passMPct: Math.round(passMcnt / cell.length * 100),
+        passIPct: Math.round(passIcnt / cell.length * 100),
+        passOkM: avgM && expM && (GICA_GRADE_RANK[avgM] || 0) >= (GICA_GRADE_RANK[expM] || 0),
+        passOkI: avgI && expI && (GICA_GRADE_RANK[avgI] || 0) >= (GICA_GRADE_RANK[expI] || 0),
+      };
+    });
+    return cells;
+  };
+  const _aggForGroup = group => {
+    const cells = {};
+    BU_ORDER.forEach(bu => {
+      const cell = group.filter(e => e.bu === bu);
+      if (!cell.length) { cells[bu] = { empty: true }; return; }
+      const passBoth = cell.filter(e => e.passed === true).length;
+      cells[bu] = { empty: false, count: cell.length, passBothCount: passBoth,
+        passBothPct: Math.round(passBoth / cell.length * 100) };
+    });
+    return cells;
+  };
+
+  const depts = [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort();
+  const expMatrixDept = depts.map(dept => {
+    const atDept = emps.filter(e => e.deptname === dept);
+    const levelRows = GICA_LEVEL_ORDER
+      .filter(lv => atDept.some(e => e.level === lv))
+      .map(lv => {
+        const atLevel = atDept.filter(e => e.level === lv);
+        const expM = _mode(atLevel.map(e => e.exp1));
+        const expI = _mode(atLevel.map(e => e.exp2));
+        return { level: lv, expM, expI, cells: _cellForGroup(atLevel, expM, expI) };
+      });
+    return { dept, deptAgg: _aggForGroup(atDept), levelRows };
+  });
+
   return {
     total, byGrade,
     byGradeMeasure, byGradeInspect, totMeasure, totInspect,
@@ -4221,6 +4363,8 @@ function _computeGicaSummary(emps, busRaw) {
     avgGrade: _gicaScoreToGrade(avgScore),
     needRetest: emps.filter(e => e.grade && e.grade !== 'A').length,
     retestBuRows, buCards,
+    expMatrix, expMatrixDept,
+    expMatrixBus: BU_ORDER.filter(bu => emps.some(e => e.bu === bu)),
   };
 }
 
@@ -4469,6 +4613,144 @@ function _gicaSummaryHtml(vm) {
   const buFlipCards = vm.buCards.map(renderFlipCard).join('');
   const schedCards  = vm.buCards.map(renderSchedCard).join('');
 
+  const passClass = pct => pct >= 80 ? 'ok' : pct >= 60 ? 'mid' : 'bad';
+  const expBadge = _gicaExpBadge;
+
+  const _mkExpCell = (c, rowAttr) => {
+    if (!c || c.empty) return `<td class="exp-cell exp-cell--empty">—</td>`;
+    const cls = passClass(c.passBothPct);
+    return `<td class="exp-cell" ${rowAttr} title="คลิกดูรายชื่อ">
+      <div class="exp-cell__top">
+        <span class="exp-cell__count">${c.passBothCount}/${c.count} คน</span>
+        <span class="exp-cell__pct pass-pct--${cls}">${c.passBothPct}%</span>
+      </div>
+      <div class="pbar pbar--6" style="margin:2px 0 0;">
+        <div class="pbar__fill exp-pbar--${cls}" style="width:${c.passBothPct}%;"></div>
+      </div>
+    </td>`;
+  };
+
+  const buThs = vm.expMatrixBus.map(bu =>
+    `<th class="exp-th" style="color:${GICA_BU_COLORS[bu] || 'var(--text)'};">${escapeHtml(bu)}</th>`).join('');
+
+  const matrixRows = vm.expMatrix.map(row => {
+    const cells = vm.expMatrixBus.map(bu =>
+      _mkExpCell(row.cells[bu], `data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`)
+    ).join('');
+    return `<tr>
+      <td class="exp-row__head"><div class="exp-row__level">${escapeHtml(row.level)}</div></td>
+      <td class="exp-td--expect">${expBadge(row.expM)}</td>
+      <td class="exp-td--expect exp-td--expect-last">${expBadge(row.expI)}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  const matrixDeptRows = vm.expMatrixDept.map(({ dept, deptAgg, levelRows }, idx) => {
+    const aggCells = vm.expMatrixBus.map(bu => {
+      const c = deptAgg[bu];
+      if (!c || c.empty) return `<td class="exp-cell exp-cell--empty exp-cell--dept-agg">—</td>`;
+      const cls = passClass(c.passBothPct);
+      return `<td class="exp-cell exp-cell--dept-agg" data-dept="${escapeHtml(dept)}" data-bu="${escapeHtml(bu)}" title="คลิกดูรายชื่อทั้งแผนก">
+        <div class="exp-cell__top">
+          <span class="exp-cell__count">${c.passBothCount}/${c.count} คน</span>
+          <span class="exp-cell__pct pass-pct--${cls}">${c.passBothPct}%</span>
+        </div>
+        <div class="pbar pbar--6" style="margin:2px 0 0;">
+          <div class="pbar__fill exp-pbar--${cls}" style="width:${c.passBothPct}%;"></div>
+        </div>
+      </td>`;
+    }).join('');
+
+    const subRows = levelRows.map(row => {
+      const cells = vm.expMatrixBus.map(bu =>
+        _mkExpCell(row.cells[bu], `data-dept="${escapeHtml(dept)}" data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`)
+      ).join('');
+      return `<tr class="exp-level-sub-row">
+        <td class="exp-row__head exp-row__sub"><div class="exp-row__level">${escapeHtml(row.level)}</div></td>
+        <td class="exp-td--expect">${expBadge(row.expM)}</td>
+        <td class="exp-td--expect exp-td--expect-last">${expBadge(row.expI)}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    return `<tr class="exp-dept-head-row${idx > 0 ? ' exp-dept-head-row--sep' : ''}">
+        <td class="exp-row__dept-head" colspan="3">${escapeHtml(dept)}</td>
+        ${aggCells}
+      </tr>${subRows}`;
+  }).join('');
+
+  const matrix = vm.expMatrix.length ? `
+    <div class="card card--section gica-expect-section">
+      <div class="chart-header">
+        <h3 style="margin:0; font-size:1rem; color:var(--text);">Expectation Matrix</h3>
+        <div class="exp-legend">
+          <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#16a34a;"></span>≥80%</span>
+          <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#f59e0b;"></span>60–79%</span>
+          <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#dc2626;"></span>&lt;60%</span>
+        </div>
+      </div>
+      <div id="gica-matrix-tables">
+        <div class="exp-matrix-front">
+          <div class="exp-table-wrap">
+            <table class="exp-table">
+              <thead><tr>
+                <th class="exp-th exp-th--level">Level</th>
+                <th class="exp-th exp-th--expect" title="Measurement — เกรดที่คาดหวัง"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+                <th class="exp-th exp-th--expect exp-th--expect-last" title="Inspection — เกรดที่คาดหวัง"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+                ${buThs}
+              </tr></thead>
+              <tbody>${matrixRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="exp-matrix-back hidden">
+          <div class="exp-table-wrap">
+            <table class="exp-table">
+              <thead><tr>
+                <th class="exp-th exp-th--level exp-th--dept">Department</th>
+                <th class="exp-th exp-th--expect" title="Measurement — เกรดที่คาดหวัง"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+                <th class="exp-th exp-th--expect exp-th--expect-last" title="Inspection — เกรดที่คาดหวัง"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+                ${buThs}
+              </tr></thead>
+              <tbody>${matrixDeptRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="gica-expect-modal" class="gica-modal hidden">
+      <div class="gica-modal__backdrop" data-close="1"></div>
+      <div class="gica-modal__panel">
+        <div class="gica-modal__head">
+          <h4 id="gica-expect-modal-title" style="margin:0;font-size:1rem;"></h4>
+          <button class="gica-modal__close" data-close="1" aria-label="ปิด">✕</button>
+        </div>
+        <div id="gica-expect-modal-body" class="gica-modal__body"></div>
+      </div>
+    </div>` : '';
+
+  const quadSection = `
+    <div class="card card--section" id="gica-quad-section" style="margin-top:12px;">
+      <div class="chart-header">
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">Quadrant Analysis</h3>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select class="quad-bu-select" id="quad-bu-select">
+            <option value="all">BU: ทั้งหมด</option>
+            ${vm.expMatrixBus.map(bu => `<option value="${escapeHtml(bu)}">${escapeHtml(bu)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="quad-grid">
+        ${GICA_QUAD_GROUPS.map(g => `
+          <div class="quad-card">
+            <div class="quad-card__title">${escapeHtml(g.label)}</div>
+            <div class="quad-card__sub">${expBadge(g.expM)}&nbsp;/&nbsp;${expBadge(g.expI)}</div>
+            <div class="quad-chart-wrap"><canvas id="gica-quad-canvas-${g.id}"></canvas></div>
+          </div>`
+        ).join('')}
+      </div>
+    </div>`;
+
   return `${kpi}
     <div class="gica-bu-row">
       <div class="stat-grid stat-grid--6">${buFlipCards}</div>
@@ -4477,7 +4759,124 @@ function _gicaSummaryHtml(vm) {
         <span class="gica-flip-btn__label">ดู Inspection</span>
       </button>
     </div>
-    <div class="stat-grid stat-grid--6">${schedCards}</div>`;
+    <div class="stat-grid stat-grid--6">${schedCards}</div>
+    ${matrix}
+    ${quadSection}`;
+}
+
+function _mountGicaQuadrant(container, emps) {
+  const section = container.querySelector('#gica-quad-section');
+  if (!section || typeof Chart === 'undefined') return;
+
+  const QUAD_CFG = {
+    I:   { bg: 'rgba(22,163,74,0.65)',  bd: '#15803d', desc: 'Pass Both'               },
+    II:  { bg: 'rgba(245,158,11,0.65)', bd: '#b45309', desc: 'Meas. Fail / Insp. Pass' },
+    III: { bg: 'rgba(99,102,241,0.65)', bd: '#4338ca', desc: 'Meas. Pass / Insp. Fail' },
+    IV:  { bg: 'rgba(220,38,38,0.65)',  bd: '#b91c1c', desc: 'Fail Both'               },
+  };
+  const _charts = {};
+  let _bu = 'all';
+
+  const buildOne = grp => {
+    const canvas = section.querySelector(`#gica-quad-canvas-${grp.id}`);
+    if (!canvas) return;
+    if (_charts[grp.id]) { _charts[grp.id].destroy(); delete _charts[grp.id]; }
+
+    const vm = _computeGicaQuadrant(emps, grp.id, _bu);
+    const grouped = {};
+    vm.points.forEach(p => { (grouped[p.quad] = grouped[p.quad] || []).push(p); });
+    const datasets = ['I','III','II','IV'].filter(q => grouped[q]?.length).map(q => ({
+      label: `${q} — ${QUAD_CFG[q].desc} (${vm.counts[q] || 0})`,
+      data: grouped[q],
+      backgroundColor: QUAD_CFG[q].bg,
+      borderColor: QUAD_CFG[q].bd,
+      borderWidth: 1,
+      pointRadius: 4.5,
+      pointHoverRadius: 7,
+    }));
+
+    const cs       = getComputedStyle(document.documentElement);
+    const clrMuted = cs.getPropertyValue('--text-muted').trim() || '#6b6899';
+    const clrGrid  = cs.getPropertyValue('--border').trim()     || '#d4d2e8';
+
+    const quadLinesPlugin = {
+      id: `gicaQL_${grp.id}`,
+      afterDraw(chart) {
+        const { ctx, chartArea: ca, scales } = chart;
+        const xPx = scales.x.getPixelForValue(vm.xT);
+        const yPx = scales.y.getPixelForValue(vm.yT);
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = 'rgba(107,114,128,0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(xPx, ca.top);  ctx.lineTo(xPx, ca.bottom); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ca.left, yPx); ctx.lineTo(ca.right, yPx);  ctx.stroke();
+        ctx.restore();
+        ctx.save();
+        const pad = 5;
+        [
+          { q:'I',   tx: ca.right-pad, ty: ca.top+pad,    ta:'right', tb:'top'    },
+          { q:'II',  tx: ca.left+pad,  ty: ca.top+pad,    ta:'left',  tb:'top'    },
+          { q:'IV',  tx: ca.left+pad,  ty: ca.bottom-pad, ta:'left',  tb:'bottom' },
+          { q:'III', tx: ca.right-pad, ty: ca.bottom-pad, ta:'right', tb:'bottom' },
+        ].forEach(({ q, tx, ty, ta, tb }) => {
+          ctx.textAlign = ta; ctx.textBaseline = tb;
+          ctx.fillStyle = QUAD_CFG[q].bd;
+          const dy = tb === 'top' ? 11 : -11;
+          ctx.font = '700 9px Inter,sans-serif';
+          ctx.fillText(`${q}  (${vm.counts[q] || 0})`, tx, ty);
+          ctx.font = '400 8px Inter,sans-serif';
+          ctx.fillText(QUAD_CFG[q].desc, tx, ty + dy);
+        });
+        ctx.restore();
+      }
+    };
+
+    _charts[grp.id] = new Chart(canvas, {
+      type: 'scatter',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            min: 0, max: 1.2,
+            ticks: { color: clrMuted, font: { size: 9 }, callback: v => v <= 1.001 ? `${Math.round(v * 100)}%` : '', stepSize: 0.25 },
+            grid:  { color: clrGrid + '44' },
+          },
+          y: {
+            min: 0, max: 1.2,
+            ticks: { color: clrMuted, font: { size: 9 }, callback: v => v <= 1.001 ? `${Math.round(v * 100)}%` : '', stepSize: 0.25 },
+            grid:  { color: clrGrid + '44' },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => items[0]?.raw?.name || '—',
+              label: item => {
+                const d = item.raw;
+                return [
+                  `BU: ${d.bu}  ·  Level: ${d.level}`,
+                  `M: ${Math.round((d.raw1 || 0) * 100)}%  (${d.grade1 || '—'})`,
+                  `I: ${Math.round((d.raw2 || 0) * 100)}%  (${d.grade2 || '—'})`,
+                ];
+              }
+            }
+          }
+        }
+      },
+      plugins: [quadLinesPlugin],
+    });
+  };
+
+  const buildAll = () => GICA_QUAD_GROUPS.forEach(buildOne);
+
+  const select = section.querySelector('#quad-bu-select');
+  if (select) select.addEventListener('change', () => { _bu = select.value; buildAll(); });
+
+  buildAll();
 }
 
 function _mountGicaSummary(html) {
@@ -4501,6 +4900,109 @@ function _mountGicaSummary(html) {
     });
   };
   wireFlipAll('#gica-flip-all', '.flip-card-wrap[data-bu]', 'ดู Inspection', 'ดู Measurement');
+
+  // Expectation matrix — Scale+Fade transition Level ↔ Department
+  const matrixTables = container.querySelector('#gica-matrix-tables');
+  const section      = container.querySelector('.gica-expect-section');
+  if (matrixTables && section) {
+    let _matrixAnimating = false;
+    section.addEventListener('click', e => {
+      if (_matrixAnimating) return;
+      if (e.target.closest('.exp-cell[data-level], .exp-cell[data-dept]')) return;
+      const front = matrixTables.querySelector('.exp-matrix-front');
+      const back  = matrixTables.querySelector('.exp-matrix-back');
+      if (!front || !back) return;
+      _matrixAnimating = true;
+      matrixTables.style.transition = 'opacity 0.18s ease, transform 0.18s ease';
+      matrixTables.style.opacity   = '0';
+      matrixTables.style.transform = 'scale(0.97)';
+      setTimeout(() => {
+        const showingFront = !front.classList.contains('hidden');
+        front.classList.toggle('hidden',  showingFront);
+        back.classList.toggle('hidden',  !showingFront);
+        matrixTables.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
+        matrixTables.style.opacity   = '1';
+        matrixTables.style.transform = '';
+        setTimeout(() => { _matrixAnimating = false; }, 220);
+      }, 180);
+    });
+  }
+
+  // Expectation matrix drill-down
+  const modal     = container.querySelector('#gica-expect-modal');
+  const modalTtl  = container.querySelector('#gica-expect-modal-title');
+  const modalBody = container.querySelector('#gica-expect-modal-body');
+  const closeModal = () => modal && modal.classList.add('hidden');
+  if (modal) {
+    modal.querySelectorAll('[data-close="1"]').forEach(el => el.addEventListener('click', closeModal));
+  }
+  if (window._gicaEscHandler) document.removeEventListener('keydown', window._gicaEscHandler);
+  window._gicaEscHandler = e => { if (e.key === 'Escape') closeModal(); };
+  document.addEventListener('keydown', window._gicaEscHandler);
+
+  const _showModal = (list, title) => {
+    if (modalTtl) modalTtl.textContent = title;
+    if (modalBody) {
+      modalBody.innerHTML = list.length ? `
+        <table class="exp-modal-table">
+          <thead>
+            <tr>
+              <th>ชื่อ</th>
+              <th class="exp-modal-icon-th" title="Measurement"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+              <th class="exp-modal-icon-th" title="Inspection"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+              <th>Department</th><th>Position</th><th>M</th><th>I</th><th>ผล</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(e => {
+              const okM = e.exp1 && e.grade1 && (GICA_GRADE_RANK[e.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0);
+              const okI = e.exp2 && e.grade2 && (GICA_GRADE_RANK[e.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+              return `<tr>
+                <td>${escapeHtml(e.name || '—')}</td>
+                <td class="exp-modal-icon-td">${_gicaExpBadge(e.exp1)}</td>
+                <td class="exp-modal-icon-td">${_gicaExpBadge(e.exp2)}</td>
+                <td class="u-muted">${escapeHtml(e.deptname || '—')}</td>
+                <td class="u-muted">${escapeHtml(e.position || '—')}</td>
+                <td><span class="exp-badge ${okM ? 'exp-badge--pass' : 'exp-badge--fail'}">${e.grade1 || '—'}</span></td>
+                <td><span class="exp-badge ${okI ? 'exp-badge--pass' : 'exp-badge--fail'}">${e.grade2 || '—'}</span></td>
+                <td>${e.passed ? '<span class="exp-status exp-status--pass">ผ่าน</span>' : '<span class="exp-status exp-status--fail">ไม่ผ่าน</span>'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>` : '<div class="u-muted" style="text-align:center;padding:24px;">— ไม่มีข้อมูล —</div>';
+    }
+    if (modal) modal.classList.remove('hidden');
+  };
+
+  const emps = _gicaData.employees || [];
+  _mountGicaQuadrant(container, emps);
+  // Front face: Level × BU
+  container.querySelectorAll('.exp-cell[data-level]:not([data-dept])').forEach(td => {
+    td.addEventListener('click', () => {
+      const lv = td.dataset.level, bu = td.dataset.bu;
+      const list = emps.filter(e => e.level === lv && e.bu === bu)
+        .sort((a, b) => Number(b.passed) - Number(a.passed) || (a.name || '').localeCompare(b.name || ''));
+      _showModal(list, `${bu} · ${lv} — ${list.length} คน`);
+    });
+  });
+  // Back face dept agg row: Dept × BU (all levels in dept)
+  container.querySelectorAll('.exp-cell[data-dept]:not([data-level])').forEach(td => {
+    td.addEventListener('click', () => {
+      const dept = td.dataset.dept, bu = td.dataset.bu;
+      const list = emps.filter(e => e.deptname === dept && e.bu === bu)
+        .sort((a, b) => Number(b.passed) - Number(a.passed) || (a.name || '').localeCompare(b.name || ''));
+      _showModal(list, `${bu} · ${dept} — ${list.length} คน`);
+    });
+  });
+  // Back face level sub-row: Dept+Level × BU
+  container.querySelectorAll('.exp-cell[data-dept][data-level]').forEach(td => {
+    td.addEventListener('click', () => {
+      const dept = td.dataset.dept, lv = td.dataset.level, bu = td.dataset.bu;
+      const list = emps.filter(e => e.deptname === dept && e.level === lv && e.bu === bu)
+        .sort((a, b) => Number(b.passed) - Number(a.passed) || (a.name || '').localeCompare(b.name || ''));
+      _showModal(list, `${bu} · ${dept} · ${lv} — ${list.length} คน`);
+    });
+  });
 }
 
 function renderGicaSummary() {

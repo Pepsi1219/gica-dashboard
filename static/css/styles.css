@@ -1866,6 +1866,166 @@ tbody tr:hover { filter: brightness(.97); }
 .sched-split-val--ok { color: #16a34a; font-weight: 600; }
 .sched-split-val--ov { color: #dc2626; font-weight: 600; }
 
+/* Expectation matrix */
+.gica-expect-section { padding: 16px; cursor: pointer; }
+.exp-legend { display: flex; gap: 12px; font-size: 0.72rem; color: var(--text-muted); align-items: center; flex-wrap: wrap; }
+.exp-legend__item { display: flex; align-items: center; gap: 5px; }
+.exp-legend__dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+#gica-matrix-tables { will-change: opacity, transform; }
+.exp-th--dept { width: 140px; min-width: 140px; max-width: 140px; }
+.exp-dept-head-row td { background: var(--surface2); }
+.exp-dept-head-row--sep td { padding-top: 12px; border-top: 1px solid var(--border); }
+.exp-row__dept-head {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  border-left: 2.5px solid #6366f1;
+}
+.exp-level-sub-row .exp-row__sub {
+  padding-left: 22px;
+  position: relative;
+}
+.exp-level-sub-row .exp-row__sub::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--border);
+}
+.exp-cell--dept-agg { background: var(--surface2); }
+.exp-table-wrap { overflow-x: auto; }
+.exp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 30px 4px;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.exp-th {
+  padding: 5px 6px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  background: var(--surface2);
+  border-radius: 4px;
+}
+.exp-th--level { 
+  text-align: left; 
+  padding-left: 8px; 
+  color: var(--text); 
+  width: 50px; 
+  min-width: 50px; 
+  max-width: 50px;
+  text-align: center; 
+ }
+.exp-th--expect { 
+  width: 40px; 
+  min-width: 40px; 
+  max-width: 40px; 
+  padding: 5px 2px; 
+  font-size: 1rem; 
+  text-align: center; 
+}
+.exp-th--expect-last { border-right: 1px solid var(--border); margin-right: 2px; }
+.exp-row__head { padding: 6px 8px; background: var(--surface2); border-radius: 4px; width: 100px; min-width: 100px; max-width: 100px; }
+.exp-td--expect { text-align: center; width: 40px; min-width: 40px; max-width: 40px; padding: 4px 2px; }
+
+.exp-row__level { font-weight: 300; color: var(--text); font-size: 0.75rem;text-align: center; }
+.exp-row__crit { display: block; font-size: 0.62rem; color: var(--text-muted); margin-top: 1px; }
+.exp-cell {
+  padding: 5px 6px;
+  text-align: center;
+  background: var(--surface);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.12s;
+}
+.exp-cell:hover { background: var(--bg-hover, rgba(99,102,241,0.08)); transform: scale(1.04); }
+.exp-cell--empty { color: var(--text-muted); cursor: default; }
+.exp-cell--empty:hover { background: var(--surface); transform: none; }
+.exp-cell__top   { display: flex; justify-content: space-between; align-items: baseline; }
+.exp-cell__pct   { font-size: 0.6rem; font-weight: 700; }
+.exp-cell__count { font-size: 0.5rem; color: var(--text-muted); }
+.pass-pct--ok  { color: #16a34a; }
+.pass-pct--mid { color: #f59e0b; }
+.pass-pct--bad { color: #dc2626; }
+.exp-badge { display: inline-block; min-width: 18px; padding: 2px 5px; border-radius: 3px; font-size: 0.65rem; font-weight: 700; line-height: 1.2; }
+.exp-badge--A { background: #dcfce7; color: #15803d; }
+.exp-badge--B { background: #dbeafe; color: #1d4ed8; }
+.exp-badge--C { background: #fef3c7; color: #b45309; }
+.exp-badge--D { background: #fee2e2; color: #b91c1c; }
+.exp-badge--pass  { background: #dcfce7; color: #15803d; }
+.exp-badge--fail  { background: #fee2e2; color: #b91c1c; }
+.exp-badge--empty { background: var(--surface2); color: var(--text); }
+.exp-pbar--ok  { background: #16a34a; }
+.exp-pbar--mid { background: #f59e0b; }
+.exp-pbar--bad { background: #dc2626; }
+
+/* Drill-down modal */
+.gica-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.gica-modal.hidden { display: none; }
+.gica-modal__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); }
+.gica-modal__panel { 
+  position: relative; 
+  background: var(--surface); 
+  border: 1px solid var(--border); 
+  border-radius: 12px; 
+  padding: 16px 20px; 
+  max-width: 1200px; 
+  width: 95%; 
+  max-height: 80vh; 
+  overflow: auto; 
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+.gica-modal__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; }
+.gica-modal__close { background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.gica-modal__close:hover { background: var(--border-light); color: var(--text); }
+.gica-modal__body { font-size: 0.78rem; }
+.exp-modal-table { width: 100%; border-collapse: collapse; }
+.exp-modal-table th { text-align: left; padding: 6px 8px; color: var(--purple-light); font-weight: 900; border-bottom: 1px solid var(--border-light); font-size: 0.7rem; }
+.exp-modal-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-light);text-align: left; }
+.exp-modal-icon-th { text-align: center; padding: 6px 4px; font-size: 1rem; }
+.exp-modal-icon-td { text-align: center; }
+.exp-badge--expect { background: var(--surface2); color: var(--text); }
+.exp-status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 600; }
+.exp-status--pass { background: #dcfce7; color: #15803d; }
+.exp-status--fail { background: #fee2e2; color: #b91c1c; }
+
+/* — Quadrant Analysis — */
+.quad-bu-select {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 5px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.quad-grid       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+.quad-card       { background: var(--surface); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; }
+.quad-card__title { font-size: 0.75rem; font-weight: 600; color: var(--text); }
+.quad-card__sub   { font-size: 0.65rem; margin: 2px 0 8px; }
+.quad-chart-wrap  { position: relative; height: 220px; }
+
+/* — Expectation Matrix dark mode — */
+[data-theme="dark"] .exp-badge--A    { background: #052e16; color: #4ade80; }
+[data-theme="dark"] .exp-badge--B    { background: #172554; color: #60a5fa; }
+[data-theme="dark"] .exp-badge--C    { background: #451a03; color: #fbbf24; }
+[data-theme="dark"] .exp-badge--D    { background: #450a0a; color: #f87171; }
+[data-theme="dark"] .exp-badge--pass { background: #052e16; color: #4ade80; }
+[data-theme="dark"] .exp-badge--fail { background: #450a0a; color: #f87171; }
+[data-theme="dark"] .exp-status--pass { background: #052e16; color: #4ade80; }
+[data-theme="dark"] .exp-status--fail { background: #450a0a; color: #f87171; }
+[data-theme="dark"] .pass-pct--ok   { color: #4ade80; }
+[data-theme="dark"] .pass-pct--mid  { color: #fbbf24; }
+[data-theme="dark"] .pass-pct--bad  { color: #f87171; }
+[data-theme="dark"] .exp-pbar--ok   { background: #4ade80; }
+[data-theme="dark"] .exp-pbar--mid  { background: #fbbf24; }
+[data-theme="dark"] .exp-pbar--bad  { background: #f87171; }
+
 /* — GICA Overall Score donut card — */
 .stat-card__donut-row { display:flex; align-items:center; gap:14px; margin-top:8px; flex:1; }
 .donut-wrap {
