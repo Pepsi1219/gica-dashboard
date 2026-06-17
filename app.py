@@ -914,19 +914,23 @@ def _fetch_gica_excel_data(token: str) -> tuple:
     ]
 
     def _read_one(tname):
-        bu_tag = tname[len(GICA_TABLE_PREFIX):]  # 'G1' from 'GICA_G1', 'TRM' from 'GICA_TRM'
-        try:
-            rows = _read_excel_table(token, drive_id, item_id, tname, GICA_COLS)
-            for r in rows:
-                r['_bu'] = bu_tag
-            print(f'[GICA] {tname}: {len(rows)} rows', flush=True)
-            return rows
-        except Exception as exc:
-            print(f'[GICA] {tname} skipped: {exc}', flush=True)
-            return []
+        bu_tag = tname[len(GICA_TABLE_PREFIX):]
+        for attempt in range(3):
+            try:
+                rows = _read_excel_table(token, drive_id, item_id, tname, GICA_COLS)
+                for r in rows:
+                    r['_bu'] = bu_tag
+                print(f'[GICA] {tname}: {len(rows)} rows', flush=True)
+                return rows
+            except Exception as exc:
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))  # 1.5s, 3s backoff
+                else:
+                    print(f'[GICA] {tname} skipped after 3 attempts: {exc}', flush=True)
+        return []
 
     all_rows = []
-    with _ThreadPoolExecutor(max_workers=max(len(table_names), 1)) as ex:
+    with _ThreadPoolExecutor(max_workers=3) as ex:  # cap at 3 to avoid Graph API throttling
         for rows in ex.map(_read_one, table_names):
             all_rows.extend(rows)
 
