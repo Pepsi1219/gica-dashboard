@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CSA Dashboard</title>
+  <title>CSA Dashboard & GICA</title>
   <!-- Apply saved theme before paint to avoid flash -->
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=95" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=98" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,8 +22,8 @@
 <body>
   <header class="topbar">
     <div class="topbar-brand">
-      <h1 data-i18n="appTitle">CSA Dashboard</h1>
-      <p data-i18n="appSubtitle">Center of Skill Acquisition</p>
+      <h1 data-i18n="appTitle">CSA & GICA Dashboard</h1>
+      <p data-i18n="appSubtitle">Center of Skill Acquisition · Garment Inspection Competency Assessment</p>
     </div>
     <div class="topbar-right">
       <div class="topbar-controls">
@@ -595,7 +595,12 @@
       <div id="gica-error" class="card hero hidden" style="text-align:center;padding:40px;"></div>
 
       <div id="gica-dashboard" class="hidden">
+        <div class="gica-subtab-bar">
+          <button class="gica-subtab-btn gica-subtab-btn--active" data-subtab="performance">Performance</button>
+          <button class="gica-subtab-btn" data-subtab="assessment-schedule">Assessment Schedule</button>
+        </div>
 
+        <div id="gica-perf-panel">
         <!-- KPI + BU breakdown (filled by JS) -->
         <div id="gica-summary"></div>
 
@@ -712,10 +717,19 @@
         </div>
 
         <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Update Real time</p>
+        </div><!-- /#gica-perf-panel -->
+
+        <div id="gica-sched-panel" class="hidden">
+          <div class="gica-under-dev">
+            <div class="gica-under-dev__icon">🚧</div>
+            <p>Under development, please wait...</p>
+          </div>
+        </div>
+
       </div><!-- /#gica-dashboard -->
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=170"></script>
+  <script src="/static/js/app.js?v=180"></script>
 </body>
 </html>

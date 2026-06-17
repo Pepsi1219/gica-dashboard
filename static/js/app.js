@@ -1,8 +1,8 @@
 // ===== TRANSLATIONS =====
 const TRANSLATIONS = {
   th: {
-    appTitle:               'CSA Dashboard',
-    appSubtitle:            'Center of Skill Acquisition',
+    appTitle:               'CSA & GICA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'เข้าสู่ระบบด้วย Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'เลือก BU',
@@ -137,8 +137,8 @@ const TRANSLATIONS = {
     tabComingSoon:          'อยู่ระหว่างพัฒนา กรุณารอสักครู่...',
   },
   en: {
-    appTitle:               'CSA Dashboard',
-    appSubtitle:            'Center of Skill Acquisition',
+    appTitle:               'CSA & GICA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'Sign in with Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'Select BU',
@@ -273,8 +273,8 @@ const TRANSLATIONS = {
     tabComingSoon:          'Under development, please wait...',
   },
   lo: {
-    appTitle:               'CSA Dashboard',
-    appSubtitle:            'Center of Skill Acquisition',
+    appTitle:               'CSA & GICA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'ເຂົ້າສູ່ລະບົບດ້ວຍ Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'ເລືອກ BU',
@@ -409,8 +409,8 @@ const TRANSLATIONS = {
     tabComingSoon:          'ກຳລັງພັດທະນາ ກະລຸນາລໍຖ້າ...',
   },
   vi: {
-    appTitle:               'CSA Dashboard',
-    appSubtitle:            'Center of Skill Acquisition',
+    appTitle:               'CSA & GICA Dashboard',
+    appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'Đăng nhập bằng tài khoản Microsoft',
     loginBtn:               'Sign in with Microsoft',
     selectDept:             'Chọn BU',
@@ -4043,6 +4043,7 @@ let _gicaInsideBu   = '';
 let _gicaSchedMode  = 'all';
 let _gicaSchedDate  = '';
 let _gicaSchedBu    = '';
+let _gicaKpiTargets = {};
 const _gicaTableState = {
   page: 1, pageSize: 10, sortKey: 'nextDate', sortDir: 1,
   filters: { bu: '', grade: '', dept: '', type: '', search: '' },
@@ -4120,6 +4121,17 @@ async function initGicaTab() {
     _gicaLoaded = true;
     if (loadingEl) loadingEl.classList.add('hidden');
     if (dashEl)    dashEl.classList.remove('hidden');
+    // Wire sub-tabs (Performance / Assessment Schedule)
+    dashEl.querySelectorAll('.gica-subtab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        dashEl.querySelectorAll('.gica-subtab-btn').forEach(b => b.classList.toggle('gica-subtab-btn--active', b === btn));
+        const isPerfTab = btn.dataset.subtab === 'performance';
+        const perfPanel  = $('gica-perf-panel');
+        const schedPanel = $('gica-sched-panel');
+        if (perfPanel)  perfPanel.classList.toggle('hidden', !isPerfTab);
+        if (schedPanel) schedPanel.classList.toggle('hidden', isPerfTab);
+      });
+    });
     renderGicaSummary();
     renderGicaGradeDistChart();
     renderGicaInsideChart(_gicaInsideMode);
@@ -4173,7 +4185,7 @@ function _computeGicaQuadrant(emps, groupId, buSet, deptSet) {
   return { points, xT, yT, counts, grp, total: points.length };
 }
 
-function _computeGicaSummary(emps, busRaw) {
+function _computeGicaSummary(emps, busRaw, kpiTargets = {}) {
   const total = emps.length;
   const byGrade = { A: 0, B: 0, C: 0, D: 0 };
   // Grade distribution split by sub-test: Measurement = grade{i}-1, Inspection = grade{i}-2
@@ -4187,7 +4199,9 @@ function _computeGicaSummary(emps, busRaw) {
   const _sum = o => o.A + o.B + o.C + o.D;
 
   const totMeasure = _sum(byGradeMeasure), totInspect = _sum(byGradeInspect);
-  const avgScore = total ? emps.reduce((s, e) => s + (e.score || 0), 0) / total : 0;
+  const avgScore   = total ? emps.reduce((s, e) => s + (e.score  || 0), 0) / total : 0;
+  const avgMeasure = total ? emps.reduce((s, e) => s + (e.score1 || 0), 0) / total : 0;
+  const avgInspect = total ? emps.reduce((s, e) => s + (e.score2 || 0), 0) / total : 0;
 
   const bus = sortBus(busRaw);
   const retestBuRows = bus.map(bu => ({
@@ -4234,24 +4248,6 @@ function _computeGicaSummary(emps, busRaw) {
       avgInspectPct: Math.round(avgInspect * 100), avgInspectGrade: _gicaScoreToGrade(avgInspect),
       aInspectBuPct: totI ? Math.round(cntInspect.A / totI * 100) : 0,
       deptRows, levelRows,
-      ...(() => {
-        const withDate = inBu.filter(e => e.nextDate);
-        const onTime   = withDate.filter(e => _gicaDaysUntil(e.nextDate) > 0);
-        const overdue  = withDate.filter(e => _gicaDaysUntil(e.nextDate) <= 0);
-        const total    = withDate.length;
-        const onTimePct = total ? Math.round(onTime.length / total * 100) : 0;
-        const retest   = withDate.filter(e => e.nextType === 'Retest');
-        const review   = withDate.filter(e => e.nextType === 'Review');
-        const retestOn = retest.filter(e => _gicaDaysUntil(e.nextDate) > 0).length;
-        const retestOv = retest.length - retestOn;
-        const reviewOn = review.filter(e => _gicaDaysUntil(e.nextDate) > 0).length;
-        const reviewOv = review.length - reviewOn;
-        return {
-          schedTotal: total, schedOnTime: onTime.length, schedOverdue: overdue.length, schedOnTimePct: onTimePct,
-          retestOn, retestOv, retestTotal: retest.length,
-          reviewOn, reviewOv, reviewTotal: review.length,
-        };
-      })(),
     };
   });
 
@@ -4360,17 +4356,23 @@ function _computeGicaSummary(emps, busRaw) {
     aInspect: byGradeInspect.A,
     aMeasurePct: totMeasure ? Math.round(byGradeMeasure.A / totMeasure * 100) : 0,
     aInspectPct: totInspect ? Math.round(byGradeInspect.A / totInspect * 100) : 0,
-    avgPct:   Math.round(avgScore * 100),
-    avgGrade: _gicaScoreToGrade(avgScore),
+    avgPct:        Math.round(avgScore * 100),
+    avgGrade:      _gicaScoreToGrade(avgScore),
+    avgMeasurePct: Math.round(avgMeasure * 100),
+    avgInspectPct: Math.round(avgInspect * 100),
     needRetest: emps.filter(e => e.grade && e.grade !== 'A').length,
     retestBuRows, buCards,
     expMatrix, expMatrixDept,
     expMatrixBus:   BU_ORDER.filter(bu => emps.some(e => e.bu === bu)),
     expMatrixDepts: [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort(),
+    kpiTargets,
   };
 }
 
 function _gicaSummaryHtml(vm) {
+  const avgCounts     = Object.fromEntries(GICA_GRADES.map(g => [g, Math.round((vm.byGradeMeasure[g] + vm.byGradeInspect[g]) / 2)]));
+  const avgTot        = Math.round((vm.totMeasure + vm.totInspect) / 2);
+  const avgOverallPct = Math.round(((vm.avgMeasurePct || 0) + (vm.avgInspectPct || 0)) / 2);
   const miniBar = rows => {
     const mx = Math.max(...rows.map(r => r.n), 1);
     return rows.map(r => `
@@ -4402,6 +4404,45 @@ function _gicaSummaryHtml(vm) {
           ${ring}
         </svg>
       </div>`;
+  };
+  // Donut with callout leader lines — grade count + pct labeled outside the ring + avg gauge
+  const donutLabeled = (counts, tot, avgPct) => {
+    const CX = 145, CY = 102, R = 50, sw = 20;
+    const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
+    const gap = tot ? 1.2 : 0;
+    let acc = 0;
+    const segs = [], lines = [];
+    GICA_GRADES.forEach(g => {
+      const v = counts[g] || 0;
+      if (!tot || !v) return;
+      const len  = v / tot * CIRC;
+      const dash = Math.max(len - gap, 0.5);
+      segs.push(`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"></circle>`);
+      const mid = -Math.PI / 2 + (acc + len / 2) / CIRC * 2 * Math.PI;
+      const mx = CX + outerR * Math.cos(mid),        my = CY + outerR * Math.sin(mid);
+      const ex = CX + (outerR + 12) * Math.cos(mid), ey = CY + (outerR + 12) * Math.sin(mid);
+      const isRight = ex >= CX;
+      const hx = ex + (isRight ? 18 : -18), hy = ey;
+      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
+      const pct = Math.round(v / tot * 100);
+      lines.push(`
+        <line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="1.2" stroke-linecap="round"></line>
+        <line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="1.2" stroke-linecap="round"></line>
+        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${GICA_GRADE_COLORS[g]}"></circle>
+        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="600" fill="var(--text)">Grade ${g}: ${v}</text>
+        <text x="${tx.toFixed(1)}" y="${(hy + 9.5).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${pct}%)</text>`);
+      acc += len;
+    });
+    const ap = avgPct || 0;
+    const gc = GICA_GRADE_COLORS[_gicaScoreToGrade(ap / 100)] || '#6b7280';
+    return `
+      <svg viewBox="0 0 300 205" width="100%">
+        <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
+        ${segs.join('')}
+        ${lines.join('')}
+        <text x="${CX}" y="${CY + 8}" text-anchor="middle" font-size="22" font-weight="800" fill="${gc}">${ap}%</text>
+        <text x="${CX}" y="${CY + 21}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)" letter-spacing="0.5">Avg Score</text>
+      </svg>`;
   };
   const legend = cnt => `
     <div class="donut-legend">
@@ -4455,13 +4496,16 @@ function _gicaSummaryHtml(vm) {
     const bw = Math.round(slot * 0.62);
     const bo = (slot - bw) / 2;
     const bars = active.map((c, i) => {
-      const bh = Math.max(Math.round(c.count / maxN * CH), 3);
-      const x = Math.round(PAD + i * slot + bo);
-      const barY = TPAD + (CH - bh);
+      const passN  = c.cnt?.A || 0;
+      const totalH = Math.max(Math.round(c.count / maxN * CH), 3);
+      const passH  = passN > 0 ? Math.max(Math.round(passN / maxN * CH), 2) : 0;
+      const x  = Math.round(PAD + i * slot + bo);
       const cx = Math.round(x + bw / 2);
       const color = GICA_BU_COLORS[c.bu] || '#6b7280';
-      return `<rect x="${x}" y="${barY}" width="${bw}" height="${bh}" rx="3" fill="${color}"></rect>
-        <text x="${cx}" y="${barY - 4}" text-anchor="middle" font-size="8" font-weight="700" fill="${color}">${c.count}</text>
+      const topY = TPAD + CH - totalH;
+      return `<rect x="${x}" y="${topY}" width="${bw}" height="${totalH}" rx="3" fill="${color}" opacity="0.25"></rect>
+        ${passH > 0 ? `<rect x="${x}" y="${TPAD + CH - passH}" width="${bw}" height="${passH}" rx="3" fill="${color}"></rect>` : ''}
+        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="8" font-weight="700" fill="${color}">${c.count}</text>
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
     }).join('');
     return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
@@ -4471,57 +4515,59 @@ function _gicaSummaryHtml(vm) {
   };
 
   const kpi = `
-    <div class="stat-grid stat-grid--5">
+    <div class="stat-grid stat-grid--4">
 
-      <!-- Total employees: BU bar chart -->
+      <!-- Total employees + Need retest -->
       <div class="stat-card">
-        <div class="stat-card__label">Total employees</div>
-        <div class="stat-card__value">${vm.total}</div>
+        <div class="u-between">
+          <div>
+            <div class="stat-card__label">Total employees</div>
+            <div class="stat-card__value">${vm.total}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="stat-card__label">Need retest</div>
+            <div class="stat-card__value"${vm.needRetest > 0 ? ' style="color:#dc2626;"' : ''}>${vm.needRetest}</div>
+          </div>
+        </div>
         ${buBarChart(vm.buCards)}
       </div>
 
-      <!-- Overall Score (Measurement): grade{i}-1 distribution -->
+      <!-- Overall Score (Measurement) -->
       <div class="stat-card">
         <div class="stat-card__label">Overall Score (Measurement)</div>
-        <div class="stat-card__donut-row">
-          ${donut(vm.byGradeMeasure, vm.totMeasure)}
-          ${legend(vm.byGradeMeasure)}
-        </div>
+        ${donutLabeled(vm.byGradeMeasure, vm.totMeasure, vm.avgMeasurePct)}
       </div>
 
-      <!-- Overall Score (Inspection): grade{i}-2 distribution -->
+      <!-- Overall Score (Inspection) -->
       <div class="stat-card">
         <div class="stat-card__label">Overall Score (Inspection)</div>
-        <div class="stat-card__donut-row">
-          ${donut(vm.byGradeInspect, vm.totInspect)}
-          ${legend(vm.byGradeInspect)}
-        </div>
+        ${donutLabeled(vm.byGradeInspect, vm.totInspect, vm.avgInspectPct)}
       </div>
 
-      <!-- Avg score -->
-      <div class="stat-card">
-        <div class="stat-card__label">Avg score</div>
-        <div class="stat-card__val-row">
-          <span class="stat-card__value stat-card__value--flush">${vm.avgPct}%</span>
-          <span>≈ ${_gicaGradeBadge(vm.avgGrade)}</span>
+      <!-- Avg Score (flip: front = donut, back = criteria) -->
+      <div class="flip-card-wrap" id="gica-avg-flip">
+        <div class="flip-card-inner">
+          <div class="flip-card-front stat-card">
+            <div class="u-between">
+              <div class="stat-card__label">Avg Score</div>
+              <div class="flip-indicator" style="margin-top:0;">↩ ดูเกณฑ์การตัดเกรด</div>
+            </div>
+            ${donutLabeled(avgCounts, avgTot, avgOverallPct)}
+          </div>
+          <div class="flip-card-back stat-card">
+            <div class="stat-card__label">Criteria</div>
+            <div class="criteria-list">
+              <span class="u-muted criteria-list__head">เกณฑ์การตัดเกรด</span>
+              ${[{g:'A',r:'85 – 100%'},{g:'B',r:'65 – 84%'},{g:'C',r:'50 – 64%'},{g:'D',r:'≤ 49%'}]
+                .map(c => `<div class="criteria-list__row">
+                  <span class="donut-legend__dot" style="background:${GICA_GRADE_COLORS[c.g]};"></span>
+                  <span class="u-muted">Grade ${c.g}</span>
+                  <span class="criteria-list__range">${c.r}</span>
+                </div>`).join('')}
+            </div>
+            <div class="flip-indicator">↩ กลับ</div>
+          </div>
         </div>
-        <div style="margin-top:8px;">${_gicaPBar(vm.avgPct, GICA_GRADE_COLORS[vm.avgGrade])}</div>
-        <div class="criteria-list">
-          <span class="u-muted criteria-list__head">Criteria</span>
-          ${[{g:'A',r:'85 – 100%'},{g:'B',r:'65 – 84%'},{g:'C',r:'50 – 64%'},{g:'D',r:'≤ 49%'}]
-            .map(c => `<div class="criteria-list__row">
-              <span class="donut-legend__dot" style="background:${GICA_GRADE_COLORS[c.g]};"></span>
-              <span class="u-muted">Grade ${c.g}</span>
-              <span class="criteria-list__range">${c.r}</span>
-            </div>`).join('')}
-        </div>
-      </div>
-
-      <!-- Need retest -->
-      <div class="stat-card">
-        <div class="stat-card__label">Need retest</div>
-        <div class="stat-card__value"${vm.needRetest > 0 ? ' style="color:#dc2626;"' : ''}>${vm.needRetest}</div>
-        ${buBarChart(vm.retestBuRows.map(r => ({ bu: r.bu, count: r.n, empty: r.n === 0 })))}
       </div>
 
     </div>`;
@@ -4565,60 +4611,12 @@ function _gicaSummaryHtml(vm) {
     </div>`;
   };
 
-  const schedDonut = (pct) => {
-    const R = 26, CIRC = 2 * Math.PI * R;
-    const fill = (CIRC * pct / 100).toFixed(1);
-    const gap  = (CIRC - CIRC * pct / 100).toFixed(1);
-    const color = pct >= 80 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626';
-    return `<svg class="sched-donut" viewBox="0 0 80 80">
-      <circle cx="40" cy="40" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="9"/>
-      <circle cx="40" cy="40" r="${R}" fill="none" stroke="${color}" stroke-width="9"
-        stroke-dasharray="${fill} ${gap}" transform="rotate(-90 40 40)" stroke-linecap="round"/>
-      <text x="40" y="38" text-anchor="middle" font-size="16" font-weight="600" style="fill:var(--text);">${pct}%</text>
-      <text x="40" y="50" text-anchor="middle" font-size="7" style="fill:var(--text-muted);">on schedule</text>
-    </svg>`;
-  };
-
-  const splitBar = (ok, ov, total) => {
-    if (!total) return `<div class="u-muted" style="font-size:0.68rem;">— no data —</div>`;
-    const okPct = Math.round(ok / total * 100);
-    return `<div class="sched-split-track">
-      <div class="sched-split-fill sched-split-fill--ok" style="width:${okPct}%"></div>
-      <div class="sched-split-fill sched-split-fill--ov" style="width:${100 - okPct}%"></div>
-    </div>
-    <div class="sched-split-labels">
-      <span class="sched-split-val sched-split-val--ok">${ok} on time</span>
-      <span class="sched-split-val sched-split-val--ov">${ov} overdue</span>
-    </div>`;
-  };
-
-  const renderSchedCard = c => {
-    if (c.empty) return `<div class="stat-card stat-card--empty" style="min-width:0;">
-      <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
-      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
-    </div>`;
-    const buColor = GICA_BU_COLORS[c.bu] || 'var(--text)';
-    return `<div class="stat-card" style="min-width:0;">
-      <div class="flip-card-type">Schedule</div>
-      <div class="bu-head"><span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span></div>
-      <div class="sched-type-section">
-        <div class="sched-type-label">Retest</div>
-        ${splitBar(c.retestOn, c.retestOv, c.retestTotal)}
-      </div>
-      <div class="sched-type-section">
-        <div class="sched-type-label">Review</div>
-        ${splitBar(c.reviewOn, c.reviewOv, c.reviewTotal)}
-      </div>
-    </div>`;
-  };
-
   const buFlipCards = vm.buCards.map(renderFlipCard).join('');
-  const schedCards  = vm.buCards.map(renderSchedCard).join('');
 
   const passClass = pct => pct >= 80 ? 'ok' : pct >= 60 ? 'mid' : 'bad';
   const expBadge = _gicaExpBadge;
 
-  const _mkExpCell = (c, rowAttr) => {
+  const _mkExpCell = (c, rowAttr, kpiPct) => {
     if (!c || c.empty) return `<td class="exp-cell exp-cell--empty">—</td>`;
     const cls = passClass(c.passBothPct);
     return `<td class="exp-cell" ${rowAttr} title="คลิกดูรายชื่อ">
@@ -4626,8 +4624,9 @@ function _gicaSummaryHtml(vm) {
         <span class="exp-cell__count">${c.passBothCount}/${c.count} คน</span>
         <span class="exp-cell__pct pass-pct--${cls}">${c.passBothPct}%</span>
       </div>
-      <div class="pbar pbar--6" style="margin:2px 0 0;">
+      <div class="pbar pbar--6${kpiPct != null ? ' pbar--kpi' : ''}" style="margin:2px 0 0;">
         <div class="pbar__fill exp-pbar--${cls}" style="width:${c.passBothPct}%;"></div>
+        ${kpiPct != null ? `<div class="pbar__kpi-marker" style="left:${kpiPct}%;"></div>` : ''}
       </div>
     </td>`;
   };
@@ -4636,8 +4635,9 @@ function _gicaSummaryHtml(vm) {
     `<th class="exp-th" style="color:${GICA_BU_COLORS[bu] || 'var(--text)'};">${escapeHtml(bu)}</th>`).join('');
 
   const matrixRows = vm.expMatrix.map(row => {
+    const kpiPct = vm.kpiTargets[row.level] ?? null;
     const cells = vm.expMatrixBus.map(bu =>
-      _mkExpCell(row.cells[bu], `data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`)
+      _mkExpCell(row.cells[bu], `data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`, kpiPct)
     ).join('');
     return `<tr>
       <td class="exp-row__head"><div class="exp-row__level">${escapeHtml(row.level)}</div></td>
@@ -4684,7 +4684,12 @@ function _gicaSummaryHtml(vm) {
   const matrix = vm.expMatrix.length ? `
     <div class="card card--section gica-expect-section">
       <div class="chart-header">
-        <h3 style="margin:0; font-size:1rem; color:var(--text);">Expectation Matrix</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h3 style="margin:0; font-size:1rem; color:var(--text);">Expectation Matrix</h3>
+          <button id="gica-kpi-setup-btn" class="gica-kpi-setup-btn" title="กำหนด KPI target สำหรับแต่ละ Level">
+            <i class="ti ti-target-arrow" aria-hidden="true"></i> KPI Setup
+          </button>
+        </div>
         <div class="exp-legend">
           <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#16a34a;"></span>≥80%</span>
           <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#f59e0b;"></span>60–79%</span>
@@ -4729,23 +4734,52 @@ function _gicaSummaryHtml(vm) {
         </div>
         <div id="gica-expect-modal-body" class="gica-modal__body"></div>
       </div>
+    </div>
+    <div id="gica-kpi-modal" class="gica-modal hidden">
+      <div class="gica-modal__backdrop" id="gica-kpi-backdrop"></div>
+      <div class="gica-modal__panel gica-kpi-modal__panel">
+        <div class="gica-modal__head">
+          <h4 style="margin:0;font-size:1rem;">KPI Setup</h4>
+          <button class="gica-modal__close" id="gica-kpi-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="gica-kpi-modal__body">
+          <p class="u-muted gica-kpi-modal__desc">กำหนด KPI target (%) สำหรับแต่ละ Level</p>
+          <div class="gica-kpi-list">
+            ${GICA_LEVEL_ORDER.filter(l => l !== 'Department Head').map(lv => `
+              <div class="gica-kpi-row" data-level="${escapeHtml(lv)}">
+                <span class="gica-kpi-row__label">${escapeHtml(lv)}</span>
+                <input type="range" class="gica-kpi-slider" min="0" max="100" step="5"
+                  value="${vm.kpiTargets[lv] ?? 80}" data-level="${escapeHtml(lv)}">
+                <span class="gica-kpi-row__val">${vm.kpiTargets[lv] ?? 80}%</span>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="gica-kpi-modal__footer">
+          <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-kpi-cancel">ยกเลิก</button>
+          <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-kpi-confirm">Confirm</button>
+        </div>
+      </div>
     </div>` : '';
 
   const quadSection = `
     <div class="card card--section" id="gica-quad-section" style="margin-top:12px;">
       <div class="chart-header">
         <h3 style="margin:0;font-size:1rem;color:var(--text);">Quadrant Analysis</h3>
-      </div>
-      <div class="quad-filter-bar">
-        <div class="quad-filter-row" id="quad-bu-row">
-          <span class="quad-filter-label">BU :</span>
-          <button class="quad-btn quad-btn--active" data-bu="all">ทั้งหมด</button>
-          ${vm.expMatrixBus.map(bu => `<button class="quad-btn" data-bu="${escapeHtml(bu)}">${escapeHtml(bu)}</button>`).join('')}
-        </div>
-        <div class="quad-filter-row" id="quad-dept-row">
-          <span class="quad-filter-label">แผนก :</span>
-          <button class="quad-btn quad-btn--active" data-dept="all">ทั้งหมด</button>
-          ${vm.expMatrixDepts.map(d => `<button class="quad-btn" data-dept="${escapeHtml(d)}">${escapeHtml(d)}</button>`).join('')}
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div class="quad-dropdown">
+            <button class="quad-dd-btn" id="quad-bu-trigger"><span class="quad-dd-label">BU</span> ▾</button>
+            <div class="quad-dd-panel" id="quad-bu-panel" hidden>
+              <button class="quad-btn quad-btn--active" data-bu="all">ทั้งหมด</button>
+              ${vm.expMatrixBus.map(bu => `<button class="quad-btn" data-bu="${escapeHtml(bu)}">${escapeHtml(bu)}</button>`).join('')}
+            </div>
+          </div>
+          <div class="quad-dropdown">
+            <button class="quad-dd-btn" id="quad-dept-trigger"><span class="quad-dd-label">แผนก</span> ▾</button>
+            <div class="quad-dd-panel" id="quad-dept-panel" hidden>
+              <button class="quad-btn quad-btn--active" data-dept="all">ทั้งหมด</button>
+              ${vm.expMatrixDepts.map(d => `<button class="quad-btn" data-dept="${escapeHtml(d)}">${escapeHtml(d)}</button>`).join('')}
+            </div>
+          </div>
         </div>
       </div>
       <div class="quad-grid">
@@ -4767,7 +4801,6 @@ function _gicaSummaryHtml(vm) {
         <span class="gica-flip-btn__label">ดู Inspection</span>
       </button>
     </div>
-    <div class="stat-grid stat-grid--6">${schedCards}</div>
     ${matrix}
     ${quadSection}`;
 }
@@ -4882,10 +4915,24 @@ function _mountGicaQuadrant(container, emps) {
 
   const buildAll = () => GICA_QUAD_GROUPS.forEach(buildOne);
 
-  const wireMultiFilter = (rowId, dataKey, targetSet) => {
-    const row = section.querySelector(`#${rowId}`);
-    if (!row) return;
-    row.addEventListener('click', e => {
+  const updateTrigger = (triggerId, set, defaultLabel) => {
+    const btn = section.querySelector(`#${triggerId}`);
+    if (!btn) return;
+    const label = btn.querySelector('.quad-dd-label');
+    if (!label) return;
+    if (set.size === 0) {
+      label.textContent = defaultLabel;
+      btn.classList.remove('quad-dd-btn--active');
+    } else {
+      label.textContent = set.size <= 2 ? [...set].join(', ') : `${defaultLabel} (${set.size})`;
+      btn.classList.add('quad-dd-btn--active');
+    }
+  };
+
+  const wirePanelFilter = (panelId, dataKey, targetSet, triggerId, defaultLabel) => {
+    const panel = section.querySelector(`#${panelId}`);
+    if (!panel) return;
+    panel.addEventListener('click', e => {
       const btn = e.target.closest(`.quad-btn[data-${dataKey}]`);
       if (!btn) return;
       const val = btn.dataset[dataKey];
@@ -4894,21 +4941,37 @@ function _mountGicaQuadrant(container, emps) {
       } else {
         targetSet.has(val) ? targetSet.delete(val) : targetSet.add(val);
       }
-      row.querySelectorAll(`.quad-btn[data-${dataKey}]`).forEach(b => {
+      panel.querySelectorAll(`.quad-btn[data-${dataKey}]`).forEach(b => {
         const v = b.dataset[dataKey];
         b.classList.toggle('quad-btn--active', v === 'all' ? targetSet.size === 0 : targetSet.has(v));
       });
+      updateTrigger(triggerId, targetSet, defaultLabel);
       buildAll();
     });
   };
 
-  wireMultiFilter('quad-bu-row',   'bu',   _buSet);
-  wireMultiFilter('quad-dept-row', 'dept', _deptSet);
+  const togglePanel = (panelId, e) => {
+    e.stopPropagation();
+    const panel = section.querySelector(`#${panelId}`);
+    const wasHidden = panel.hidden;
+    section.querySelectorAll('.quad-dd-panel').forEach(p => { p.hidden = true; });
+    panel.hidden = !wasHidden;
+  };
+
+  section.querySelector('#quad-bu-trigger')  ?.addEventListener('click', e => togglePanel('quad-bu-panel', e));
+  section.querySelector('#quad-dept-trigger')?.addEventListener('click', e => togglePanel('quad-dept-panel', e));
+
+  if (section._onDocClick) document.removeEventListener('click', section._onDocClick);
+  section._onDocClick = () => section.querySelectorAll('.quad-dd-panel').forEach(p => { p.hidden = true; });
+  document.addEventListener('click', section._onDocClick);
+
+  wirePanelFilter('quad-bu-panel',   'bu',   _buSet,   'quad-bu-trigger',   'BU');
+  wirePanelFilter('quad-dept-panel', 'dept', _deptSet, 'quad-dept-trigger', 'แผนก');
 
   buildAll();
 }
 
-function _mountGicaSummary(html) {
+function _mountGicaSummary(html, vm) {
   const container = $('gica-summary');
   if (!container) return;
   container.innerHTML = html;
@@ -4929,6 +4992,8 @@ function _mountGicaSummary(html) {
     });
   };
   wireFlipAll('#gica-flip-all', '.flip-card-wrap[data-bu]', 'ดู Inspection', 'ดู Measurement');
+  const avgFlip = container.querySelector('#gica-avg-flip');
+  if (avgFlip) avgFlip.addEventListener('click', () => avgFlip.classList.toggle('is-flipped'));
 
   // Expectation matrix — Scale+Fade transition Level ↔ Department
   const matrixTables = container.querySelector('#gica-matrix-tables');
@@ -4957,6 +5022,30 @@ function _mountGicaSummary(html) {
     });
   }
 
+  // KPI Setup modal
+  const kpiModal     = container.querySelector('#gica-kpi-modal');
+  const closeKpiModal = () => kpiModal && kpiModal.classList.add('hidden');
+  if (kpiModal) {
+    container.querySelector('#gica-kpi-setup-btn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      kpiModal.classList.remove('hidden');
+    });
+    container.querySelector('#gica-kpi-close')?.addEventListener('click', closeKpiModal);
+    container.querySelector('#gica-kpi-cancel')?.addEventListener('click', closeKpiModal);
+    container.querySelector('#gica-kpi-backdrop')?.addEventListener('click', closeKpiModal);
+    kpiModal.querySelectorAll('.gica-kpi-slider').forEach(slider => {
+      const valEl = slider.closest('.gica-kpi-row')?.querySelector('.gica-kpi-row__val');
+      slider.addEventListener('input', () => { if (valEl) valEl.textContent = slider.value + '%'; });
+    });
+    container.querySelector('#gica-kpi-confirm')?.addEventListener('click', () => {
+      kpiModal.querySelectorAll('.gica-kpi-slider').forEach(slider => {
+        _gicaKpiTargets[slider.dataset.level] = Number(slider.value);
+      });
+      closeKpiModal();
+      renderGicaSummary();
+    });
+  }
+
   // Expectation matrix drill-down
   const modal     = container.querySelector('#gica-expect-modal');
   const modalTtl  = container.querySelector('#gica-expect-modal-title');
@@ -4966,7 +5055,7 @@ function _mountGicaSummary(html) {
     modal.querySelectorAll('[data-close="1"]').forEach(el => el.addEventListener('click', closeModal));
   }
   if (window._gicaEscHandler) document.removeEventListener('keydown', window._gicaEscHandler);
-  window._gicaEscHandler = e => { if (e.key === 'Escape') closeModal(); };
+  window._gicaEscHandler = e => { if (e.key === 'Escape') { closeModal(); closeKpiModal(); } };
   document.addEventListener('keydown', window._gicaEscHandler);
 
   const _showModal = (list, title) => {
@@ -5035,8 +5124,8 @@ function _mountGicaSummary(html) {
 }
 
 function renderGicaSummary() {
-  const vm = _computeGicaSummary(_gicaData.employees || [], _gicaData.bus || []);
-  _mountGicaSummary(_gicaSummaryHtml(vm));
+  const vm = _computeGicaSummary(_gicaData.employees || [], _gicaData.bus || [], _gicaKpiTargets);
+  _mountGicaSummary(_gicaSummaryHtml(vm), vm);
 }
 
 // ── Chart: grade distribution — BU (dual) / Department / Level ────────────────
@@ -5219,7 +5308,9 @@ function _gicaSchedRows() {
   if (_gicaSchedMode !== 'all') rows = rows.filter(e => e.nextType === _gicaSchedMode);
   return rows;
 }
-const GICA_BU_COLORS = Object.fromEntries(BU_ORDER.map((bu, i) => [bu, JUMPER_COLORS[i % JUMPER_COLORS.length]]));
+const GICA_BU_COLORS = Object.fromEntries(
+  BU_ORDER.map(bu => [bu, getComputedStyle(document.documentElement).getPropertyValue(`--bu-${bu}`).trim() || '#6b7280'])
+);
 function renderGicaScheduleChart() {
   const all     = (_gicaData.employees || []).filter(e => e.nextDate);
   const retestN = all.filter(e => e.nextType === 'Retest').length;

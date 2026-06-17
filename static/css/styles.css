@@ -51,6 +51,14 @@
   --row-under-op-bg:           #dbeafe;
   --shadow:          rgba(11, 78, 99, .08);
   --shadow-lg:       rgba(11, 78, 99, .20);
+
+  /* BU Colors — แก้สีที่นี่ที่เดียว */
+  --bu-G1:           #d272d2;
+  --bu-G2:           #4fb8aa;
+  --bu-G3:           #cc9e53;
+  --bu-G4:           #b2ce5e;
+  --bu-TRM:          #af75d2;
+  --bu-EA:           #6787c3;
 }
 
 [data-theme="dark"] {
@@ -1995,21 +2003,68 @@ tbody tr:hover { filter: brightness(.97); }
 .exp-status--fail { background: #fee2e2; color: #b91c1c; }
 
 /* — Quadrant Analysis — */
-.quad-filter-bar   { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
-.quad-filter-row   { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.quad-filter-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; white-space: nowrap; min-width: 54px; }
+.quad-dropdown  { position: relative; }
+.quad-dd-btn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 5px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s;
+}
+.quad-dd-btn:hover     { background: var(--surface2); }
+.quad-dd-btn--active   { border-color: #6366f1; color: #6366f1; }
+
+/* 🛠️ แก้ไขส่วนนี้: เปลี่ยนจาก Flex เป็น Grid เพื่อจัดแถวคอลัมน์ */
+.quad-dd-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  padding: 8px;
+  
+  display: grid;                        /* เปลี่ยนเป็น Grid */
+  grid-template-columns: repeat(3, 1fr); /* แบ่งเป็น 3 คอลัมน์กว้างเท่ากันเป๊ะ */
+  gap: 6px;                             /* ระยะห่างช่องไฟระหว่างปุ่ม */
+  min-width: 170px;                     /* ขยายความกว้างขั้นต่ำเล็กน้อยเพื่อให้พอดี 3 ปุ่ม */
+  z-index: 200;
+}
+.quad-dd-panel[hidden] { display: none; }
+
+/* 🛠️ แก้ไขส่วนนี้: ล็อกให้ทุกปุ่มกว้างเต็มคอลัมน์ Grid และจัดตัวอักษรให้อยู่ตรงกลาง */
 .quad-btn {
-  padding: 2px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;              /* ปรับ padding ให้กระชับ */
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
   border-radius: 5px;
   font-size: 0.72rem;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
+  
+  width: 100%;                  /* บังคับยืดเต็มช่องคอลัมน์ของตัวเอง */
+  box-sizing: border-box;
 }
 .quad-btn:hover    { background: var(--surface2); color: var(--text); }
 .quad-btn--active  { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+/* 🛠️ เพิ่มเติม (Best Practice): บังคับปุ่มคำว่า "ทั้งหมด" ให้ยืดเต็มความกว้างแถวบนสุด */
+.quad-btn[data-bu="all"],
+.quad-btn[data-dept="all"] {
+  grid-column: span 3;          /* ยึดพื้นที่เต็ม 3 คอลัมน์ขนานไปด้านบน */
+}
+
 .quad-grid       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
 .quad-card       { background: var(--surface); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; }
 .quad-card__title { font-size: 0.75rem; font-weight: 600; color: var(--text); }
@@ -2033,21 +2088,21 @@ tbody tr:hover { filter: brightness(.97); }
 [data-theme="dark"] .exp-pbar--bad  { background: #f87171; }
 
 /* — GICA Overall Score donut card — */
-.stat-card__donut-row { display:flex; align-items:center; gap:14px; margin-top:8px; flex:1; }
+.stat-card__donut-row { display:flex; align-items:center; gap:10px; margin-top:8px; flex:1; }
 .donut-wrap {
    position:relative; 
-   width:100px; 
-   height:100px; 
+   width:120px; 
+   height:120px; 
    flex-shrink:0;
    display: flex;
    justify-content: center;
    align-items: center;
-   margin-left: 20px;
+   margin-left: 30px;
    }
 .donut-wrap > svg { 
   display:block; 
-  width:100px; 
-  height:100px; 
+  width:120px; 
+  height:120px; 
 }
 .donut-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
 .donut-count { font-size:1.45rem; font-weight:800; color:var(--text); line-height:1; }
@@ -2087,8 +2142,41 @@ tbody tr:hover { filter: brightness(.97); }
 .mini-bar__track { flex:1; height:5px; background:var(--border-light); border-radius:3px; overflow:hidden; }
 .mini-bar__fill { height:100%; border-radius:3px; }
 .mini-bar__count { min-width:16px; text-align:right; color:var(--text); }
+/* — GICA Sub-tab bar — */
+.gica-subtab-bar { display:flex; gap:2px; margin-bottom:16px; border-bottom:2px solid var(--border); }
+.gica-subtab-btn { padding:8px 20px; font-size:0.85rem; font-weight:600; color:var(--text-muted); background:transparent; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; border-radius:6px 6px 0 0; transition:color .15s, border-color .15s, background .15s; }
+.gica-subtab-btn:hover { color:var(--text); background:var(--bg-hover, rgba(99,102,241,0.06)); }
+.gica-subtab-btn--active { color:var(--primary, #6366f1); border-bottom-color:var(--primary, #6366f1); }
+/* — GICA "Under development" placeholder — */
+.gica-under-dev { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; gap:14px; color:var(--text-muted); }
+.gica-under-dev__icon { font-size:3rem; line-height:1; }
+.gica-under-dev p { font-size:0.95rem; margin:0; }
+/* — KPI marker on Expectation Matrix pbar — */
+.pbar--kpi { overflow:visible; }
+.pbar__kpi-marker { position:absolute; top:-4px; bottom:-4px; width:2px; transform:translateX(-50%); background:var(--text); opacity:0.8; border-radius:1px; pointer-events:none; }
+.pbar__kpi-marker::after { content:''; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); margin-bottom:2px; border-left:4px solid transparent; border-right:4px solid transparent; border-bottom:5px solid var(--text); opacity:0.8; }
+/* — KPI Setup button — */
+.gica-kpi-setup-btn { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:6px; background:var(--surface); border:1px solid var(--border); font-size:0.76rem; font-weight:600; color:var(--text-muted); cursor:pointer; transition:color .15s, background .15s; }
+.gica-kpi-setup-btn:hover { color:var(--primary, #6366f1); background:var(--bg-hover, rgba(99,102,241,0.08)); border-color:var(--primary, #6366f1); }
+/* — KPI Setup modal panel — */
+.gica-kpi-modal__panel { width:380px; max-width:92vw; }
+.gica-kpi-modal__body { padding:0 0 4px; }
+.gica-kpi-modal__desc { margin:0 0 16px; font-size:0.8rem; }
+.gica-kpi-list { display:flex; flex-direction:column; gap:10px; }
+.gica-kpi-row { display:grid; grid-template-columns:105px 1fr 38px; align-items:center; gap:10px; }
+.gica-kpi-row__label { font-size:0.8rem; font-weight:600; color:var(--text); }
+.gica-kpi-row__val { font-size:0.75rem; font-weight:700; color:var(--primary, #6366f1); text-align:right; }
+.gica-kpi-slider { -webkit-appearance:none; appearance:none; width:100%; height:4px; background:var(--border); border-radius:999px; outline:none; cursor:pointer; }
+.gica-kpi-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; background:var(--primary, #6366f1); border-radius:50%; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.18); }
+.gica-kpi-slider::-moz-range-thumb { width:14px; height:14px; background:var(--primary, #6366f1); border-radius:50%; border:none; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.18); }
+.gica-kpi-modal__footer { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; padding-top:12px; border-top:1px solid var(--border); }
+.gica-kpi-btn { padding:7px 22px; border-radius:7px; font-size:0.82rem; font-weight:600; cursor:pointer; border:1px solid var(--border); transition:opacity .15s, background .15s; }
+.gica-kpi-btn--cancel { background:var(--surface); color:var(--text-muted); }
+.gica-kpi-btn--cancel:hover { background:var(--border-light); }
+.gica-kpi-btn--confirm { background:var(--primary, #6366f1); color:#fff; border-color:transparent; }
+.gica-kpi-btn--confirm:hover { opacity:0.88; }
 /* — Summary progress bar (Jumper + Trainer stat cards) — */
-.pbar { background:var(--progress-track); border-radius:999px; overflow:hidden; }
+.pbar { background:var(--progress-track); border-radius:999px; overflow:hidden; position:relative; }
 .pbar--6 { height:6px; }
 .pbar--5 { height:5px; margin-top:3px; }
 .pbar__fill { height:100%; border-radius:999px; transition:width .3s; }
