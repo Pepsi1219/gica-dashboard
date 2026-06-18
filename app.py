@@ -956,6 +956,37 @@ def _gica_avg(a, b):
     return round(sum(nums) / len(nums), 4) if nums else None
 
 
+def _gica_parse_date(s):
+    """ISO date string → date object (or None)."""
+    if not s:
+        return None
+    try:
+        return _datetime.strptime(s[:10], '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _gica_add_months(d, months):
+    """Add calendar months to a date, clamping day to month length."""
+    if not months or not d:
+        return d
+    from calendar import monthrange
+    total = d.month - 1 + int(months)
+    year_adj, month_idx = divmod(total, 12)
+    new_year = d.year + year_adj
+    new_month = month_idx + 1
+    new_day = min(d.day, monthrange(new_year, new_month)[1])
+    return d.replace(year=new_year, month=new_month, day=new_day)
+
+
+def _gica_attempt_passed(g1, g2, exp1, exp2):
+    """Did an attempt pass? None if criteria/grades incomplete."""
+    if not (exp1 and exp2 and g1 and g2):
+        return None
+    return (_gica_rank(g1) >= _gica_rank(exp1)
+            and _gica_rank(g2) >= _gica_rank(exp2))
+
+
 def _build_gica_freq_lookup(freq_rows: list) -> dict:
     """(department, level, role) → {exp1, exp2, freqMonths}.
 
@@ -987,6 +1018,7 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
     (looked up by deptname + level + position). Next test date is the formula
     cell date{N+1} (already computed in Excel)."""
     freq_lookup = _build_gica_freq_lookup(freq_rows or [])
+    today = _datetime.now().date()
     employees = []
     for r in rows:
         latest = 0
@@ -994,10 +1026,26 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
             if r.get(f'result{i}-1', '') not in (None, '', 'null'):
                 latest = i
                 break
-        if latest == 0:
+
+        dept  = str(r.get('deptname', '') or '').strip()
+        level = str(r.get('level', '') or '').strip()
+        pos   = str(r.get('position', '') or '').strip()
+        crit  = freq_lookup.get((dept.lower(), level.lower(), pos.lower()))
+        exp1  = crit['exp1'] if crit else ''
+        exp2  = crit['exp2'] if crit else ''
+        freq_months = crit['freqMonths'] if crit else None
+
+        start_date_iso = _gica_to_iso(r.get('start_date', ''))
+        start_date = _gica_parse_date(start_date_iso)
+        is_new_emp = ((today - start_date).days < 90) if start_date else False
+
+        # Skip employees with no test history AND no start_date — nothing to schedule.
+        if latest == 0 and not start_date:
             continue
 
         history = []
+        prev_actual = None
+        prev_passed = None
         for i in range(1, latest + 1):
             r1 = r.get(f'result{i}-1', '')
             r2 = r.get(f'result{i}-2', '')
@@ -1008,6 +1056,23 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
             # Legacy single grade = the weaker of the two sub-grades (limiting factor).
             worse = min([g for g in (g1, g2) if g] or [''],
                         key=lambda g: _gica_rank(g)) if (g1 or g2) else ''
+            actual_iso = _gica_to_iso(r.get(f'date{i}', ''))
+            actual_date = _gica_parse_date(actual_iso)
+
+            # Scheduled date for this attempt: derived from prior state.
+            if i == 1:
+                sched = _gica_add_months(start_date, 1) if start_date else None
+            elif prev_actual is None:
+                sched = None
+            elif prev_passed is False:
+                sched = prev_actual + timedelta(days=7)
+            elif prev_passed is True and freq_months:
+                sched = _gica_add_months(prev_actual, freq_months)
+            else:
+                sched = None
+
+            on_time = (actual_date <= sched) if (actual_date and sched) else None
+
             history.append({
                 'n':      i,
                 'score':  _gica_avg(r1, r2),
@@ -1016,28 +1081,58 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
                 'grade':  worse,
                 'grade1': g1,
                 'grade2': g2,
-                'date':   _gica_to_iso(r.get(f'date{i}', '')),
+                'date':   actual_iso,
+                'scheduledDate': sched.strftime('%Y-%m-%d') if sched else None,
+                'onTime': on_time,
             })
+            prev_actual = actual_date
+            prev_passed = _gica_attempt_passed(g1, g2, exp1, exp2)
 
-        cur = history[-1]
+        cur = history[-1] if history else None
 
-        dept  = str(r.get('deptname', '') or '').strip()
-        level = str(r.get('level', '') or '').strip()
-        pos   = str(r.get('position', '') or '').strip()
-        crit  = freq_lookup.get((dept.lower(), level.lower(), pos.lower()))
-        exp1  = crit['exp1'] if crit else ''
-        exp2  = crit['exp2'] if crit else ''
-        freq_months = crit['freqMonths'] if crit else None
-
-        g1, g2 = cur['grade1'], cur['grade2']
-        if crit and exp1 and exp2 and g1 and g2:
-            passed = (_gica_rank(g1) >= _gica_rank(exp1)
-                      and _gica_rank(g2) >= _gica_rank(exp2))
+        if cur:
+            g1, g2 = cur['grade1'], cur['grade2']
+            passed = _gica_attempt_passed(g1, g2, exp1, exp2)
         else:
-            passed = None  # no criteria match → undetermined
+            g1 = g2 = ''
+            passed = None
 
-        next_date = (_gica_to_iso(r.get(f'date{latest + 1}', ''))
-                     if latest < GICA_MAX_TESTS else None)
+        # Scheduled date of the next (not-yet-taken) attempt.
+        if not history:
+            scheduled_next = _gica_add_months(start_date, 1) if start_date else None
+            next_type = 'Initial'
+        elif prev_actual is None:
+            scheduled_next = None
+            next_type = 'Review' if passed else 'Retest'
+        elif passed is False:
+            scheduled_next = prev_actual + timedelta(days=7)
+            next_type = 'Retest'
+        elif passed is True and freq_months:
+            scheduled_next = _gica_add_months(prev_actual, freq_months)
+            next_type = 'Review'
+        else:
+            scheduled_next = None
+            next_type = 'Review' if passed else 'Retest'
+
+        # Schedule status vs today.
+        if scheduled_next:
+            days_to = (scheduled_next - today).days
+            days_overdue = -days_to  # positive ⇒ late; negative ⇒ still ahead
+            if days_overdue > 0:
+                sched_status = 'overdue'
+            elif days_overdue >= -7:
+                sched_status = 'due_soon'
+            else:
+                sched_status = 'upcoming'
+        else:
+            days_overdue = None
+            sched_status = 'unknown'
+
+        # Compliance summary across history.
+        completed_attempts = sum(1 for h in history if h['onTime'] is not None)
+        on_time_attempts   = sum(1 for h in history if h['onTime'] is True)
+        compliance_pct = (round(on_time_attempts / completed_attempts * 100, 1)
+                          if completed_attempts else None)
 
         employees.append({
             'bu':       (str(r.get('bu', '') or '').strip() or str(r.get('_bu', '') or '').strip()),
@@ -1048,21 +1143,30 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
             'position': pos,
             'attempt':  latest,
             # Legacy bridge fields (kept so the current dashboard renders unchanged):
-            'score':    cur['score'],
-            'grade':    cur['grade'],
+            'score':    cur['score'] if cur else None,
+            'grade':    cur['grade'] if cur else '',
             # New authoritative fields:
-            'score1':   cur['score1'],
-            'score2':   cur['score2'],
+            'score1':   cur['score1'] if cur else None,
+            'score2':   cur['score2'] if cur else None,
             'grade1':   g1,
             'grade2':   g2,
             'exp1':     exp1,
             'exp2':     exp2,
             'passed':   passed,
             'freqMonths': freq_months,
-            'lastDate': cur['date'],
-            'nextDate': next_date,
-            'nextType': 'Review' if passed else 'Retest',
+            'lastDate': cur['date'] if cur else None,
+            'nextDate': scheduled_next.strftime('%Y-%m-%d') if scheduled_next else None,
+            'nextType': next_type,
             'history':  history,
+            # ── Assessment Schedule fields ──
+            'startDate':     start_date_iso,
+            'isNewEmp':      is_new_emp,
+            'scheduledNext': scheduled_next.strftime('%Y-%m-%d') if scheduled_next else None,
+            'daysOverdue':   days_overdue,
+            'schedStatus':   sched_status,
+            'compliancePct': compliance_pct,
+            'completedAttempts': completed_attempts,
+            'onTimeAttempts':    on_time_attempts,
         })
 
     bus = sorted({e['bu'] for e in employees if e['bu']})

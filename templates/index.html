@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=98" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=106" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -407,13 +407,13 @@
               <option value="expired">มี Skill หมดอายุ</option>
               <option value="ok">ไม่มี Skill หมดอายุ</option>
             </select>
-            <input type="text" id="jtp-filterSearch" placeholder="ค้นหาชื่อ / รหัสพนักงาน" />
+            <input type="text" id="jtp-filterSearch" placeholder="Search Employee Name / ID" />
           </div>
           <div id="jtp-tableWrap"></div>
           <div class="jtp-pagination">
             <span id="jtp-rangeLabel" class="jtp-range-label"></span>
             <div class="jtp-page-size-group">
-              <label class="jtp-page-size-label" for="jtp-pageSize">แสดงต่อหน้า</label>
+              <label class="jtp-page-size-label" for="jtp-pageSize">Show per page</label>
               <select id="jtp-pageSize" class="jtp-page-size-select">
                 <option value="10" selected>10</option>
                 <option value="25">25</option>
@@ -598,138 +598,53 @@
         <div class="gica-subtab-bar">
           <button class="gica-subtab-btn gica-subtab-btn--active" data-subtab="performance">Performance</button>
           <button class="gica-subtab-btn" data-subtab="assessment-schedule">Assessment Schedule</button>
+          <button class="gica-subtab-btn" data-subtab="employee-list">Employee List</button>
         </div>
 
         <div id="gica-perf-panel">
-        <!-- KPI + BU breakdown (filled by JS) -->
-        <div id="gica-summary"></div>
-
-<div class="charts charts--flex">
-
-  <div class="card card--chart">
-    <div class="chart-header">
-      <h3 id="gica-gradeDistTitle" style="margin:0; font-size:1rem; color:var(--text);">Grade distribution ราย BU</h3>
-      <div id="gica-distToggle" class="toggle-group">
-        <button class="toggle-btn active" data-mode="bu"    type="button">BU</button>
-        <button class="toggle-btn"        data-mode="dept"  type="button">Department</button>
-        <button class="toggle-btn"        data-mode="level" type="button">Level</button>
-      </div>
-    </div>
-    <div id="gica-distDual">
-      <div class="gica-dist-dual">
-        <div class="gica-dist-half">
-          <div class="gica-dist-label">Measurement</div>
-          <div class="chart-canvas-wrap"><canvas id="gica-gradeDistM"></canvas></div>
-        </div>
-        <div class="gica-dist-half">
-          <div class="gica-dist-label">Inspection</div>
-          <div class="chart-canvas-wrap"><canvas id="gica-gradeDistI"></canvas></div>
-        </div>
-      </div>
-      <div class="gica-dist-legend">
-        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#16a34a;"></span>A</span>
-        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#2563eb;"></span>B</span>
-        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#f59e0b;"></span>C</span>
-        <span class="gica-dist-legend__item"><span class="gica-dist-legend__dot" style="background:#dc2626;"></span>D</span>
-      </div>
-    </div>
-    <div id="gica-distSingle" class="chart-canvas-wrap hidden">
-      <canvas id="gica-gradeDistChart"></canvas>
-    </div>
-  </div>
-
-  <div class="card card--chart">
-    <div class="chart-header">
-      <h3 style="margin:0; font-size:1rem; color:var(--text);">Inside Data</h3>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <select id="gica-insideBuFilter" style="font-size:0.75rem; padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer;">
-          <option value="">ทุก BU</option>
-        </select>
-        <div id="gica-insideToggle" class="toggle-group">
-          <button class="toggle-btn active" data-mode="score" type="button">Score Distribution</button>
-          <button class="toggle-btn" data-mode="dept" type="button">Grade by Dept</button>
-          <button class="toggle-btn" data-mode="improve" type="button">Retest Improvement</button>
-          <button class="toggle-btn" data-mode="attempt" type="button">Attempt Count</button>
-        </div>
-      </div>
-    </div>
-    <div class="chart-canvas-wrap"><canvas id="gica-insideChart"></canvas></div>
-    <div id="gica-insideHint" class="hidden" style="padding:6px 0 0; font-size:0.82rem; color:var(--text-muted); min-height:24px;"></div>
-  </div>
-
-</div>
-
-        <!-- Upcoming test schedule -->
-        <div class="card card--section">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-            <h3 style="margin:0;font-size:1rem;color:var(--text);">Upcoming test schedule</h3>
-            <div id="gica-schedToggle" class="toggle-group">
-              <button class="toggle-btn active" data-mode="all"    type="button">All</button>
-              <button class="toggle-btn"        data-mode="Retest" type="button">Retest</button>
-              <button class="toggle-btn"        data-mode="Review" type="button">Review</button>
-            </div>
-          </div>
-          <div id="gica-schedSummary"></div>
-          <div id="gica-schedChartWrap" style="display:grid;gap:12px;">
-            <div>
-              <div id="gica-schedLabelLeft" style="display:none;font-size:0.82rem;font-weight:700;color:#dc2626;margin-bottom:6px;">Retest (B/C/D)</div>
-              <div class="chart-canvas-wrap"><canvas id="gica-scheduleChart"></canvas></div>
-            </div>
-            <div id="gica-schedRightWrap" style="display:none;">
-              <div style="font-size:0.82rem;font-weight:700;color:#2563eb;margin-bottom:6px;">Review (A)</div>
-              <div class="chart-canvas-wrap"><canvas id="gica-scheduleChartRight"></canvas></div>
-            </div>
-          </div>
-          <div style="display:flex;gap:16px;margin-top:10px;font-size:0.72rem;color:var(--text-muted);flex-wrap:wrap;">
-            <div id="gica-schedBuLegend" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
-            <span style="font-style:italic;">คลิกที่แท่ง → ดูรายชื่อด้านล่าง</span>
-          </div>
-          <div id="gica-scheduleDrill" style="margin-top:14px;"></div>
-        </div>
-
-        <!-- Employee data table -->
-        <div class="card card--section">
-          <h3 style="margin:0 0 12px;font-size:1rem;font-weight:700;color:var(--text);">รายชื่อพนักงาน (ผลล่าสุด)</h3>
-          <div class="filters">
-            <select id="gica-filterBu"><option value="">ทุก BU</option></select>
-            <select id="gica-filterGrade"><option value="">ทุกเกรด</option></select>
-            <select id="gica-filterDept"><option value="">ทุกแผนก</option></select>
-            <select id="gica-filterType"><option value="">ประเภท</option></select>
-            <input type="text" id="gica-filterSearch" placeholder="ค้นหาชื่อ / รหัสพนักงาน" />
-          </div>
-          <div id="gica-table"></div>
-          <div class="jtp-pagination">
-            <span id="gica-rangeLabel" class="jtp-range-label"></span>
-            <div class="jtp-page-size-group">
-              <label class="jtp-page-size-label" for="gica-pageSize">แสดงต่อหน้า</label>
-              <select id="gica-pageSize" class="jtp-page-size-select">
-                <option value="10" selected>10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-            </div>
-            <div class="jtp-page-nav">
-              <button id="gica-prevPage" class="jtp-nav-btn">‹</button>
-              <span id="gica-pageLabel" class="jtp-page-label"></span>
-              <button id="gica-nextPage" class="jtp-nav-btn">›</button>
-            </div>
-          </div>
-        </div>
-
-        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Update Real time</p>
+          <!-- KPI + BU breakdown (filled by JS) -->
+          <div id="gica-summary"></div>
+          <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Update Real time</p>
         </div><!-- /#gica-perf-panel -->
 
         <div id="gica-sched-panel" class="hidden">
-          <div class="gica-under-dev">
-            <div class="gica-under-dev__icon">🚧</div>
-            <p>Under development, please wait...</p>
-          </div>
+          <div id="gica-sched-summary"></div>
         </div>
+
+        <div id="gica-emplist-panel" class="hidden">
+          <div class="card card--section">
+            <h3 style="margin:0 0 12px;font-size:1rem;color:var(--text);">Employee List</h3>
+            <div class="filters">
+              <select id="gica-filterBu"><option value="">All BU</option></select>
+              <select id="gica-filterGrade"><option value="">All Grades</option></select>
+              <select id="gica-filterDept"><option value="">All Departments</option></select>
+              <select id="gica-filterType"><option value="">Type</option></select>
+              <input type="text" id="gica-filterSearch" placeholder="Search by name / ID" />
+            </div>
+            <div id="gica-table"></div>
+            <div class="jtp-pagination">
+              <span id="gica-rangeLabel" class="jtp-range-label"></span>
+              <div class="jtp-page-size-group">
+                <label class="jtp-page-size-label" for="gica-pageSize">Show per page</label>
+                <select id="gica-pageSize" class="jtp-page-size-select">
+                  <option value="10" selected>10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div class="jtp-page-nav">
+                <button id="gica-prevPage" class="jtp-nav-btn">‹</button>
+                <span id="gica-pageLabel" class="jtp-page-label"></span>
+                <button id="gica-nextPage" class="jtp-nav-btn">›</button>
+              </div>
+            </div>
+          </div>
+        </div><!-- /#gica-emplist-panel -->
 
       </div><!-- /#gica-dashboard -->
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=180"></script>
+  <script src="/static/js/app.js?v=211"></script>
 </body>
 </html>

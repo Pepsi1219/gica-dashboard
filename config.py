@@ -147,7 +147,7 @@ GICA_MAX_TESTS    = 12
 # Each test now has TWO sub-parts: result{i}-1/-2 (scores) + grade{i}-1/-2 (letters),
 # plus a single date{i}. Meta columns add `level`. Order here is informational only —
 # _read_excel_table maps by header name, so column order in Excel can differ.
-GICA_COLS = ["bu", "empid", "name", "deptname", "level", "position"] + [
+GICA_COLS = ["bu", "empid", "name", "deptname", "level", "position", "start_date"] + [
     f"{field}{i}{suffix}"
     for i in range(1, GICA_MAX_TESTS + 1)
     for field, suffix in (

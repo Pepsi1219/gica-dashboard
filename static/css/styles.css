@@ -57,7 +57,7 @@
   --bu-G2:           #4fb8aa;
   --bu-G3:           #cc9e53;
   --bu-G4:           #b2ce5e;
-  --bu-TRM:          #af75d2;
+  --bu-TRM:          #7a6f72;
   --bu-EA:           #6787c3;
 }
 
@@ -1757,12 +1757,16 @@ tbody tr:hover { filter: brightness(.97); }
 
 /* — Card grid (KPI row / BU row) — */
 .stat-grid { display: grid; gap: 12px; }
+.stat-grid--2 { grid-template-columns: repeat(2, 1fr); }
 .stat-grid--3 { grid-template-columns: repeat(3, 1fr); }
 .stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
 .stat-grid--5 { grid-template-columns: repeat(5, 1fr); }
 .stat-grid--6 { grid-template-columns: repeat(6, 1fr); }
 @media (max-width: 860px) {
-  .stat-grid--3, .stat-grid--4, .stat-grid--5, .stat-grid--6 { grid-template-columns: repeat(2, 1fr); }
+  .stat-grid--2, .stat-grid--3, .stat-grid--4, .stat-grid--5, .stat-grid--6 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .stat-grid--2 { grid-template-columns: 1fr; }
 }
 
 /* — Stat card (replaces JS `CARD` constant) — */
@@ -1790,7 +1794,7 @@ tbody tr:hover { filter: brightness(.97); }
 .stat-card__value--flush { margin-top: 0; }     /* value placed inline beside other content */
 
 /* — Dashboard summary containers (replace JS container.style.cssText) — */
-#gica-summary, #jtp-summary, #trainer-summary { display: flex; flex-direction: column; gap: 12px; }
+#gica-summary, #jtp-summary, #trainer-summary, #gica-sched-summary { display: flex; flex-direction: column; gap: 12px; }
 
 /* — Card header row; min-height keeps chart canvases aligned across columns — */
 .card-head {
@@ -1818,8 +1822,10 @@ tbody tr:hover { filter: brightness(.97); }
 .u-between { display: flex; justify-content: space-between; }
 .u-muted   { color: var(--text-muted); }
 .u-mt-auto { margin-top: auto; }
-.drill-th { padding:6px 9px; font-size:0.72rem; font-weight:600; color:var(--text-muted); text-align:left; border-bottom:1px solid var(--border-light); }
-.drill-td { padding:6px 9px; font-size:0.78rem; color:var(--text); border-bottom:1px solid var(--border-light); }
+.drill-th { padding:6px 9px; font-size:0.72rem; font-weight:600; color:var(--surface); text-align:left; border-bottom:1px solid var(--border-light); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drill-td { padding:6px 9px; font-size:0.78rem; color:var(--text); border-bottom:1px solid var(--border-light); overflow:hidden; text-overflow:ellipsis; }
+.gica-drill-table-wrap { overflow-x: auto; }
+.gica-drill-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .charts--flex { display: flex; gap: 16px; }
 .card--chart { padding: 16px; flex: 1; display: flex; flex-direction: column; margin-bottom: 0; }
 .card--section { padding: 16px; margin-bottom: 0; }
@@ -1835,25 +1841,59 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-bu-row { display: flex; align-items: stretch; gap: 10px; }
 .gica-bu-row .stat-grid { flex: 1; min-width: 0; }
 .gica-flip-btn {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 40px;
+  position: absolute;
+  top: 2px;
+  right: -25px;
+  z-index: 10;
+  width: 20px;
+  height: 20px;
+  border-radius: 20%;
   border: none;
-  border-radius: 20px;
   background: var(--accent);
   color: #fff;
   cursor: pointer;
-  padding: 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
   transition: opacity 0.15s, transform 0.15s;
 }
-.gica-flip-btn:hover { opacity: 0.82; transform: scaleY(1.03); }
-.gica-flip-btn:active { transform: scaleY(0.97); }
-.gica-flip-btn__icon { font-size: 1.15rem; line-height: 1; }
-.gica-flip-btn__label { writing-mode: vertical-rl; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; white-space: nowrap; }
+.gica-flip-btn:hover { opacity: 0.82; transform: scale(1.1); }
+.gica-flip-btn:active { transform: scale(0.92); }
+.gica-flip-btn__icon { font-size: 1rem; line-height: 1; }
+/* — GICA Trend mini-cards (row under BU flip cards) — */
+.gica-trend-row {
+  margin-top: -21px;
+  position: relative; 
+  z-index: 10;
+}
+.gica-trend-card {
+  padding: 6px 8px 4px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.gica-trend-card--empty { opacity: 0.15; pointer-events: none; }
+.gica-trend-canvas-wrap {
+  position: relative;
+  height: 110px;
+  flex-shrink: 0;
+}
+.gica-trend-canvas-wrap canvas {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+.gica-trend-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  transition: color 0.2s;
+}
 .gica-dist-dual   { display: flex; gap: 12px; flex: 1; }
 .gica-dist-half   { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .gica-dist-label  { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-align: center; margin-bottom: 4px; }
@@ -2284,6 +2324,7 @@ tbody tr:hover { filter: brightness(.97); }
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+  font-size: 0.75rem;
 }
 
 /* ── Jumper table pagination ─────────────────────────────────────────────── */
@@ -2368,16 +2409,16 @@ tbody tr:hover { filter: brightness(.97); }
 /* ===== PRINT (GICA schedule drill-down report) ===== */
 .gica-print-header { display: none; }
 .no-print { }
+#gica-print-overlay { display: none; }
 @media print {
-  body * { visibility: hidden !important; }
-  #gica-scheduleDrill, #gica-scheduleDrill * { visibility: visible !important; }
-  #gica-scheduleDrill {
-    position: absolute !important;
-    top: 0; left: 0;
-    width: 100% !important;
-    padding: 24px !important;
-    box-sizing: border-box !important;
-  }
-  .no-print { display: none !important; }
-  .gica-print-header { display: block !important; margin-bottom: 16px; }
+  @page { size: A4 landscape; margin: 15mm; }
+  body.print-mode > *:not(#gica-print-overlay) { display: none !important; }
+  #gica-print-overlay { display: block !important; width: 100%; padding: 15mm; box-sizing: border-box; }
+  #gica-print-overlay .gica-print-header { display: block !important; margin-bottom: 10px; }
+  #gica-print-overlay .no-print { display: none !important; }
+  #gica-print-overlay .gica-drill-table-wrap { overflow: visible !important; }
+  #gica-print-overlay .gica-drill-table { font-size: 8.5pt !important; width: 100% !important; }
+  #gica-print-overlay .drill-th { font-size: 8pt !important; padding: 3px 5px !important; border: 1px solid #bbb !important; color: #333 !important; }
+  #gica-print-overlay .drill-td { font-size: 8.5pt !important; padding: 3px 5px !important; border: 1px solid #bbb !important; }
+  #gica-print-overlay .exp-badge { font-size: 7pt !important; padding: 1px 3px !important; }
 }
