@@ -4044,7 +4044,7 @@ let _gicaSchedBu    = '';
 let _gicaDrillEscHandler = null;
 let _gicaKpiTargets = {};
 const _gicaTableState = {
-  page: 1, pageSize: 10, sortKey: 'nextDate', sortDir: 1,
+  page: 1, pageSize: 25, sortKey: 'nextDate', sortDir: 1,
   filters: { bu: '', grade: '', dept: '', type: '', search: '' },
 };
 
@@ -4440,7 +4440,7 @@ function _gicaSummaryHtml(vm) {
   };
   // Donut with callout leader lines — grade count + pct labeled outside the ring + avg gauge
   const donutLabeled = (counts, tot, avgPct) => {
-    const CX = 145, CY = 102, R = 50, sw = 20;
+    const CX = 145, CY = 102, R = 50, sw = 20; 
     const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
     const gap = tot ? 1.2 : 0;
     let acc = 0;
@@ -5269,6 +5269,10 @@ let _gicaScheduleRendered  = false;
 let _gicaEmpListRendered   = false;
 let _gicaSchedBuFilter   = new Set();
 let _gicaSchedDeptFilter = new Set();
+let _gicaCalMonthOffset = 0;        // 0 = current month, ±N = N months away
+let _gicaCalBuFilter    = new Set();
+let _gicaCalTypeFilter  = new Set();
+let _gicaCalDrillEscHandler = null;
 const _gicaSchedTableState = {
   page: 1, pageSize: 10,
   filters: { bu: '', status: '', dept: '', newEmp: '', search: '' },
@@ -5313,43 +5317,121 @@ function _gicaSchedBucketIdx(iso, buckets) {
   return -1;
 }
 
+function _gicaDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Month grid for the Calendar View — Mon-start weeks, only as many rows as the month needs (5 or 6).
+function _gicaCalGrid(monthDate) {
+  const year = monthDate.getFullYear(), month = monthDate.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const lastOfMonth   = new Date(year, month + 1, 0);
+  const startDow = firstOfMonth.getDay() || 7;
+  const cur = new Date(firstOfMonth);
+  cur.setDate(firstOfMonth.getDate() - (startDow - 1));
+  const days = [];
+  while (true) {
+    days.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+    if (cur > lastOfMonth && days.length % 7 === 0) break;
+  }
+  return days;
+}
+
+function _gicaCalGroupByBu(emps) {
+  const map = {};
+  emps.forEach(e => {
+    const k = e.bu || '—';
+    if (!map[k]) map[k] = { bu: k, count: 0, overdue: false };
+    map[k].count++;
+    if (e.schedStatus === 'overdue') map[k].overdue = true;
+  });
+  return sortBus(Object.keys(map)).map(bu => map[bu]);
+}
+
+// Calendar View — month grid keyed strictly by scheduledNext (the planned test date, not
+// the actual test date). BU/type filters here are independent of the Timeline's filters —
+// each chart owns its own filter state so they never leak into each other.
+function _computeGicaCalendar(emps, monthDate, buFilter = new Set(), typeFilter = new Set()) {
+  const allSchedable = emps.filter(e => e.scheduledNext || e.startDate);
+  const availBus = sortBus([...new Set(allSchedable.map(e => e.bu).filter(Boolean))]);
+
+  const filtered = allSchedable.filter(e => {
+    if (buFilter.size > 0 && !buFilter.has(e.bu)) return false;
+    if (typeFilter.size > 0 && !typeFilter.has(e.nextType)) return false;
+    return true;
+  });
+
+  const eventsByDate = {};
+  filtered.forEach(e => {
+    if (!e.scheduledNext) return;
+    (eventsByDate[e.scheduledNext] = eventsByDate[e.scheduledNext] || []).push(e);
+  });
+
+  const today     = _gicaToday();
+  const todayKey  = _gicaDateKey(today);
+  const gridDays  = _gicaCalGrid(monthDate);
+  const month     = monthDate.getMonth();
+  const weeks = [];
+  for (let i = 0; i < gridDays.length; i += 7) {
+    weeks.push(gridDays.slice(i, i + 7).map(d => {
+      const key = _gicaDateKey(d);
+      const events = eventsByDate[key] || [];
+      return {
+        key, dayNum: d.getDate(), inMonth: d.getMonth() === month, isToday: key === todayKey,
+        isPast: d < today,
+        events, buGroups: _gicaCalGroupByBu(events),
+      };
+    }));
+  }
+
+  const M = ['January', 'February', 'March', 'April', 'May', 'June',
+             'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthLabel = `${M[month]} ${monthDate.getFullYear()}`;
+
+  return { weeks, monthLabel, availBus, buFilter, typeFilter };
+}
+
 function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFilter = new Set(), deptFilter = new Set()) {
   const allSchedable = emps.filter(e => e.scheduledNext || e.startDate);
   const availBus   = sortBus([...new Set(allSchedable.map(e => e.bu).filter(Boolean))]);
   const availDepts = [...new Set(allSchedable.map(e => e.deptname).filter(Boolean))].sort();
+  // BU/dept filter affects only the Assessment Schedule Timeline chart below — KPI cards,
+  // BU cards, donut and the schedule table all stay computed from the unfiltered list.
   const schedable = allSchedable.filter(e => {
     if (buFilter.size > 0 && !buFilter.has(e.bu)) return false;
     if (deptFilter.size > 0 && !deptFilter.has(e.deptname)) return false;
     return true;
   });
-  const total    = schedable.length;
-  const overdueN = schedable.filter(e => e.schedStatus === 'overdue').length;
-  const dueWeekN = schedable.filter(e => e.daysOverdue != null
+  const total    = allSchedable.length;
+  const overdueN = allSchedable.filter(e => e.schedStatus === 'overdue').length;
+  const dueWeekN = allSchedable.filter(e => e.daysOverdue != null
                                       && e.daysOverdue >= -7 && e.daysOverdue <= 0).length;
-  const dueMonthN = schedable.filter(e => e.daysOverdue != null
+  const dueMonthN = allSchedable.filter(e => e.daysOverdue != null
                                        && e.daysOverdue >= -30 && e.daysOverdue <= 0).length;
 
-  const retestN = schedable.filter(e => e.passed === false).length;
-  const reviewN = schedable.filter(e => e.passed === true).length;
+  const retestN = allSchedable.filter(e => e.passed === false).length;
+  const reviewN = allSchedable.filter(e => e.passed === true).length;
 
   let completed = 0, onTime = 0;
-  schedable.forEach(e => {
+  allSchedable.forEach(e => {
     completed += e.completedAttempts || 0;
     onTime    += e.onTimeAttempts    || 0;
   });
   const compliancePct = completed ? Math.round(onTime / completed * 100) : null;
 
   const statusCounts = { upcoming: 0, due_soon: 0, overdue: 0, unknown: 0 };
-  schedable.forEach(e => { statusCounts[e.schedStatus] = (statusCounts[e.schedStatus] || 0) + 1; });
+  allSchedable.forEach(e => { statusCounts[e.schedStatus] = (statusCounts[e.schedStatus] || 0) + 1; });
 
   const buMap = {};
-  schedable.forEach(e => {
+  allSchedable.forEach(e => {
     if (!e.bu) return;
-    if (!buMap[e.bu]) buMap[e.bu] = { bu: e.bu, total: 0, overdue: 0, dueSoon: 0, completed: 0, onTime: 0 };
+    if (!buMap[e.bu]) buMap[e.bu] = { bu: e.bu, total: 0, overdue: 0, dueSoon: 0, completed: 0, onTime: 0, failed: 0 };
     const c = buMap[e.bu];
     c.total++;
     if (e.schedStatus === 'overdue')  c.overdue++;
     if (e.schedStatus === 'due_soon') c.dueSoon++;
+    if (e.passed === false)           c.failed++;
     c.completed += e.completedAttempts || 0;
     c.onTime    += e.onTimeAttempts    || 0;
   });
@@ -5360,43 +5442,58 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
   });
 
   const buckets = _gicaSchedBuckets(today, timelineMode);
+  const currentIdx = buckets.findIndex(b => today >= b.start && today <= b.end);
   const timeline = buckets.map(b => ({
     label: b.label, isFuture: b.isFuture,
     onTimePassed: 0, onTimeFailed: 0, upcoming: 0, overdue: 0,
   }));
   schedable.forEach(e => {
+    // Track buckets where this person already has an actual test recorded (from history).
+    // Used to prevent double-counting in monthly mode when scheduledNext falls in the
+    // same monthly bucket as a history entry.
+    const testedBuckets = new Set();
     (e.history || []).forEach(h => {
       if (!h.date) return;
       const actualIdx = _gicaSchedBucketIdx(h.date, buckets);
       const schedIdx  = h.scheduledDate ? _gicaSchedBucketIdx(h.scheduledDate, buckets) : -1;
       if (actualIdx >= 0) {
+        testedBuckets.add(actualIdx);
         const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
           (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
           (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
         if (attemptPassed) timeline[actualIdx].onTimePassed++;
         else               timeline[actualIdx].onTimeFailed++;
       }
-      // Tested in a different week than scheduled → mark scheduled week as overdue (missed)
+      // Tested in a different bucket than scheduled → mark scheduled bucket as overdue (missed)
       if (schedIdx >= 0 && schedIdx !== actualIdx) timeline[schedIdx].overdue++;
     });
     if (e.scheduledNext) {
       if (e.schedStatus === 'overdue') {
-        // Cascade from scheduledNext through all buckets:
-        // past/current → overdue++ (they were scheduled but didn't test)
-        // future       → upcoming++ (they still need to test, carried forward every week)
-        const startDate    = _gicaParseDate(e.scheduledNext);
-        const lastTestDate = _gicaParseDate(e.lastDate);
-        for (let bi = 0; bi < buckets.length; bi++) {
-          if (startDate > buckets[bi].end) continue;
-          if (buckets[bi].isFuture) break;
-          // Skip bucket where last actual test already counted (prevents double-count in monthly view)
-          if (lastTestDate && lastTestDate >= buckets[bi].start && lastTestDate <= buckets[bi].end) continue;
-          if (buckets[bi].end < today) timeline[bi].overdue++;
-          else                         timeline[bi].upcoming++;
+        // Weekly: cascade overdue forward through past/current buckets to show carry-over.
+        //         lastTestDate guard suppresses double-count with history fail in the same week.
+        // Monthly: count each overdue person ONCE at the bucket containing scheduledNext so the
+        //          red overdue segment stays visible. The lastTestDate guard is intentionally NOT
+        //          applied here — accepts mild Total double-count (a fail-then-overdue person can
+        //          appear in both onTimeFailed and overdue for the same month) as the trade-off
+        //          for keeping overdue visible in monthly mode.
+        if (timelineMode === 'month') {
+          const idx = _gicaSchedBucketIdx(e.scheduledNext, buckets);
+          if (idx >= 0 && !buckets[idx].isFuture) timeline[idx].overdue++;
+        } else {
+          const startDate    = _gicaParseDate(e.scheduledNext);
+          const lastTestDate = _gicaParseDate(e.lastDate);
+          for (let bi = 0; bi < buckets.length; bi++) {
+            if (startDate > buckets[bi].end) continue;
+            if (buckets[bi].isFuture) break;
+            if (lastTestDate && lastTestDate >= buckets[bi].start && lastTestDate <= buckets[bi].end) continue;
+            if (buckets[bi].end < today) timeline[bi].overdue++;
+            else                         timeline[bi].upcoming++;
+          }
         }
       } else {
         const idx = _gicaSchedBucketIdx(e.scheduledNext, buckets);
-        if (idx >= 0) timeline[idx].upcoming++;
+        // Skip if person already counted in this bucket via a history entry (monthly double-count guard)
+        if (idx >= 0 && !testedBuckets.has(idx)) timeline[idx].upcoming++;
       }
     }
   });
@@ -5404,8 +5501,8 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
   return {
     total, overdueN, dueWeekN, dueMonthN, compliancePct,
     retestN, reviewN,
-    statusCounts, buCards, timeline, timelineMode, schedMode,
-    employees: schedable,
+    statusCounts, buCards, timeline, timelineMode, schedMode, currentIdx,
+    employees: allSchedable,
     availBus, availDepts, buFilter, deptFilter,
   };
 }
@@ -5416,13 +5513,10 @@ function _gicaScheduleHtml(vm) {
       <div class="stat-card__label">${label}</div>
       <div class="stat-card__value" style="color:${color};">${value}</div>
     </div>`;
-  const failPct = vm.total > 0 ? vm.retestN / vm.total * 100 : 0;
-  const passPct = vm.total > 0 ? vm.reviewN / vm.total * 100 : 0;
-
   const legendItem = (color, text) => `
     <span><span style="display:inline-block;width:10px;height:10px;background:${color};border-radius:2px;margin-right:4px;vertical-align:middle;"></span>${text}</span>`;
   const buLabel   = vm.buFilter.size === 0   ? 'BU'   : vm.buFilter.size   <= 2 ? [...vm.buFilter].join(', ')   : `BU (${vm.buFilter.size})`;
-  const deptLabel = vm.deptFilter.size === 0 ? 'แผนก' : vm.deptFilter.size <= 2 ? [...vm.deptFilter].join(', ') : `แผนก (${vm.deptFilter.size})`;
+  const deptLabel = vm.deptFilter.size === 0 ? 'Department' : vm.deptFilter.size <= 2 ? [...vm.deptFilter].join(', ') : `Department (${vm.deptFilter.size})`;
   const timelineCard = `
     <div class="card card--section">
       <div class="card-head u-between">
@@ -5431,28 +5525,28 @@ function _gicaScheduleHtml(vm) {
           <div class="quad-dropdown">
             <button class="quad-dd-btn${vm.buFilter.size > 0 ? ' quad-dd-btn--active' : ''}" id="gica-sched-bu-trigger" type="button"><span class="quad-dd-label">${buLabel}</span> ▾</button>
             <div class="quad-dd-panel" id="gica-sched-bu-panel" hidden>
-              <button class="quad-btn${vm.buFilter.size === 0 ? ' quad-btn--active' : ''}" data-bu="all" type="button">ทั้งหมด</button>
+              <button class="quad-btn${vm.buFilter.size === 0 ? ' quad-btn--active' : ''}" data-bu="all" type="button">All BU</button>
               ${vm.availBus.map(bu => `<button class="quad-btn${vm.buFilter.has(bu) ? ' quad-btn--active' : ''}" data-bu="${escapeHtml(bu)}" type="button">${escapeHtml(bu)}</button>`).join('')}
             </div>
           </div>
           <div class="quad-dropdown">
             <button class="quad-dd-btn${vm.deptFilter.size > 0 ? ' quad-dd-btn--active' : ''}" id="gica-sched-dept-trigger" type="button"><span class="quad-dd-label">${deptLabel}</span> ▾</button>
             <div class="quad-dd-panel" id="gica-sched-dept-panel" hidden>
-              <button class="quad-btn${vm.deptFilter.size === 0 ? ' quad-btn--active' : ''}" data-dept="all" type="button">ทั้งหมด</button>
+              <button class="quad-btn${vm.deptFilter.size === 0 ? ' quad-btn--active' : ''}" data-dept="all" type="button">All Departments</button>
               ${vm.availDepts.map(d => `<button class="quad-btn${vm.deptFilter.has(d) ? ' quad-btn--active' : ''}" data-dept="${escapeHtml(d)}" type="button">${escapeHtml(d)}</button>`).join('')}
             </div>
           </div>
           <div class="toggle-group" id="gica-schedTimelineToggle">
-            <button class="toggle-btn ${vm.timelineMode === 'week'  ? 'active' : ''}" data-mode="week"  type="button">รายสัปดาห์</button>
-            <button class="toggle-btn ${vm.timelineMode === 'month' ? 'active' : ''}" data-mode="month" type="button">รายเดือน</button>
+            <button class="toggle-btn ${vm.timelineMode === 'week'  ? 'active' : ''}" data-mode="week"  type="button">Week</button>
+            <button class="toggle-btn ${vm.timelineMode === 'month' ? 'active' : ''}" data-mode="month" type="button">Month</button>
           </div>
         </div>
       </div>
       <div class="chart-canvas-wrap" style="height:300px;"><canvas id="gica-schedTimelineChart"></canvas></div>
       <div style="display:flex;gap:16px;margin-top:10px;font-size:0.74rem;color:var(--text-muted);flex-wrap:wrap;">
         ${legendItem('#64748b', 'Total')}
-        ${legendItem('#16a34a', 'On-time (ผ่าน)')}
-        ${legendItem('#86efac', 'On-time (ไม่ผ่าน)')}
+        ${legendItem('#16a34a', 'On-time (Pass)')}
+        ${legendItem('#86efac', 'On-time (Fail)')}
         ${legendItem('#dc2626', 'Overdue')}
       </div>
     </div>`;
@@ -5501,85 +5595,121 @@ function _gicaScheduleHtml(vm) {
       </div>
       <div style="display:flex;gap:16px;margin-top:10px;font-size:0.72rem;color:var(--text-muted);flex-wrap:wrap;">
         <div id="gica-schedBuLegend" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
-        <span style="font-style:italic;">คลิกที่แท่ง → ดูรายชื่อด้านล่าง</span>
       </div>
       <div id="gica-scheduleDrill" style="margin-top:14px;"></div>
     </div>`;
 
   const buSection = `<div class="stat-grid stat-grid--6">${buCardsHtml}</div>`;
 
-  const totStat = vm.statusCounts.upcoming + vm.statusCounts.due_soon + vm.statusCounts.overdue;
-  const R = 38, sw = 18, CIRC = 2 * Math.PI * R;
-  let acc = 0;
-  const segs = ['overdue', 'due_soon', 'upcoming'].map(k => {
-    const v = vm.statusCounts[k] || 0;
-    if (!v || !totStat) return '';
-    const len = v / totStat * CIRC;
-    const dash = Math.max(len - 1, 0.5);
-    const seg = `<circle cx="50" cy="50" r="${R}" fill="none" stroke="${_GICA_SCHED_STATUS[k].color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 50 50)"></circle>`;
-    acc += len;
-    return seg;
-  }).join('');
-  const donutStatusRows = ['overdue', 'due_soon', 'upcoming', 'unknown'].map(k => {
-    const v   = vm.statusCounts[k] || 0;
-    const info = _GICA_SCHED_STATUS[k];
+  // 3-way snapshot of every schedulable employee: Overdue (past due, not yet tested),
+  // Upcoming (test date not reached yet — due_soon + upcoming), On-time (no pending test
+  // outstanding right now, i.e. the 'unknown' bucket left over once overdue/upcoming are removed).
+  const schedDonutColors = { overdue: '#dc2626', upcoming: '#f59e0b', onTime: '#16a34a' };
+  const schedDonutLabels = { overdue: 'Overdue', upcoming: 'Upcoming', onTime: 'On-time' };
+  const schedDonutCounts = {
+    overdue: vm.statusCounts.overdue,
+    upcoming: vm.statusCounts.due_soon + vm.statusCounts.upcoming,
+    onTime: vm.statusCounts.unknown,
+  };
+  const donutSchedLg = (counts, tot) => {
+    const CX = 145, CY = 102, R = 50, sw = 20;
+    const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
+    const gap = tot ? 1.2 : 0;
+    let acc = 0;
+    const segs = [], lines = [];
+    ['overdue', 'upcoming', 'onTime'].forEach(k => {
+      const v = counts[k] || 0;
+      if (!tot || !v) return;
+      const color = schedDonutColors[k];
+      const len  = v / tot * CIRC;
+      const dash = Math.max(len - gap, 0.5);
+      segs.push(`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"></circle>`);
+      const mid = -Math.PI / 2 + (acc + len / 2) / CIRC * 2 * Math.PI;
+      const mx = CX + outerR * Math.cos(mid),        my = CY + outerR * Math.sin(mid);
+      const ex = CX + (outerR + 12) * Math.cos(mid), ey = CY + (outerR + 12) * Math.sin(mid);
+      const isRight = ex >= CX;
+      const hx = ex + (isRight ? 18 : -18), hy = ey;
+      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
+      const pct = Math.round(v / tot * 100);
+      lines.push(`
+        <line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${color}" stroke-width="1.2" stroke-linecap="round"></line>
+        <line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${color}" stroke-width="1.2" stroke-linecap="round"></line>
+        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${color}"></circle>
+        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="600" fill="var(--text)">${schedDonutLabels[k]}: ${v}</text>
+        <text x="${tx.toFixed(1)}" y="${(hy + 9.5).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${pct}%)</text>`);
+      acc += len;
+    });
+    const onTimePct = tot ? Math.round((counts.onTime || 0) / tot * 100) : 0;
     return `
-      <div style="display:flex;align-items:center;gap:5px;font-size:0.69rem;">
-        <span style="width:8px;height:8px;background:${info.color};border-radius:2px;flex-shrink:0;"></span>
-        <span style="color:var(--text);flex:1;">${info.label}</span>
-        <strong style="color:var(--text);">${v}</strong>
-      </div>`;
-  }).join('');
+      <svg viewBox="0 0 300 205" width="100%">
+        <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
+        ${segs.join('')}
+        ${lines.join('')}
+        <text x="${CX}" y="${CY + 8}" text-anchor="middle" font-size="22" font-weight="800" fill="${schedDonutColors.onTime}">${onTimePct}%</text>
+        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)" letter-spacing="0.5">On-time</text>
+      </svg>`;
+  };
+
+  const failedBuBarChart = buCards => {
+    const active = buCards.filter(c => !c.empty);
+    if (!active.length) return `<div class="u-muted" style="font-size:0.75rem;margin-top:10px;">ไม่มีข้อมูล</div>`;
+    const maxN = Math.max(...active.map(c => c.failed || 0), 1);
+    const W = 220, CH = 70, PAD = 8, LH = 16, TPAD = 14;
+    const n = active.length;
+    const slot = (W - PAD * 2) / n;
+    const bw = Math.round(slot * 0.62);
+    const bo = (slot - bw) / 2;
+    const bars = active.map((c, i) => {
+      const v = c.failed || 0;
+      const h = Math.max(Math.round(v / maxN * CH), v > 0 ? 2 : 0);
+      const x  = Math.round(PAD + i * slot + bo);
+      const cx = Math.round(x + bw / 2);
+      const color = GICA_BU_COLORS[c.bu] || '#6b7280';
+      const topY = TPAD + CH - h;
+      return `<rect x="${x}" y="${topY}" width="${bw}" height="${h}" rx="3" fill="${color}"></rect>
+        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="8" font-weight="700" fill="${color}">${v}</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
+      <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
+      ${bars}
+    </svg>`;
+  };
 
   const gaugeStatCard = `
     <div class="stat-card">
-      <div class="stat-card__label">GICA Assessment Status</div>
-      <div style="font-size:0.69rem;color:var(--text-muted);margin-bottom:8px;">Total: ${vm.total} คน</div>
-      <div style="border-radius:4px;overflow:hidden;height:14px;display:flex;background:var(--progress-track);margin-bottom:10px;">
-        <div style="width:${failPct.toFixed(1)}%;background:#dc2626;" title="Failed: ${vm.retestN}"></div>
-        <div style="width:${passPct.toFixed(1)}%;background:#16a34a;" title="Passed: ${vm.reviewN}"></div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:5px;font-size:0.72rem;">
-        <div style="display:flex;align-items:center;gap:5px;">
-          <span style="width:8px;height:8px;background:#dc2626;border-radius:2px;flex-shrink:0;"></span>
-          <span>Failed <strong style="color:#b91c1c;">${vm.retestN}</strong> (${Math.round(failPct)}%)</span>
+      <div class="u-between">
+        <div>
+          <div class="stat-card__label">Total employees</div>
+          <div class="stat-card__value"${vm.retestN > 0 ? ' style="color:#dc2626;"' : ''}>${vm.retestN}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:5px;">
-          <span style="width:8px;height:8px;background:#16a34a;border-radius:2px;flex-shrink:0;"></span>
-          <span>Passed <strong style="color:#16a34a;">${vm.reviewN}</strong> (${Math.round(passPct)}%)</span>
-        </div>
-        <div style="color:var(--text-muted);">Pending: ${vm.total - vm.retestN - vm.reviewN}</div>
       </div>
+      ${failedBuBarChart(vm.buCards)}
     </div>`;
 
   const donutStatCard = `
     <div class="stat-card">
       <div class="stat-card__label">สถานะการประเมิน</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
-        <div style="position:relative;width:72px;height:72px;flex-shrink:0;">
-          <svg viewBox="0 0 100 100" style="width:100%;height:100%;">
-            <circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
-            ${segs}
-          </svg>
-          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-            <div style="font-size:1.1rem;font-weight:700;color:var(--text);">${totStat}</div>
-            <div style="font-size:0.55rem;color:var(--text-muted);">รอประเมิน</div>
-          </div>
-        </div>
-        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">${donutStatusRows}</div>
-      </div>
+      ${donutSchedLg(schedDonutCounts, vm.total)}
     </div>`;
 
   const row1 = `
-    <div class="stat-grid stat-grid--5">
+    <div class="stat-grid stat-grid--4">
       ${gaugeStatCard}
       ${donutStatCard}
-      ${kpiCard('Due This Week', vm.dueWeekN, '#b45309')}
       ${kpiCard('Overdue', vm.overdueN, '#dc2626')}
       ${kpiCard('On-time Rate', vm.compliancePct != null ? vm.compliancePct + '%' : '—', '#16a34a')}
     </div>`;
 
-  return `${row1}${buSection}${timelineCard}${upcomingCard}`;
+  const calendarCard = `
+    <div class="card card--section">
+      <div class="card-head u-between">
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">Assessment Schedule (Calendar View)</h3>
+      </div>
+      <div id="gica-cal-summary"></div>
+    </div>`;
+
+  return `${row1}${buSection}${calendarCard}${timelineCard}${upcomingCard}`;
 }
 
 function _mountGicaSchedule(html, vm) {
@@ -5637,9 +5767,23 @@ function _mountGicaSchedule(html, vm) {
       display: ctx => showWhen(vm.timeline[ctx.dataIndex]),
       formatter: (v, ctx) => { const t = vm.timeline[ctx.dataIndex]; return t.onTimePassed + t.onTimeFailed; },
     });
+    const _currentBucketHighlight = {
+      id: 'gicaCurrentBucketHighlight',
+      beforeDatasetsDraw(chart) {
+        const idx = vm.currentIdx;
+        if (idx == null || idx < 0) return;
+        const { ctx, chartArea, scales: { x } } = chart;
+        const center = x.getPixelForTick(idx);
+        const band   = x.width / x.ticks.length;
+        ctx.save();
+        ctx.fillStyle = 'rgba(37,99,235,0.10)';
+        ctx.fillRect(center - band / 2, chartArea.top, band, chartArea.bottom - chartArea.top);
+        ctx.restore();
+      },
+    };
     _gicaSchedTimelineChart = new Chart(cvs, {
       type: 'bar',
-      plugins: typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [],
+      plugins: [_currentBucketHighlight, ...(typeof ChartDataLabels !== 'undefined' ? [ChartDataLabels] : [])],
       data: {
         labels: vm.timeline.map(t => t.label),
         datasets: [
@@ -5858,6 +6002,196 @@ function renderGicaSchedule() {
   const today = _gicaToday();
   const vm = _computeGicaSchedule(_gicaData.employees || [], today, _gicaSchedTimelineMode, _gicaSchedMode, _gicaSchedBuFilter, _gicaSchedDeptFilter);
   _mountGicaSchedule(_gicaScheduleHtml(vm), vm);
+  renderGicaCalendar();
+}
+
+// ── Assessment Schedule (Calendar View) — month grid keyed by scheduledNext ───
+const GICA_CAL_TYPE = {
+  Initial: { color: '#2563eb', bg: 'rgba(37,99,235,0.14)', label: 'Initial assessment' },
+  Retest:  { color: '#b45309', bg: 'rgba(180,83,9,0.14)',  label: 'Re-assessment' },
+  Review:  { color: '#16a34a', bg: 'rgba(22,163,74,0.14)', label: 'Review assessment' },
+};
+function _gicaCalendarHtml(vm) {
+  const buChips = `
+    <button class="quad-btn${vm.buFilter.size === 0 ? ' quad-btn--active' : ''}" data-bu="all" type="button">All BU</button>
+    ${vm.availBus.map(bu => `<button class="quad-btn${vm.buFilter.has(bu) ? ' quad-btn--active' : ''}" data-bu="${escapeHtml(bu)}" type="button">${escapeHtml(bu)}</button>`).join('')}`;
+  const typeRows = Object.keys(GICA_CAL_TYPE).map(t => {
+    const info = GICA_CAL_TYPE[t];
+    const checked = vm.typeFilter.size === 0 || vm.typeFilter.has(t);
+    return `
+      <label class="gica-cal-type-row">
+        <input type="checkbox" data-type="${t}" ${checked ? 'checked' : ''}>
+        <span class="gica-cal-type-dot" style="background:${info.color};"></span>${info.label}
+      </label>`;
+  }).join('');
+
+  const weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const cellHtml = day => {
+    const evtHtml = day.buGroups.map(g => {
+      const color = GICA_BU_COLORS[g.bu] || '#6b7280';
+      return `<div class="gica-cal-evt" data-day-key="${day.key}" data-bu="${escapeHtml(g.bu)}" style="background:${hexToRgba(color, 0.16)};color:${color};">${escapeHtml(g.bu)} (${g.count})${g.overdue ? '<span class="gica-cal-evt__dot"></span>' : ''}</div>`;
+    }).join('');
+    const cls = ['gica-cal-cell', !day.inMonth ? 'gica-cal-cell--out' : '', day.isPast ? 'gica-cal-cell--past' : '', day.isToday ? 'gica-cal-cell--today' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}"><div class="gica-cal-daynum">${day.dayNum}</div><div class="gica-cal-evt-list">${evtHtml}</div></div>`;
+  };
+
+  return `
+    <div class="gica-cal-toolbar">
+      <button class="gica-cal-nav-btn" id="gica-cal-today" type="button">Today</button>
+      <button class="gica-cal-nav-btn" id="gica-cal-prev" type="button">‹</button>
+      <span class="gica-cal-month-label">${escapeHtml(vm.monthLabel)}</span>
+      <button class="gica-cal-nav-btn" id="gica-cal-next" type="button">›</button>
+    </div>
+    <div class="gica-cal-body">
+      <div class="gica-cal-sidebar">
+        <div class="gica-cal-sidebar-label">BU</div>
+        <div id="gica-cal-bu-chips" class="gica-cal-bu-grid">${buChips}</div>
+        <div class="gica-cal-sidebar-label" style="margin-top:12px;">Type</div>
+        <div id="gica-cal-type-chips" class="gica-cal-type-list">${typeRows}</div>
+        <div class="gica-cal-sidebar-label" style="margin-top:12px;">Status</div>
+        <div class="gica-cal-type-row" style="cursor:default;">
+          <span class="gica-cal-type-dot" style="background:#dc2626;"></span> Overdue (Not yet tested)
+        </div>
+      </div>
+      <div class="gica-cal-main">
+        <div class="gica-cal-weekdays">${weekdayNames.map(n => `<div class="gica-cal-weekday">${n}</div>`).join('')}</div>
+        <div class="gica-cal-grid" id="gica-cal-grid">${vm.weeks.map(week => week.map(cellHtml).join('')).join('')}</div>
+      </div>
+    </div>
+    <div class="gica-cal-panel" id="gica-cal-panel"></div>`;
+}
+
+// Reuses the same gica-drill-table-wrap / gica-drill-table markup as the
+// Upcoming test schedule chart's drill-down, scoped to one day + one BU.
+function _gicaCalDrillHtml(dayKey, bu, emps) {
+  const rows = emps.filter(e => e.bu === bu).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const gradeCell = (g, s) => g
+    ? `${_gicaGradeBadge(g)}<span style="font-size:0.68rem;color:var(--text-muted);margin-left:3px;">${s != null ? Math.round(s * 100) + '%' : ''}</span>`
+    : '<span style="color:var(--text-muted);">—</span>';
+  const passBadge = p => p === true
+    ? `<span class="exp-badge" style="background:#16a34a;color:#fff;font-size:0.68rem;">Pass</span>`
+    : p === false
+      ? `<span class="exp-badge" style="background:#dc2626;color:#fff;font-size:0.68rem;">Fail</span>`
+      : `<span style="color:var(--text-muted);">—</span>`;
+  const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+  return `
+    <div class="gica-print-header">
+      <div style="font-size:1rem;font-weight:700;">Employee List for GICA Assessment Schedule</div>
+      <div style="font-size:0.78rem;color:#555;margin-top:3px;">Assessment Date: ${_gicaFmtDate(dayKey)} · BU ${escapeHtml(bu)} · Total: ${rows.length} employees · Report Date: ${printDate}</div>
+    </div>
+    <div class="no-print" style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span>${_gicaFmtDate(dayKey)} · <span style="color:${GICA_BU_COLORS[bu] || 'var(--accent)'};">${escapeHtml(bu)}</span> — ${rows.length} Participants</span>
+      <button id="gica-cal-panel-close" type="button" style="font-size:0.72rem;padding:2px 8px;">✕ Close</button>
+      <button onclick="_gicaPrint('gica-cal-panel');" type="button" style="font-size:0.72rem;padding:2px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print PDF</button>
+    </div>
+    <div class="gica-drill-table-wrap">
+      <table class="gica-drill-table">
+        <colgroup>
+          <col style="width:5%"><col style="width:7%"><col style="width:13%"><col style="width:12%">
+          <col style="width:9%"><col style="width:9%"><col style="width:5%"><col style="width:8%">
+          <col style="width:8%"><col style="width:9%"><col style="width:7%"><col style="width:8%">
+        </colgroup>
+        <thead><tr>
+          <th class="drill-th" style="text-align:center;">BU</th>
+          <th class="drill-th">Employee ID</th>
+          <th class="drill-th">Employee Name</th>
+          <th class="drill-th">Department</th>
+          <th class="drill-th" style="text-align:center;white-space:normal;line-height:1.3;">Measurement Result</th>
+          <th class="drill-th" style="text-align:center;white-space:normal;line-height:1.3;">Inspection Result</th>
+          <th class="drill-th" style="text-align:center;">Attempt</th>
+          <th class="drill-th" style="text-align:center;white-space:normal;line-height:1.3;">Assessment Date</th>
+          <th class="drill-th" style="text-align:center;white-space:normal;line-height:1.3;">Assessment Result</th>
+          <th class="drill-th" style="text-align:center;white-space:normal;line-height:1.3;">Next Assessment Date</th>
+          <th class="drill-th" style="text-align:center;white-space:normal;line-height:1.3;">Days Remaining</th>
+          <th class="drill-th" style="text-align:center;">Status</th>
+        </tr></thead>
+        <tbody>
+          ${rows.length ? rows.map(e => `<tr>
+            <td class="drill-td" style="text-align:center;">${escapeHtml(e.bu)}</td>
+            <td class="drill-td" style="font-size:0.72rem;color:var(--text-muted);">${escapeHtml(e.empid || '')}</td>
+            <td class="drill-td" style="font-weight:600;">${escapeHtml(e.name)}</td>
+            <td class="drill-td" style="font-size:0.75rem;color:var(--text-muted);">${escapeHtml(e.deptname)}</td>
+            <td class="drill-td" style="text-align:center;">${gradeCell(e.grade1, e.score1)}</td>
+            <td class="drill-td" style="text-align:center;">${gradeCell(e.grade2, e.score2)}</td>
+            <td class="drill-td" style="text-align:center;">${e.attempt}</td>
+            <td class="drill-td" style="text-align:center;font-size:0.72rem;">${_gicaFmtDate(e.lastDate)}</td>
+            <td class="drill-td" style="text-align:center;">${passBadge(e.passed)}</td>
+            <td class="drill-td" style="text-align:center;font-size:0.72rem;">${_gicaFmtDate(e.nextDate)}</td>
+            <td class="drill-td" style="text-align:center;">${_gicaDaysBadge(e.nextDate)}</td>
+            <td class="drill-td" style="text-align:center;">${_gicaTypeBadge(e.nextType)}</td>
+          </tr>`).join('') : `<tr><td colspan="12" style="padding:20px;text-align:center;color:var(--text-muted);">ไม่มีข้อมูล</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function _mountGicaCalendar(html, vm) {
+  const container = $('gica-cal-summary');
+  if (!container) return;
+  container.innerHTML = html;
+
+  $('gica-cal-prev') ?.addEventListener('click', () => { _gicaCalMonthOffset--; renderGicaCalendar(); });
+  $('gica-cal-next') ?.addEventListener('click', () => { _gicaCalMonthOffset++; renderGicaCalendar(); });
+  $('gica-cal-today')?.addEventListener('click', () => { _gicaCalMonthOffset = 0; renderGicaCalendar(); });
+
+  $('gica-cal-bu-chips')?.addEventListener('click', e => {
+    const btn = e.target.closest('.quad-btn[data-bu]');
+    if (!btn) return;
+    const val = btn.dataset.bu;
+    if (val === 'all') _gicaCalBuFilter.clear();
+    else _gicaCalBuFilter.has(val) ? _gicaCalBuFilter.delete(val) : _gicaCalBuFilter.add(val);
+    renderGicaCalendar();
+  });
+  $('gica-cal-type-chips')?.addEventListener('change', e => {
+    const input = e.target.closest('input[data-type]');
+    if (!input) return;
+    const allTypes = Object.keys(GICA_CAL_TYPE);
+    if (_gicaCalTypeFilter.size === 0) allTypes.forEach(t => { if (t !== input.dataset.type) _gicaCalTypeFilter.add(t); });
+    else input.checked ? _gicaCalTypeFilter.add(input.dataset.type) : _gicaCalTypeFilter.delete(input.dataset.type);
+    if (_gicaCalTypeFilter.size === allTypes.length) _gicaCalTypeFilter.clear();
+    renderGicaCalendar();
+  });
+
+  if (_gicaCalDrillEscHandler) {
+    document.removeEventListener('keydown', _gicaCalDrillEscHandler);
+    _gicaCalDrillEscHandler = null;
+  }
+  const panel = $('gica-cal-panel');
+  const grid  = $('gica-cal-grid');
+  const dayByKey = {};
+  vm.weeks.forEach(week => week.forEach(d => { dayByKey[d.key] = d; }));
+  const closeDrill = () => {
+    if (panel) panel.innerHTML = '';
+    if (_gicaCalDrillEscHandler) {
+      document.removeEventListener('keydown', _gicaCalDrillEscHandler);
+      _gicaCalDrillEscHandler = null;
+    }
+  };
+  const showDrill = (dayKey, bu) => {
+    if (!panel) return;
+    const day = dayByKey[dayKey];
+    panel.innerHTML = day ? _gicaCalDrillHtml(dayKey, bu, day.events) : '';
+    panel.querySelector('#gica-cal-panel-close')?.addEventListener('click', closeDrill);
+    if (_gicaCalDrillEscHandler) document.removeEventListener('keydown', _gicaCalDrillEscHandler);
+    _gicaCalDrillEscHandler = e => { if (e.key === 'Escape') closeDrill(); };
+    document.addEventListener('keydown', _gicaCalDrillEscHandler);
+  };
+  grid?.addEventListener('click', e => {
+    const chip = e.target.closest('.gica-cal-evt[data-bu]');
+    if (!chip) return;
+    showDrill(chip.dataset.dayKey, chip.dataset.bu);
+  });
+
+  const todayDay = Object.values(dayByKey).find(d => d.isToday && d.buGroups.length);
+  if (todayDay) showDrill(todayDay.key, todayDay.buGroups[0].bu);
+}
+
+function renderGicaCalendar() {
+  const monthDate = new Date();
+  monthDate.setDate(1);
+  monthDate.setMonth(monthDate.getMonth() + _gicaCalMonthOffset);
+  const vm = _computeGicaCalendar(_gicaData.employees || [], monthDate, _gicaCalBuFilter, _gicaCalTypeFilter);
+  _mountGicaCalendar(_gicaCalendarHtml(vm), vm);
 }
 
 // ── Chart: upcoming test schedule (clickable) ─────────────────────────────────
@@ -5968,8 +6302,8 @@ function renderGicaScheduleChart() {
 
   renderGicaScheduleDrill();
 }
-function _gicaPrint() {
-  const src = $('gica-scheduleDrill');
+function _gicaPrint(sourceId = 'gica-scheduleDrill') {
+  const src = $(sourceId);
   if (!src) return;
   let overlay = document.getElementById('gica-print-overlay');
   if (!overlay) {
@@ -5991,7 +6325,7 @@ function renderGicaScheduleDrill() {
   const wrap = $('gica-scheduleDrill');
   if (!wrap) return;
   if (!_gicaSchedDate) {
-    wrap.innerHTML = '<p style="font-size:0.78rem;color:var(--text-muted);font-style:italic;">เลือกวันที่จากกราฟด้านบนเพื่อดูรายชื่อ</p>';
+    wrap.innerHTML = '<p style="font-size:0.78rem;color:var(--text-muted);font-style:italic;">Click on the bar → view the list naname.</p>';
     return;
   }
   let rows = _gicaSchedRows().filter(e => e.nextDate === _gicaSchedDate);

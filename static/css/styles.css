@@ -2422,3 +2422,33 @@ tbody tr:hover { filter: brightness(.97); }
   #gica-print-overlay .drill-td { font-size: 8.5pt !important; padding: 3px 5px !important; border: 1px solid #bbb !important; }
   #gica-print-overlay .exp-badge { font-size: 7pt !important; padding: 1px 3px !important; }
 }
+
+/* ===== GICA ASSESSMENT SCHEDULE — CALENDAR VIEW ===== */
+.gica-cal-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.gica-cal-nav-btn { padding: 3px 10px; font-size: 0.78rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 5px; cursor: pointer; }
+.gica-cal-nav-btn:hover { background: var(--surface2); }
+.gica-cal-month-label { font-size: 0.92rem; font-weight: 700; color: var(--text); min-width: 110px; }
+.gica-cal-body { display: flex; gap: 14px; align-items: flex-start; }
+.gica-cal-sidebar { width: 168px; flex-shrink: 0; }
+.gica-cal-sidebar-label { font-size: 0.68rem; font-weight: 700; color: var(--text-muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: .03em; }
+.gica-cal-bu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.gica-cal-type-list { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.gica-cal-type-row { display: flex; flex-direction: row; align-items: center; gap: 6px; margin-bottom: 0; font-weight: 400; font-size: 0.74rem; color: var(--text); cursor: pointer; }
+.gica-cal-type-row input[type="checkbox"] { width: 13px; height: 13px; margin: 0; flex-shrink: 0; cursor: pointer; accent-color: #6366f1; }
+.gica-cal-type-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.gica-cal-main { flex: 1; min-width: 0; overflow-x: auto; }
+.gica-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--border-light); min-width: 560px; }
+.gica-cal-weekday { padding: 5px 6px; font-size: 0.68rem; color: var(--text-muted); text-align: center; }
+.gica-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); min-width: 560px; }
+.gica-cal-cell { border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light); padding: 4px 5px; min-height: 74px; }
+.gica-cal-cell--out { opacity: 0.4; }
+.gica-cal-cell--past { background: rgba(100, 100, 100, 0.08); }
+.gica-cal-cell--today { background: rgba(99, 102, 241, 0.08); }
+.gica-cal-daynum { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 3px; }
+.gica-cal-cell--today .gica-cal-daynum { color: #6366f1; font-weight: 700; }
+.gica-cal-evt-list { max-height: 64px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.gica-cal-evt-list::-webkit-scrollbar { display: none; }
+.gica-cal-evt { position: relative; font-size: 0.64rem; border-radius: 4px; padding: 2px 5px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.gica-cal-evt:hover { filter: brightness(0.93); }
+.gica-cal-evt__dot { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 5px; height: 5px; border-radius: 50%; background: #dc2626; }
+.gica-cal-panel { border-top: 1px solid var(--border-light); margin-top: 12px; padding-top: 10px; }
