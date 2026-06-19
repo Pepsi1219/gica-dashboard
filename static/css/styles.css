@@ -21,8 +21,8 @@
   --bg:              #f0f0f8;
   --surface:         #ffffff;
   --surface2:        #f6f5ff;
-  --text:            #1a1440;
-  --text-muted:      #6b6899;
+  --text:            #000000;
+  --text-muted:      #9e9db2;
   --border:          #d4d2e8;
   --border-light:    #e8e7f5;
 
@@ -64,7 +64,7 @@
 [data-theme="dark"] {
   --bg:              #0d0b1e;
   --surface:         #161230;
-  --surface2:        #0f0c22;
+  --surface2:        #1e1842;
   --text:            #cec9f0;
   --text-muted:      #7872b0;
   --border:          #2e2858;
@@ -2033,7 +2033,7 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-modal__close:hover { background: var(--border-light); color: var(--text); }
 .gica-modal__body { font-size: 0.78rem; }
 .exp-modal-table { width: 100%; border-collapse: collapse; }
-.exp-modal-table th { text-align: left; padding: 6px 8px; color: var(--purple-light); font-weight: 900; border-bottom: 1px solid var(--border-light); font-size: 0.7rem; }
+.exp-modal-table th { text-align: left; padding: 6px 8px; color: #ffffff; font-weight: 900; border-bottom: 1px solid var(--border-light); font-size: 0.7rem; }
 .exp-modal-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-light);text-align: left; }
 .exp-modal-icon-th { text-align: center; padding: 6px 4px; font-size: 1rem; }
 .exp-modal-icon-td { text-align: center; }
@@ -2427,6 +2427,7 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-cal-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .gica-cal-nav-btn { padding: 3px 10px; font-size: 0.78rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 5px; cursor: pointer; }
 .gica-cal-nav-btn:hover { background: var(--surface2); }
+.gica-cal-nav-btn--active { border-color: #6366f1; color: #6366f1; }
 .gica-cal-month-label { font-size: 0.92rem; font-weight: 700; color: var(--text); min-width: 110px; }
 .gica-cal-body { display: flex; gap: 14px; align-items: flex-start; }
 .gica-cal-sidebar { width: 168px; flex-shrink: 0; }
@@ -2437,9 +2438,11 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-cal-type-row input[type="checkbox"] { width: 13px; height: 13px; margin: 0; flex-shrink: 0; cursor: pointer; accent-color: #6366f1; }
 .gica-cal-type-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .gica-cal-main { flex: 1; min-width: 0; overflow-x: auto; }
-.gica-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--border-light); min-width: 560px; }
+.gica-cal-weekdays { display: grid; grid-template-columns: 26px repeat(7, 1fr); border-bottom: 1px solid var(--border-light); min-width: 586px; }
 .gica-cal-weekday { padding: 5px 6px; font-size: 0.68rem; color: var(--text-muted); text-align: center; }
-.gica-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); min-width: 560px; }
+.gica-cal-weeknum-head { border-right: 1px solid var(--border-light); }
+.gica-cal-grid { display: grid; grid-template-columns: 26px repeat(7, 1fr); min-width: 586px; }
+.gica-cal-weeknum { display: flex; align-items: center; justify-content: center; font-size: 0.62rem; color: var(--text-muted); border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light); }
 .gica-cal-cell { border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light); padding: 4px 5px; min-height: 74px; }
 .gica-cal-cell--out { opacity: 0.4; }
 .gica-cal-cell--past { background: rgba(100, 100, 100, 0.08); }

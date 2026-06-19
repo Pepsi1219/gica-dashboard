@@ -4045,7 +4045,7 @@ let _gicaDrillEscHandler = null;
 let _gicaKpiTargets = {};
 const _gicaTableState = {
   page: 1, pageSize: 25, sortKey: 'nextDate', sortDir: 1,
-  filters: { bu: '', grade: '', dept: '', type: '', search: '' },
+  filters: { bu: '', grade: '', dept: '', level: '', type: '', search: '' },
 };
 
 // ── Date / format helpers ─────────────────────────────────────────────────────
@@ -5118,10 +5118,17 @@ function _mountGicaSummary(html, vm) {
         <table class="exp-modal-table">
           <thead>
             <tr>
-              <th>ชื่อ</th>
+              <th>Name</th>
               <th class="exp-modal-icon-th" title="Measurement"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
               <th class="exp-modal-icon-th" title="Inspection"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
-              <th>Department</th><th>Position</th><th>M</th><th>I</th><th>ผล</th>
+              <th>Department</th>
+              <th>Position</th>
+              <th>Level</th>
+
+              <th class="exp-modal-icon-th" title="Measurement"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+              <th class="exp-modal-icon-th" title="Inspection"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+              
+              <th>Result</th>
             </tr>
           </thead>
           <tbody>
@@ -5134,6 +5141,7 @@ function _mountGicaSummary(html, vm) {
                 <td class="exp-modal-icon-td">${_gicaExpBadge(e.exp2)}</td>
                 <td class="u-muted">${escapeHtml(e.deptname || '—')}</td>
                 <td class="u-muted">${escapeHtml(e.position || '—')}</td>
+                <td class="u-muted">${escapeHtml(e.level || '—')}</td>
                 <td><span class="exp-badge ${okM ? 'exp-badge--pass' : 'exp-badge--fail'}">${e.grade1 || '—'}</span></td>
                 <td><span class="exp-badge ${okI ? 'exp-badge--pass' : 'exp-badge--fail'}">${e.grade2 || '—'}</span></td>
                 <td>${e.passed ? '<span class="exp-status exp-status--pass">Pass</span>' : '<span class="exp-status exp-status--fail">Fail</span>'}</td>
@@ -5272,6 +5280,7 @@ let _gicaSchedDeptFilter = new Set();
 let _gicaCalMonthOffset = 0;        // 0 = current month, ±N = N months away
 let _gicaCalBuFilter    = new Set();
 let _gicaCalTypeFilter  = new Set();
+let _gicaCalSidebarOpen = false;
 let _gicaCalDrillEscHandler = null;
 const _gicaSchedTableState = {
   page: 1, pageSize: 10,
@@ -5321,6 +5330,17 @@ function _gicaDateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// ISO 8601 week number (Mon-start weeks, week 1 = week containing the year's first Thursday).
+function _gicaIsoWeekNumber(d) {
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayNr = (target.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = new Date(target.getFullYear(), 0, 4);
+  const fDayNr = (firstThursday.getDay() + 6) % 7;
+  firstThursday.setDate(firstThursday.getDate() - fDayNr + 3);
+  return 1 + Math.round((target - firstThursday) / (7 * 86400000));
+}
+
 // Month grid for the Calendar View — Mon-start weeks, only as many rows as the month needs (5 or 6).
 function _gicaCalGrid(monthDate) {
   const year = monthDate.getFullYear(), month = monthDate.getMonth();
@@ -5352,7 +5372,7 @@ function _gicaCalGroupByBu(emps) {
 // Calendar View — month grid keyed strictly by scheduledNext (the planned test date, not
 // the actual test date). BU/type filters here are independent of the Timeline's filters —
 // each chart owns its own filter state so they never leak into each other.
-function _computeGicaCalendar(emps, monthDate, buFilter = new Set(), typeFilter = new Set()) {
+function _computeGicaCalendar(emps, monthDate, buFilter = new Set(), typeFilter = new Set(), sidebarOpen = false) {
   const allSchedable = emps.filter(e => e.scheduledNext || e.startDate);
   const availBus = sortBus([...new Set(allSchedable.map(e => e.bu).filter(Boolean))]);
 
@@ -5374,7 +5394,7 @@ function _computeGicaCalendar(emps, monthDate, buFilter = new Set(), typeFilter 
   const month     = monthDate.getMonth();
   const weeks = [];
   for (let i = 0; i < gridDays.length; i += 7) {
-    weeks.push(gridDays.slice(i, i + 7).map(d => {
+    const days = gridDays.slice(i, i + 7).map(d => {
       const key = _gicaDateKey(d);
       const events = eventsByDate[key] || [];
       return {
@@ -5382,14 +5402,15 @@ function _computeGicaCalendar(emps, monthDate, buFilter = new Set(), typeFilter 
         isPast: d < today,
         events, buGroups: _gicaCalGroupByBu(events),
       };
-    }));
+    });
+    weeks.push({ weekNumber: _gicaIsoWeekNumber(gridDays[i]), days });
   }
 
   const M = ['January', 'February', 'March', 'April', 'May', 'June',
              'July', 'August', 'September', 'October', 'November', 'December'];
   const monthLabel = `${M[month]} ${monthDate.getFullYear()}`;
 
-  return { weeks, monthLabel, availBus, buFilter, typeFilter };
+  return { weeks, monthLabel, availBus, buFilter, typeFilter, sidebarOpen };
 }
 
 function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFilter = new Set(), deptFilter = new Set()) {
@@ -6035,14 +6056,7 @@ function _gicaCalendarHtml(vm) {
     return `<div class="${cls}"><div class="gica-cal-daynum">${day.dayNum}</div><div class="gica-cal-evt-list">${evtHtml}</div></div>`;
   };
 
-  return `
-    <div class="gica-cal-toolbar">
-      <button class="gica-cal-nav-btn" id="gica-cal-today" type="button">Today</button>
-      <button class="gica-cal-nav-btn" id="gica-cal-prev" type="button">‹</button>
-      <span class="gica-cal-month-label">${escapeHtml(vm.monthLabel)}</span>
-      <button class="gica-cal-nav-btn" id="gica-cal-next" type="button">›</button>
-    </div>
-    <div class="gica-cal-body">
+  const sidebarHtml = vm.sidebarOpen ? `
       <div class="gica-cal-sidebar">
         <div class="gica-cal-sidebar-label">BU</div>
         <div id="gica-cal-bu-chips" class="gica-cal-bu-grid">${buChips}</div>
@@ -6052,10 +6066,23 @@ function _gicaCalendarHtml(vm) {
         <div class="gica-cal-type-row" style="cursor:default;">
           <span class="gica-cal-type-dot" style="background:#dc2626;"></span> Overdue (Not yet tested)
         </div>
-      </div>
+      </div>` : '';
+
+  return `
+    <div class="gica-cal-toolbar">
+      <button class="gica-cal-nav-btn" id="gica-cal-today" type="button">Today</button>
+      <button class="gica-cal-nav-btn" id="gica-cal-prev" type="button">‹</button>
+      <span class="gica-cal-month-label">${escapeHtml(vm.monthLabel)}</span>
+      <button class="gica-cal-nav-btn" id="gica-cal-next" type="button">›</button>
+      <button class="gica-cal-nav-btn${vm.sidebarOpen ? ' gica-cal-nav-btn--active' : ''}" id="gica-cal-filter-toggle" type="button" title="BU / Type / Status filters" style="margin-left:auto;">
+        <i class="ti ti-filter" aria-hidden="true"></i> Filters
+      </button>
+    </div>
+    <div class="gica-cal-body">
+      ${sidebarHtml}
       <div class="gica-cal-main">
-        <div class="gica-cal-weekdays">${weekdayNames.map(n => `<div class="gica-cal-weekday">${n}</div>`).join('')}</div>
-        <div class="gica-cal-grid" id="gica-cal-grid">${vm.weeks.map(week => week.map(cellHtml).join('')).join('')}</div>
+        <div class="gica-cal-weekdays"><div class="gica-cal-weeknum-head"></div>${weekdayNames.map(n => `<div class="gica-cal-weekday">${n}</div>`).join('')}</div>
+        <div class="gica-cal-grid" id="gica-cal-grid">${vm.weeks.map(week => `<div class="gica-cal-weeknum">${week.weekNumber}</div>${week.days.map(cellHtml).join('')}`).join('')}</div>
       </div>
     </div>
     <div class="gica-cal-panel" id="gica-cal-panel"></div>`;
@@ -6133,6 +6160,7 @@ function _mountGicaCalendar(html, vm) {
   $('gica-cal-prev') ?.addEventListener('click', () => { _gicaCalMonthOffset--; renderGicaCalendar(); });
   $('gica-cal-next') ?.addEventListener('click', () => { _gicaCalMonthOffset++; renderGicaCalendar(); });
   $('gica-cal-today')?.addEventListener('click', () => { _gicaCalMonthOffset = 0; renderGicaCalendar(); });
+  $('gica-cal-filter-toggle')?.addEventListener('click', () => { _gicaCalSidebarOpen = !_gicaCalSidebarOpen; renderGicaCalendar(); });
 
   $('gica-cal-bu-chips')?.addEventListener('click', e => {
     const btn = e.target.closest('.quad-btn[data-bu]');
@@ -6159,7 +6187,7 @@ function _mountGicaCalendar(html, vm) {
   const panel = $('gica-cal-panel');
   const grid  = $('gica-cal-grid');
   const dayByKey = {};
-  vm.weeks.forEach(week => week.forEach(d => { dayByKey[d.key] = d; }));
+  vm.weeks.forEach(week => week.days.forEach(d => { dayByKey[d.key] = d; }));
   const closeDrill = () => {
     if (panel) panel.innerHTML = '';
     if (_gicaCalDrillEscHandler) {
@@ -6190,7 +6218,7 @@ function renderGicaCalendar() {
   const monthDate = new Date();
   monthDate.setDate(1);
   monthDate.setMonth(monthDate.getMonth() + _gicaCalMonthOffset);
-  const vm = _computeGicaCalendar(_gicaData.employees || [], monthDate, _gicaCalBuFilter, _gicaCalTypeFilter);
+  const vm = _computeGicaCalendar(_gicaData.employees || [], monthDate, _gicaCalBuFilter, _gicaCalTypeFilter, _gicaCalSidebarOpen);
   _mountGicaCalendar(_gicaCalendarHtml(vm), vm);
 }
 
@@ -6418,6 +6446,7 @@ function _gicaFilteredEmployees() {
     if (f.bu && e.bu !== f.bu) return false;
     if (f.grade && e.grade !== f.grade) return false;
     if (f.dept && e.deptname !== f.dept) return false;
+    if (f.level && e.level !== f.level) return false;
     if (f.type && e.nextType !== f.type) return false;
     if (q && !(`${e.name} ${e.empid}`.toLowerCase().includes(q))) return false;
     return true;
@@ -6460,11 +6489,30 @@ function renderGicaTable() {
   const gradeCell = (g, s) => g
     ? `${_gicaGradeBadge(g)}<span style="font-size:0.68rem;color:var(--text-muted);margin-left:3px;">${s != null ? Math.round(s * 100) + '%' : ''}</span>`
     : '<span style="color:var(--text-muted);">—</span>';
-  const passBadge = p => p === true
-    ? `<span class="exp-badge" style="background:#16a34a;color:#fff;font-size:0.68rem;">Pass</span>`
-    : p === false
-      ? `<span class="exp-badge" style="background:#dc2626;color:#fff;font-size:0.68rem;">Fail</span>`
-      : `<span style="color:var(--text-muted);">—</span>`;
+  const attemptDots = e => {
+    const dot = (color, title) => `<span title="${escapeHtml(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};"></span>`;
+    const items = (e.history || []).slice(-6).map(h => {
+      const passed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
+        (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
+        (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+      const title = `Attempt ${h.n}${h.date ? ' · ' + _gicaFmtDate(h.date) : ''} — ${passed ? 'Pass' : 'Fail'}`;
+      return { html: dot(passed ? '#16a34a' : '#dc2626', title), monthKey: h.date ? h.date.slice(0, 7) : null };
+    });
+    while (items.length < 6) items.push({ html: dot('var(--border-light)', 'ยังไม่สอบ'), monthKey: null });
+
+    // Consecutive attempts in the same calendar month get a connecting ring around them.
+    const groups = [];
+    items.forEach(it => {
+      const prev = groups[groups.length - 1];
+      if (prev && it.monthKey && prev.monthKey === it.monthKey) prev.items.push(it);
+      else groups.push({ monthKey: it.monthKey, items: [it] });
+    });
+    const groupHtml = groups.map(g => {
+      if (g.items.length < 2) return g.items[0].html;
+      return `<span title="สอบในเดือนเดียวกัน (${g.items.length} ครั้ง)" style="display:inline-flex;align-items:center;gap:3px;padding:2px 4px;border:1.3px solid var(--text-muted);border-radius:999px;">${g.items.map(it => it.html).join('')}</span>`;
+    }).join('');
+    return `<div style="display:flex;gap:3px;justify-content:center;align-items:center;">${groupHtml}</div>`;
+  };
 
   wrap.innerHTML = `
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:1100px;">
@@ -6473,6 +6521,7 @@ function renderGicaTable() {
         ${TH('empid', 'Employee ID')}
         ${TH('name', 'Employee Name')}
         ${TH('deptname', 'Department')}
+        ${TH('level', 'Level', 'text-align:center;')}
         ${TH('grade1', 'Measurement Result', 'text-align:center;')}
         ${TH('grade2', 'Inspection Result', 'text-align:center;')}
         ${TH('attempt', 'Attempt', 'text-align:center;')}
@@ -6484,18 +6533,19 @@ function renderGicaTable() {
       </tr></thead>
       <tbody>
         ${pageRows.length === 0
-          ? `<tr><td colspan="12" style="${TD}text-align:center;color:var(--text-muted);padding:20px;">ไม่พบข้อมูล</td></tr>`
+          ? `<tr><td colspan="13" style="${TD}text-align:center;color:var(--text-muted);padding:20px;">ไม่พบข้อมูล</td></tr>`
           : pageRows.map(e => `<tr>
           <td style="${TD}">${escapeHtml(e.bu)}</td>
-          <td style="${TD}color:var(--text-muted);font-size:0.74rem;">${escapeHtml(e.empid || '')}</td>
-          <td style="${TD}font-weight:600;">${escapeHtml(e.name)}</td>
-          <td style="${TD}font-size:0.75rem;color:var(--text-muted);">${escapeHtml(e.deptname)}</td>
+          <td style="${TD}">${escapeHtml(e.empid || '')}</td>
+          <td style="${TD}">${escapeHtml(e.name)}</td>
+          <td style="${TD}">${escapeHtml(e.deptname)}</td>
+          <td style="${TD}">${escapeHtml(e.level || '')}</td>
           <td style="${TD}text-align:center;">${gradeCell(e.grade1, e.score1)}</td>
           <td style="${TD}text-align:center;">${gradeCell(e.grade2, e.score2)}</td>
           <td style="${TD}text-align:center;">${e.attempt}</td>
-          <td style="${TD}text-align:center;font-size:0.74rem;color:var(--text-muted);">${_gicaFmtDate(e.lastDate)}</td>
-          <td style="${TD}text-align:center;">${passBadge(e.passed)}</td>
-          <td style="${TD}text-align:center;font-size:0.74rem;color:var(--text-muted);">${_gicaFmtDate(e.nextDate)}</td>
+          <td style="${TD}text-align:center;">${_gicaFmtDate(e.lastDate)}</td>
+          <td style="${TD}text-align:center;">${attemptDots(e)}</td>
+          <td style="${TD}text-align:center;">${_gicaFmtDate(e.nextDate)}</td>
           <td style="${TD}text-align:center;">${_gicaDaysBadge(e.nextDate)}</td>
           <td style="${TD}text-align:center;">${_gicaTypeBadge(e.nextType)}</td>
         </tr>`).join('')}
@@ -6528,6 +6578,7 @@ function _wireGicaControls() {
   fillSelect('gica-filterBu', sortBus(_gicaData.bus || []));
   fillSelect('gica-filterGrade', GICA_GRADES);
   fillSelect('gica-filterDept', [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort());
+  fillSelect('gica-filterLevel', GICA_LEVEL_ORDER.filter(lv => emps.some(e => e.level === lv)));
   fillSelect('gica-filterType', ['Retest', 'Review']);
 
   const bind = (id, key) => {
@@ -6537,6 +6588,7 @@ function _wireGicaControls() {
   bind('gica-filterBu', 'bu');
   bind('gica-filterGrade', 'grade');
   bind('gica-filterDept', 'dept');
+  bind('gica-filterLevel', 'level');
   bind('gica-filterType', 'type');
   const searchEl = $('gica-filterSearch');
   if (searchEl) searchEl.oninput = () => { _gicaTableState.filters.search = searchEl.value; _gicaTableState.page = 1; renderGicaTable(); };
