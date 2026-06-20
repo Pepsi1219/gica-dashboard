@@ -136,14 +136,18 @@ def _workbook_session(token, drive_id, item_id):
 
 # ── Row helpers ───────────────────────────────────────────────────────────────
 
-def row_to_object(values):
-    values = values or []
-    return {col: values[i] if i < len(values) else ""
-            for i, col in enumerate(EXCEL_COLUMNS)}
+def row_to_object(values, headers):
+    """Map a row's values to EXCEL_COLUMNS by header name (not position) —
+    survives column reordering/insertion in the Excel file."""
+    values  = values or []
+    by_name = {headers[i]: (values[i] if i < len(values) else "")
+               for i in range(len(headers))}
+    return {col: by_name.get(col, "") for col in EXCEL_COLUMNS}
 
 
-def object_to_row(record):
-    return [record.get(col, "") for col in EXCEL_COLUMNS]
+def object_to_row(record, headers):
+    """Build a row's values in the Excel file's actual column order."""
+    return [record.get(col, "") for col in headers]
 
 
 # ── Table read ────────────────────────────────────────────────────────────────
@@ -152,14 +156,19 @@ def get_table_rows(token, department):
     item     = get_drive_item(token, department)
     drive_id = item["parentReference"]["driveId"]
     item_id  = item["id"]
-    data     = graph_request(token, "GET",
-                             f"/drives/{drive_id}/items/{item_id}"
-                             f"/workbook/tables/{EXCEL_TABLE_NAME}/rows")
+    base     = (f"/drives/{drive_id}/items/{item_id}"
+                f"/workbook/tables/{EXCEL_TABLE_NAME}")
+
+    col_resp = graph_request(token, "GET", f"{base}/columns?$select=name")
+    headers  = [c.get("name", "") for c in col_resp.get("value", [])]
+    item["_headers"] = headers
+
+    data      = graph_request(token, "GET", f"{base}/rows")
     rows      = data.get("value", [])
     employees = []
     for index, row in enumerate(rows):
         values = (row.get("values") or [[]])[0]
-        obj    = row_to_object(values)
+        obj    = row_to_object(values, headers)
         emp_id = str(obj.get("Employee ID", "")).strip()
         if emp_id and emp_id != "0":
             obj["_row_index"] = index
@@ -230,7 +239,7 @@ def create_employee(token, department, record):
 
     drive_id = item["parentReference"]["driveId"]
     item_id  = item["id"]
-    _write_row_add(token, drive_id, item_id, object_to_row(new_record))
+    _write_row_add(token, drive_id, item_id, object_to_row(new_record, item["_headers"]))
     return new_record
 
 
@@ -250,5 +259,5 @@ def update_employee(token, department, employee_id, patch_record):
     drive_id  = item["parentReference"]["driveId"]
     item_id   = item["id"]
     row_index = employee["_row_index"]
-    _write_row_patch(token, drive_id, item_id, row_index, object_to_row(merged))
+    _write_row_patch(token, drive_id, item_id, row_index, object_to_row(merged, item["_headers"]))
     return merged

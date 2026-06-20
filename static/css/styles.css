@@ -1863,19 +1863,15 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-flip-btn:hover { opacity: 0.82; transform: scale(1.1); }
 .gica-flip-btn:active { transform: scale(0.92); }
 .gica-flip-btn__icon { font-size: 1rem; line-height: 1; }
-/* — GICA Trend mini-cards (row under BU flip cards) — */
-.gica-trend-row {
-  margin-top: -21px;
-  position: relative; 
-  z-index: 10;
-}
-.gica-trend-card {
-  padding: 6px 8px 4px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.gica-trend-card--empty { opacity: 0.15; pointer-events: none; }
+/* — GICA BU flip card: front = Measurement + Inspection donuts stacked,
+   back = Measurement + Inspection trend charts stacked —
+   space-between only has visible effect on the back face: the back is
+   stretched (position:absolute; inset:0) to match the front's (taller)
+   natural height, so any leftover height is distributed as a gap instead
+   of being dumped below the Inspection half. */
+.flip-card-face--dual { gap: 0; justify-content: space-between; }
+.flip-card-half { display: flex; flex-direction: column; min-height: 0; }
+.flip-card-divider { border-top: 1px solid var(--border-light); margin: 6px 0 8px; }
 .gica-trend-canvas-wrap {
   position: relative;
   height: 110px;
@@ -1886,15 +1882,6 @@ tbody tr:hover { filter: brightness(.97); }
   inset: 0;
   width: 100% !important;
   height: 100% !important;
-}
-.gica-trend-label {
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 2px;
-  transition: color 0.2s;
 }
 .gica-dist-dual   { display: flex; gap: 12px; flex: 1; }
 .gica-dist-half   { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -2454,11 +2441,12 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-cal-type-row input[type="checkbox"] { width: 13px; height: 13px; margin: 0; flex-shrink: 0; cursor: pointer; accent-color: #6366f1; }
 .gica-cal-type-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .gica-cal-main { flex: 1; min-width: 0; overflow-x: auto; }
-.gica-cal-weekdays { display: grid; grid-template-columns: 26px repeat(7, 1fr); border-bottom: 1px solid var(--border-light); min-width: 586px; }
+.gica-cal-weekdays { display: grid; grid-template-columns: 22px repeat(7, 1fr); border-bottom: 1px solid var(--border-light); min-width: 586px; }
 .gica-cal-weekday { padding: 5px 6px; font-size: 0.68rem; color: var(--text-muted); text-align: center; }
 .gica-cal-weeknum-head { border-right: 1px solid var(--border-light); }
-.gica-cal-grid { display: grid; grid-template-columns: 26px repeat(7, 1fr); min-width: 586px; }
-.gica-cal-weeknum { display: flex; align-items: center; justify-content: center; font-size: 0.62rem; color: var(--text-muted); border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light); }
+.gica-cal-grid { display: grid; grid-template-columns: 22px repeat(7, 1fr); min-width: 586px; }
+.gica-cal-weeknum { display: flex; align-items: center; justify-content: center; font-size: 0.58rem; color: var(--text-muted); border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light); }
+.gica-cal-weeknum span { writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: 0.5px; white-space: nowrap; }
 .gica-cal-cell { border-right: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light); padding: 4px 5px; min-height: 74px; }
 .gica-cal-cell--out { opacity: 0.4; }
 .gica-cal-cell--past { background: rgba(100, 100, 100, 0.08); }
@@ -2472,4 +2460,3 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-cal-evt__dot { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 5px; height: 5px; border-radius: 50%; background: #dc2626; }
 .gica-cal-evt-types { display: inline-flex; gap: 2px; margin: 0 3px; vertical-align: middle; }
 .gica-cal-evt-type-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-.gica-cal-panel { border-top: 1px solid var(--border-light); margin-top: 12px; padding-top: 10px; }

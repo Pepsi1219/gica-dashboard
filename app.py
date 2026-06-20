@@ -646,7 +646,7 @@ def _fetch_jumper_excel_data(token: str) -> tuple:
             return []
 
     jumper_rows = []
-    with _ThreadPoolExecutor(max_workers=len(JUMPER_BU_TABLES)) as ex:
+    with _ThreadPoolExecutor(max_workers=3) as ex:  # cap at 3 to avoid Graph API throttling
         for rows in ex.map(_read_jumper_bu, JUMPER_BU_TABLES.items()):
             jumper_rows.extend(rows)
 
@@ -705,6 +705,9 @@ def _build_jumper_excel_payload(jumper_rows: list, sew_rows: list) -> dict:
 def api_jumper_excel():
     """Return Jumper data from Jumper_Monitoring.xlsx on OneDrive.
     Cached in-process for 5 minutes to minimise Graph API round-trips."""
+    _, error = require_token()
+    if error:
+        return error
     global _JUMPER_EXCEL_CACHE
     now = time.time()
     if _JUMPER_EXCEL_CACHE.get('data') and now < _JUMPER_EXCEL_CACHE.get('exp', 0):
@@ -723,6 +726,9 @@ def api_jumper_excel():
 @app.route('/api/trainer-excel')
 def api_trainer_excel():
     """Return Trainer data from Trainer_Monitoring.xlsx on OneDrive. Cached 5 min."""
+    _, error = require_token()
+    if error:
+        return error
     global _TRAINER_EXCEL_CACHE
     now = time.time()
     if _TRAINER_EXCEL_CACHE.get('data') and now < _TRAINER_EXCEL_CACHE.get('exp', 0):
@@ -774,7 +780,7 @@ def api_trainer_excel():
                 return []
 
         skill_rows = []
-        with _ThreadPoolExecutor(max_workers=max(len(unique_bus), 1)) as ex:
+        with _ThreadPoolExecutor(max_workers=3) as ex:  # cap at 3 to avoid Graph API throttling
             for rows in ex.map(_read_trainer_bu, unique_bus):
                 skill_rows.extend(rows)
 
@@ -1128,12 +1134,6 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
             days_overdue = None
             sched_status = 'unknown'
 
-        # Compliance summary across history.
-        completed_attempts = sum(1 for h in history if h['onTime'] is not None)
-        on_time_attempts   = sum(1 for h in history if h['onTime'] is True)
-        compliance_pct = (round(on_time_attempts / completed_attempts * 100, 1)
-                          if completed_attempts else None)
-
         employees.append({
             'bu':       (str(r.get('bu', '') or '').strip() or str(r.get('_bu', '') or '').strip()),
             'empid':    str(r.get('empid', '') or '').strip(),
@@ -1164,9 +1164,6 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
             'scheduledNext': scheduled_next.strftime('%Y-%m-%d') if scheduled_next else None,
             'daysOverdue':   days_overdue,
             'schedStatus':   sched_status,
-            'compliancePct': compliance_pct,
-            'completedAttempts': completed_attempts,
-            'onTimeAttempts':    on_time_attempts,
         })
 
     bus = sorted({e['bu'] for e in employees if e['bu']})
@@ -1176,6 +1173,9 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
 @app.route('/api/gica-excel')
 def api_gica_excel():
     """Return GICA assessment data from GICA.xlsx on OneDrive. Cached 5 min."""
+    _, error = require_token()
+    if error:
+        return error
     global _GICA_CACHE
     now = time.time()
     if _GICA_CACHE.get('data') and now < _GICA_CACHE.get('exp', 0):
@@ -1195,6 +1195,9 @@ def api_gica_excel():
 def api_jumper_data():
     """Return merged jumper/trainer/employee/sewingOperator data from OneDrive.
     Cached in-process for 5 minutes to minimise Graph API round-trips."""
+    _, error = require_token()
+    if error:
+        return error
     global _JUMPER_CACHE
     now = time.time()
     if _JUMPER_CACHE.get('data') and now < _JUMPER_CACHE.get('exp', 0):
