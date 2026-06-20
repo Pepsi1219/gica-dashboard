@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=112" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=114" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -613,7 +613,10 @@
 
         <div id="gica-emplist-panel" class="hidden">
           <div class="card card--section">
-            <h3 style="margin:0 0 12px;font-size:1rem;color:var(--text);">Employee List</h3>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;">
+              <h3 style="margin:0;font-size:1rem;color:var(--text);">Employee List</h3>
+              <button onclick="_gicaEmpListPrint();" style="font-size:0.72rem;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print</button>
+            </div>
             <div class="filters">
               <select id="gica-filterBu"><option value="">All BU</option></select>
               <select id="gica-filterGrade"><option value="">All Grades</option></select>
@@ -622,6 +625,7 @@
               <select id="gica-filterType"><option value="">Type</option></select>
               <input type="text" id="gica-filterSearch" placeholder="Search by name / ID" />
             </div>
+            <div id="gica-failStats"></div>
             <div id="gica-table"></div>
             <div class="jtp-pagination">
               <span id="gica-rangeLabel" class="jtp-range-label"></span>
@@ -646,6 +650,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=230"></script>
+  <script src="/static/js/app.js?v=233"></script>
 </body>
 </html>
