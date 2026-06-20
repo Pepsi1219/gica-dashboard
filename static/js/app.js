@@ -4264,8 +4264,12 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}) {
       if (ib !== -1) return  1;
       return a[0].localeCompare(b[0]);
     });
+    const passN = inBu.filter(e => e.passed === true).length;
+    const failN = inBu.filter(e => e.passed === false).length;
+    const untestedN = inBu.length - passN - failN;
     return {
       bu, empty: false, count: inBu.length, cnt,
+      passN, failN, untestedN,
       avgPct: Math.round(avg * 100), avgGrade: _gicaScoreToGrade(avg),
       aTargetPct: Math.min(100, Math.round(cnt.A / (inBu.length * 0.8) * 100)),
       cntMeasure, totMeasureBu: totM,
@@ -4391,9 +4395,11 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}) {
         if (h.score2 != null) { inspAcc[idx].s += h.score2; inspAcc[idx].n++; }
       });
     });
+    // Divide by the BU's total headcount, not just the count of people who have a
+    // score for this attempt — a partial response set must not look like a full one.
     trendByBu[bu] = {
-      meas: measAcc.map(x => x.n ? Math.round(x.s / x.n * 100) : null),
-      insp: inspAcc.map(x => x.n ? Math.round(x.s / x.n * 100) : null),
+      meas: measAcc.map(x => x.n ? Math.round(x.s / inBu.length * 100) : null),
+      insp: inspAcc.map(x => x.n ? Math.round(x.s / inBu.length * 100) : null),
     };
   });
 
@@ -4408,10 +4414,12 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}) {
     avgGrade:      _gicaScoreToGrade(avgScore),
     avgMeasurePct: Math.round(avgMeasure * 100),
     avgInspectPct: Math.round(avgInspect * 100),
-    needRetest: emps.filter(e => e.passed === false).length,
+    totalPass:     emps.filter(e => e.passed === true).length,
+    totalFail:     emps.filter(e => e.passed === false).length,
+    totalAwaiting: emps.filter(e => e.passed !== true && e.passed !== false).length,
     retestBuRows, buCards,
     expMatrix, expMatrixDept,
-    expMatrixBus:   BU_ORDER.filter(bu => emps.some(e => e.bu === bu)),
+    expMatrixBus:   BU_ORDER,
     expMatrixDepts: [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort(),
     kpiTargets,
     trendByBu,
@@ -4543,26 +4551,39 @@ function _gicaSummaryHtml(vm) {
   };
 
   const buBarChart = buCards => {
+    if (!buCards.length) return '';
     const active = buCards.filter(c => !c.empty);
-    if (!active.length) return '';
     const maxN = Math.max(...active.map(c => c.count), 1);
     const W = 220, CH = 70, PAD = 8, LH = 16, TPAD = 14;
-    const n = active.length;
+    const n = buCards.length;
     const slot = (W - PAD * 2) / n;
     const bw = Math.round(slot * 0.62);
     const bo = (slot - bw) / 2;
-    const bars = active.map((c, i) => {
-      const passN  = c.cnt?.A || 0;
-      const totalH = Math.max(Math.round(c.count / maxN * CH), 3);
-      const passH  = passN > 0 ? Math.max(Math.round(passN / maxN * CH), 2) : 0;
+    const bars = buCards.map((c, i) => {
       const x  = Math.round(PAD + i * slot + bo);
       const cx = Math.round(x + bw / 2);
+      if (c.empty) {
+        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">no data</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
+      }
+      const totalH = Math.max(Math.round(c.count / maxN * CH), 3);
+      const scale  = c.count ? totalH / c.count : 0;
+      const passH  = c.passN > 0 ? Math.max(Math.round(c.passN * scale), 2) : 0;
+      const failH  = c.failN > 0 ? Math.max(Math.round(c.failN * scale), 2) : 0;
+      const untestedH = Math.max(totalH - passH - failH, 0);
       const color = GICA_BU_COLORS[c.bu] || '#6b7280';
       const topY = TPAD + CH - totalH;
-      return `<rect x="${x}" y="${topY}" width="${bw}" height="${totalH}" rx="3" fill="${color}" opacity="0.25"></rect>
-        ${passH > 0 ? `<rect x="${x}" y="${TPAD + CH - passH}" width="${bw}" height="${passH}" rx="3" fill="${color}"></rect>` : ''}
+      const passY      = TPAD + CH - passH;
+      const failY      = passY - failH;
+      const untestedY  = failY - untestedH;
+      return `<g>
+        <title>${escapeHtml(c.bu)} — Pass: ${c.passN}, Fail: ${c.failN}, Not tested: ${c.untestedN} (Total ${c.count})</title>
+        ${untestedH > 0 ? `<rect x="${x}" y="${untestedY}" width="${bw}" height="${untestedH}" rx="3" fill="var(--border-light)"></rect>` : ''}
+        ${failH > 0 ? `<rect x="${x}" y="${failY}" width="${bw}" height="${failH}" rx="3" fill="${color}" opacity="0.25"></rect>` : ''}
+        ${passH > 0 ? `<rect x="${x}" y="${passY}" width="${bw}" height="${passH}" rx="3" fill="${color}"></rect>` : ''}
         <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="8" font-weight="700" fill="${color}">${c.count}</text>
-        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
+      </g>`;
     }).join('');
     return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
       <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
@@ -4581,8 +4602,16 @@ function _gicaSummaryHtml(vm) {
             <div class="stat-card__value">${vm.total}</div>
           </div>
           <div style="text-align:right;">
-            <div class="stat-card__label">Need retest</div>
-            <div class="stat-card__value"${vm.needRetest > 0 ? ' style="color:#dc2626;"' : ''}>${vm.needRetest}</div>
+            <div class="stat-card__label">Result</div>
+            <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
+              <span class="u-muted">Pass</span><strong style="color:#16a34a;">${vm.totalPass}</strong>
+            </div>
+            <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
+              <span class="u-muted">Fail</span><strong style="color:#dc2626;">${vm.totalFail}</strong>
+            </div>
+            <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
+              <span class="u-muted">Awaiting</span><strong class="u-muted">${vm.totalAwaiting}</strong>
+            </div>
           </div>
         </div>
         ${buBarChart(vm.buCards)}
@@ -4677,7 +4706,7 @@ function _gicaSummaryHtml(vm) {
   };
 
   const buThs = vm.expMatrixBus.map(bu =>
-    `<th class="exp-th" style="color:${GICA_BU_COLORS[bu] || 'var(--text)'};">${escapeHtml(bu)}</th>`).join('');
+    `<th class="exp-th exp-th--bu" style="color:${GICA_BU_COLORS[bu] || 'var(--text)'};">${escapeHtml(bu)}</th>`).join('');
 
   const matrixRows = vm.expMatrix.map(row => {
     const kpiPct = vm.kpiTargets[row.level] ?? null;
@@ -5378,11 +5407,16 @@ function _gicaCalGroupByBu(emps) {
   const map = {};
   emps.forEach(e => {
     const k = e.bu || '—';
-    if (!map[k]) map[k] = { bu: k, count: 0, overdue: false };
+    if (!map[k]) map[k] = { bu: k, count: 0, overdue: false, types: new Set() };
     map[k].count++;
     if (e.schedStatus === 'overdue') map[k].overdue = true;
+    if (e.nextType) map[k].types.add(e.nextType);
   });
-  return sortBus(Object.keys(map)).map(bu => map[bu]);
+  return sortBus(Object.keys(map)).map(bu => {
+    const g = map[bu];
+    g.types = Object.keys(GICA_CAL_TYPE).filter(t => g.types.has(t));
+    return g;
+  });
 }
 
 // Calendar View — month grid keyed strictly by scheduledNext (the planned test date, not
@@ -5443,13 +5477,15 @@ function _computeGicaWeeklyBuCards(emps, today) {
 
   const buMap = {};
   const ensure = bu => buMap[bu] || (buMap[bu] = {
-    bu, total: 0, attended: 0, overdue: 0,
+    bu, total: 0, attended: 0, overdue: 0, attendedPass: 0, attendedFail: 0,
     retestReq: 0, retestAttended: 0, reviewReq: 0, reviewAttended: 0,
+    employees: [],
   });
 
   allSchedable.forEach(e => {
     if (!e.bu || currentIdx < 0) return;
-    const attendedThisWeek = (e.history || []).some(h => h.date && _gicaSchedBucketIdx(h.date, buckets) === currentIdx);
+    const thisWeekEntry = (e.history || []).find(h => h.date && _gicaSchedBucketIdx(h.date, buckets) === currentIdx);
+    const attendedThisWeek = !!thisWeekEntry;
     let inCohort = attendedThisWeek;
     if (!attendedThisWeek && e.scheduledNext) {
       const schedDate = _gicaParseDate(e.scheduledNext);
@@ -5459,13 +5495,22 @@ function _computeGicaWeeklyBuCards(emps, today) {
 
     const c = ensure(e.bu);
     c.total++;
-    if (attendedThisWeek) c.attended++; else c.overdue++;
+    c.employees.push(e);
+    if (attendedThisWeek) {
+      c.attended++;
+      const attemptPassed = thisWeekEntry.grade1 && thisWeekEntry.grade2 && e.exp1 && e.exp2 &&
+        (GICA_GRADE_RANK[thisWeekEntry.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
+        (GICA_GRADE_RANK[thisWeekEntry.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+      if (attemptPassed) c.attendedPass++; else c.attendedFail++;
+    } else {
+      c.overdue++;
+    }
 
     if (e.nextType === 'Retest') { c.retestReq++; if (attendedThisWeek) c.retestAttended++; }
     else                          { c.reviewReq++; if (attendedThisWeek) c.reviewAttended++; }
   });
 
-  return sortBus(Object.keys(buMap)).map(bu => buMap[bu]);
+  return BU_ORDER.map(bu => buMap[bu] || { bu, empty: true });
 }
 
 function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFilter = new Set(), deptFilter = new Set()) {
@@ -5480,7 +5525,6 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
     return true;
   });
   const total    = allSchedable.length;
-  const overdueN = allSchedable.filter(e => e.schedStatus === 'overdue').length;
   const dueWeekN = allSchedable.filter(e => e.daysOverdue != null
                                       && e.daysOverdue >= -7 && e.daysOverdue <= 0).length;
   const dueMonthN = allSchedable.filter(e => e.daysOverdue != null
@@ -5489,33 +5533,20 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
   const retestN = allSchedable.filter(e => e.passed === false).length;
   const reviewN = allSchedable.filter(e => e.passed === true).length;
 
-  let completed = 0, onTime = 0;
-  allSchedable.forEach(e => {
-    completed += e.completedAttempts || 0;
-    onTime    += e.onTimeAttempts    || 0;
-  });
-  const compliancePct = completed ? Math.round(onTime / completed * 100) : null;
-
   const statusCounts = { upcoming: 0, due_soon: 0, overdue: 0, unknown: 0 };
   allSchedable.forEach(e => { statusCounts[e.schedStatus] = (statusCounts[e.schedStatus] || 0) + 1; });
 
   const buMap = {};
   allSchedable.forEach(e => {
     if (!e.bu) return;
-    if (!buMap[e.bu]) buMap[e.bu] = { bu: e.bu, total: 0, overdue: 0, dueSoon: 0, completed: 0, onTime: 0, failed: 0 };
+    if (!buMap[e.bu]) buMap[e.bu] = { bu: e.bu, total: 0, overdue: 0, dueSoon: 0, failed: 0 };
     const c = buMap[e.bu];
     c.total++;
     if (e.schedStatus === 'overdue')  c.overdue++;
     if (e.schedStatus === 'due_soon') c.dueSoon++;
     if (e.passed === false)           c.failed++;
-    c.completed += e.completedAttempts || 0;
-    c.onTime    += e.onTimeAttempts    || 0;
   });
-  const buCards = sortBus(Object.keys(buMap)).map(bu => {
-    const c = buMap[bu];
-    c.compliancePct = c.completed ? Math.round(c.onTime / c.completed * 100) : null;
-    return c;
-  });
+  const buCards = BU_ORDER.map(bu => buMap[bu] || { bu, empty: true });
 
   const buckets = _gicaSchedBuckets(today, timelineMode);
   const currentIdx = buckets.findIndex(b => today >= b.start && today <= b.end);
@@ -5577,7 +5608,7 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
   const weeklyBuCards = _computeGicaWeeklyBuCards(emps, today);
 
   return {
-    total, overdueN, dueWeekN, dueMonthN, compliancePct,
+    total, dueWeekN, dueMonthN,
     retestN, reviewN,
     statusCounts, buCards, weeklyBuCards, timeline, timelineMode, schedMode, currentIdx,
     employees: allSchedable,
@@ -5586,11 +5617,6 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
 }
 
 function _gicaScheduleHtml(vm) {
-  const kpiCard = (label, value, color) => `
-    <div class="stat-card">
-      <div class="stat-card__label">${label}</div>
-      <div class="stat-card__value" style="color:${color};">${value}</div>
-    </div>`;
   const legendItem = (color, text) => `
     <span><span style="display:inline-block;width:10px;height:10px;background:${color};border-radius:2px;margin-right:4px;vertical-align:middle;"></span>${text}</span>`;
   const buLabel   = vm.buFilter.size === 0   ? 'BU'   : vm.buFilter.size   <= 2 ? [...vm.buFilter].join(', ')   : `BU (${vm.buFilter.size})`;
@@ -5634,11 +5660,15 @@ function _gicaScheduleHtml(vm) {
       <div class="pbar__fill" style="background:${pct >= 100 ? '#16a34a' : color};width:${pct}%;"></div>
     </div>`;
   const buCardsHtml = vm.weeklyBuCards.map(c => {
+    if (c.empty) return `<div class="stat-card stat-card--empty" style="min-width:0;">
+      <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
+      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+    </div>`;
     const buColor   = GICA_BU_COLORS[c.bu] || '#6b7280';
     const retestPct = c.retestReq > 0 ? Math.min(100, Math.round(c.retestAttended / c.retestReq * 100)) : 0;
     const reviewPct = c.reviewReq > 0 ? Math.min(100, Math.round(c.reviewAttended / c.reviewReq * 100)) : 0;
     return `
-      <div class="stat-card" style="min-width:0;">
+      <div class="stat-card gica-bu-cohort-card" data-bu="${escapeHtml(c.bu)}" style="min-width:0;cursor:pointer;" title="คลิกเพื่อดูรายชื่อ">
         <div class="bu-head">
           <span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span>
           <span class="u-muted bu-count">${c.total} คน</span>
@@ -5696,26 +5726,28 @@ function _gicaScheduleHtml(vm) {
 
   const buSection = `<div class="stat-grid stat-grid--6">${buCardsHtml}</div>`;
 
-  // 3-way snapshot of every schedulable employee: Overdue (past due, not yet tested),
-  // Upcoming (test date not reached yet — due_soon + upcoming), On-time (no pending test
-  // outstanding right now, i.e. the 'unknown' bucket left over once overdue/upcoming are removed).
-  const schedDonutColors = { overdue: '#dc2626', upcoming: '#f59e0b', onTime: '#16a34a' };
-  const schedDonutLabels = { overdue: 'Overdue', upcoming: 'Upcoming', onTime: 'On-time' };
-  const schedDonutCounts = {
-    overdue: vm.statusCounts.overdue,
-    upcoming: vm.statusCounts.due_soon + vm.statusCounts.upcoming,
-    onTime: vm.statusCounts.unknown,
-  };
-  const donutSchedLg = (counts, tot) => {
+  // Proportion of failed employees (passed === false, same population as the "Total
+  // employees" card) broken down by how many consecutive attempts they've failed.
+  const failStreakColors = { fail1: '#f59e0b', fail2: '#ea580c', fail3: '#dc2626' };
+  const failStreakLabels = { fail1: 'Fail 1', fail2: 'Fail 2', fail3: 'Fail 3+' };
+  const failStreakCounts = { fail1: 0, fail2: 0, fail3: 0 };
+  vm.employees.filter(e => e.passed === false).forEach(e => {
+    const s = _gicaFailStreak(e);
+    if (s === 1) failStreakCounts.fail1++;
+    else if (s === 2) failStreakCounts.fail2++;
+    else if (s >= 3) failStreakCounts.fail3++;
+  });
+  const failStreakTotal = failStreakCounts.fail1 + failStreakCounts.fail2 + failStreakCounts.fail3;
+  const donutFailStreakLg = (counts, tot) => {
     const CX = 145, CY = 102, R = 50, sw = 20;
     const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
     const gap = tot ? 1.2 : 0;
     let acc = 0;
-    const segs = [], lines = [];
-    ['overdue', 'upcoming', 'onTime'].forEach(k => {
+    const segs = [], labelData = [];
+    ['fail1', 'fail2', 'fail3'].forEach(k => {
       const v = counts[k] || 0;
       if (!tot || !v) return;
-      const color = schedDonutColors[k];
+      const color = failStreakColors[k];
       const len  = v / tot * CIRC;
       const dash = Math.max(len - gap, 0.5);
       segs.push(`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"></circle>`);
@@ -5723,42 +5755,60 @@ function _gicaScheduleHtml(vm) {
       const mx = CX + outerR * Math.cos(mid),        my = CY + outerR * Math.sin(mid);
       const ex = CX + (outerR + 12) * Math.cos(mid), ey = CY + (outerR + 12) * Math.sin(mid);
       const isRight = ex >= CX;
-      const hx = ex + (isRight ? 18 : -18), hy = ey;
-      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
+      const hx = ex + (isRight ? 18 : -18);
       const pct = Math.round(v / tot * 100);
-      lines.push(`
+      labelData.push({ k, v, pct, color, mx, my, ex, ey, hx, hy: ey, isRight });
+      acc += len;
+    });
+
+    // Small adjacent segments can place their label leader-lines too close together —
+    // push labels apart vertically (per side) so the text never overlaps.
+    const MIN_GAP = 24;
+    [true, false].forEach(isRight => {
+      const group = labelData.filter(d => d.isRight === isRight).sort((a, b) => a.hy - b.hy);
+      for (let i = 1; i < group.length; i++) {
+        const minHy = group[i - 1].hy + MIN_GAP;
+        if (group[i].hy < minHy) group[i].hy = minHy;
+      }
+    });
+
+    const lines = labelData.map(({ mx, my, ex, ey, hx, hy, isRight, color, k, v, pct }) => {
+      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
+      return `
         <line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${color}" stroke-width="1.2" stroke-linecap="round"></line>
         <line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${color}" stroke-width="1.2" stroke-linecap="round"></line>
         <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${color}"></circle>
-        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="600" fill="var(--text)">${schedDonutLabels[k]}: ${v}</text>
-        <text x="${tx.toFixed(1)}" y="${(hy + 9.5).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${pct}%)</text>`);
-      acc += len;
+        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="600" fill="var(--text)">${failStreakLabels[k]}: ${v}</text>
+        <text x="${tx.toFixed(1)}" y="${(hy + 9.5).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${pct}%)</text>`;
     });
-    const onTimePct = tot ? Math.round((counts.onTime || 0) / tot * 100) : 0;
     return `
       <svg viewBox="0 0 300 205" width="100%">
         <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
         ${segs.join('')}
         ${lines.join('')}
-        <text x="${CX}" y="${CY + 8}" text-anchor="middle" font-size="22" font-weight="800" fill="${schedDonutColors.onTime}">${onTimePct}%</text>
-        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)" letter-spacing="0.5">On-time</text>
+        <text x="${CX}" y="${CY + 8}" text-anchor="middle" font-size="22" font-weight="800" fill="${failStreakColors.fail3}">${tot}</text>
+        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)" letter-spacing="0.5">Fail Cases</text>
       </svg>`;
   };
 
   const failedBuBarChart = buCards => {
+    if (!buCards.length) return `<div class="u-muted" style="font-size:0.75rem;margin-top:10px;">ไม่มีข้อมูล</div>`;
     const active = buCards.filter(c => !c.empty);
-    if (!active.length) return `<div class="u-muted" style="font-size:0.75rem;margin-top:10px;">ไม่มีข้อมูล</div>`;
     const maxN = Math.max(...active.map(c => c.failed || 0), 1);
     const W = 220, CH = 70, PAD = 8, LH = 16, TPAD = 14;
-    const n = active.length;
+    const n = buCards.length;
     const slot = (W - PAD * 2) / n;
     const bw = Math.round(slot * 0.62);
     const bo = (slot - bw) / 2;
-    const bars = active.map((c, i) => {
-      const v = c.failed || 0;
-      const h = Math.max(Math.round(v / maxN * CH), v > 0 ? 2 : 0);
+    const bars = buCards.map((c, i) => {
       const x  = Math.round(PAD + i * slot + bo);
       const cx = Math.round(x + bw / 2);
+      if (c.empty) {
+        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">no data</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
+      }
+      const v = c.failed || 0;
+      const h = Math.max(Math.round(v / maxN * CH), v > 0 ? 2 : 0);
       const color = GICA_BU_COLORS[c.bu] || '#6b7280';
       const topY = TPAD + CH - h;
       return `<rect x="${x}" y="${topY}" width="${bw}" height="${h}" rx="3" fill="${color}"></rect>
@@ -5784,16 +5834,76 @@ function _gicaScheduleHtml(vm) {
 
   const donutStatCard = `
     <div class="stat-card">
-      <div class="stat-card__label">สถานะการประเมิน</div>
-      ${donutSchedLg(schedDonutCounts, vm.total)}
+      <div class="stat-card__label">Failure Status by Consecutive Attempts</div>
+      ${donutFailStreakLg(failStreakCounts, failStreakTotal)}
+    </div>`;
+
+  const weekCards    = vm.weeklyBuCards.filter(c => !c.empty);
+  const weekTotal    = weekCards.reduce((s, c) => s + c.total, 0);
+  const weekAttended = weekCards.reduce((s, c) => s + c.attended, 0);
+  const dueWeekRows = vm.weeklyBuCards.map(c => {
+    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
+    if (c.empty) {
+      return `<div class="mini-bar__row mini-bar__row--lg">
+        <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+        <span class="u-muted" style="font-size:0.68rem;">no data</span>
+      </div>`;
+    }
+    const passPct  = c.total ? Math.round(c.attendedPass  / c.total * 100) : 0;
+    const failPct  = c.total ? Math.round(c.attendedFail  / c.total * 100) : 0;
+    const awaitPct = Math.max(100 - passPct - failPct, 0);
+    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Pass: ${c.attendedPass}, Fail: ${c.attendedFail}, Awaiting: ${c.overdue} (Total ${c.total})">
+      <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+      <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
+        ${passPct  > 0 ? `<div style="width:${passPct}%;background:#16a34a;height:100%;"></div>`  : ''}
+        ${failPct  > 0 ? `<div style="width:${failPct}%;background:#dc2626;height:100%;"></div>`  : ''}
+        ${awaitPct > 0 ? `<div style="width:${awaitPct}%;background:var(--border-light);height:100%;"></div>` : ''}
+      </div>
+      <span class="mini-bar__count mini-bar__count--lg">${c.attended}/${c.total}</span>
+    </div>`;
+  }).join('');
+  const dueWeekCard = `
+    <div class="stat-card">
+      <div class="stat-card__label">Due this week</div>
+      <div class="stat-card__value">${weekAttended}/${weekTotal}</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:8px;">${dueWeekRows}</div>
+    </div>`;
+
+  // On-time Rate = attended this week / required this week — pass/fail doesn't matter
+  // here, only whether they showed up by their scheduled date (see weeklyBuCards above).
+  const onTimePctColor = pct => pct == null ? 'var(--text)' : pct >= 80 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626';
+  const overallOnTimePct = weekTotal ? Math.round(weekAttended / weekTotal * 100) : null;
+  const onTimeBuRows = vm.weeklyBuCards.map(c => {
+    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
+    if (c.empty) {
+      return `<div class="mini-bar__row mini-bar__row--lg">
+        <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+        <span class="u-muted" style="font-size:0.68rem;">no data</span>
+      </div>`;
+    }
+    const pct = c.total ? Math.round(c.attended / c.total * 100) : 0;
+    const fillColor = onTimePctColor(pct);
+    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Attended: ${c.attended}/${c.total} (${pct}%)">
+      <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+      <div class="mini-bar__track mini-bar__track--lg">
+        <div class="mini-bar__fill" style="width:${pct}%;background:${fillColor};"></div>
+      </div>
+      <span class="mini-bar__count mini-bar__count--lg" style="color:${fillColor};font-weight:700;">${pct}%</span>
+    </div>`;
+  }).join('');
+  const onTimeRateCard = `
+    <div class="stat-card">
+      <div class="stat-card__label">Overall On-time Rate</div>
+      <div class="stat-card__value" style="color:${onTimePctColor(overallOnTimePct)};">${overallOnTimePct != null ? overallOnTimePct + '%' : '—'}</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:8px;">${onTimeBuRows}</div>
     </div>`;
 
   const row1 = `
     <div class="stat-grid stat-grid--4">
       ${gaugeStatCard}
       ${donutStatCard}
-      ${kpiCard('Overdue', vm.overdueN, '#dc2626')}
-      ${kpiCard('On-time Rate', vm.compliancePct != null ? vm.compliancePct + '%' : '—', '#16a34a')}
+      ${dueWeekCard}
+      ${onTimeRateCard}
     </div>`;
 
   const calendarCard = `
@@ -5804,7 +5914,22 @@ function _gicaScheduleHtml(vm) {
       <div id="gica-cal-summary"></div>
     </div>`;
 
-  return `${row1}${buSection}${calendarCard}${timelineCard}${upcomingCard}`;
+  const buCohortModal = `
+    <div id="gica-buCohort-modal" class="gica-modal hidden">
+      <div class="gica-modal__backdrop" data-buclose="1"></div>
+      <div class="gica-modal__panel">
+        <div class="gica-modal__head">
+          <h4 id="gica-buCohort-title" style="margin:0;font-size:1rem;"></h4>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="_gicaBuCohortPrint();" style="font-size:0.72rem;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print</button>
+            <button class="gica-modal__close" data-buclose="1" aria-label="ปิด">✕</button>
+          </div>
+        </div>
+        <div id="gica-buCohort-body" class="gica-modal__body"></div>
+      </div>
+    </div>`;
+
+  return `${row1}${buSection}${calendarCard}${timelineCard}${upcomingCard}${buCohortModal}`;
 }
 
 function _mountGicaSchedule(html, vm) {
@@ -5815,6 +5940,21 @@ function _mountGicaSchedule(html, vm) {
     if (_gicaCharts[id]) { try { _gicaCharts[id].destroy(); } catch (_) {} _gicaCharts[id] = null; }
   });
   container.innerHTML = html;
+
+  container.querySelectorAll('.gica-bu-cohort-card[data-bu]').forEach(card => {
+    card.addEventListener('click', () => {
+      const c = vm.weeklyBuCards.find(x => x.bu === card.dataset.bu);
+      if (c) _gicaShowBuCohortModal(c.bu, c.employees);
+    });
+  });
+  const cohortModal = $('gica-buCohort-modal');
+  if (cohortModal) {
+    const closeCohortModal = () => cohortModal.classList.add('hidden');
+    cohortModal.querySelectorAll('[data-buclose="1"]').forEach(el => el.addEventListener('click', closeCohortModal));
+    if (window._gicaCohortEscHandler) document.removeEventListener('keydown', window._gicaCohortEscHandler);
+    window._gicaCohortEscHandler = e => { if (e.key === 'Escape') closeCohortModal(); };
+    document.addEventListener('keydown', window._gicaCohortEscHandler);
+  }
 
   const toggle = $('gica-schedTimelineToggle');
   if (toggle) {
@@ -6124,7 +6264,8 @@ function _gicaCalendarHtml(vm) {
   const cellHtml = day => {
     const evtHtml = day.buGroups.map(g => {
       const color = GICA_BU_COLORS[g.bu] || '#6b7280';
-      return `<div class="gica-cal-evt" data-day-key="${day.key}" data-bu="${escapeHtml(g.bu)}" style="background:${hexToRgba(color, 0.16)};color:${color};">${escapeHtml(g.bu)} (${g.count})${g.overdue ? '<span class="gica-cal-evt__dot"></span>' : ''}</div>`;
+      const typeDots = g.types.map(t => `<span class="gica-cal-evt-type-dot" style="background:${GICA_CAL_TYPE[t].color};" title="${escapeHtml(GICA_CAL_TYPE[t].label)}"></span>`).join('');
+      return `<div class="gica-cal-evt" data-day-key="${day.key}" data-bu="${escapeHtml(g.bu)}" style="background:${hexToRgba(color, 0.16)};color:${color};">${escapeHtml(g.bu)} (${g.count})<span class="gica-cal-evt-types">${typeDots}</span>${g.overdue ? '<span class="gica-cal-evt__dot"></span>' : ''}</div>`;
     }).join('');
     const cls = ['gica-cal-cell', !day.inMonth ? 'gica-cal-cell--out' : '', day.isPast ? 'gica-cal-cell--past' : '', day.isToday ? 'gica-cal-cell--today' : ''].filter(Boolean).join(' ');
     return `<div class="${cls}"><div class="gica-cal-daynum">${day.dayNum}</div><div class="gica-cal-evt-list">${evtHtml}</div></div>`;
@@ -6448,6 +6589,7 @@ window._gicaEmpListPrint = function () {
       <div style="font-size:1rem;font-weight:700;">GICA Employee List</div>
       <div style="font-size:0.78rem;color:#555;margin-top:3px;">Total: ${rows.length} employees${filterLabel} · Report Date: ${printDate}</div>
     </div>
+    ${_gicaFailStatsHtml(rows)}
     <div class="gica-drill-table-wrap">
       <table class="gica-drill-table">
         <thead><tr>
@@ -6594,6 +6736,96 @@ function _gicaFailStreak(e) {
   return streak;
 }
 
+function _gicaFailStatsHtml(rows) {
+  let fail1 = 0, fail2 = 0, fail3 = 0;
+  rows.forEach(e => { const s = _gicaFailStreak(e); if (s === 1) fail1++; else if (s === 2) fail2++; else if (s >= 3) fail3++; });
+  const chip = (label, count, color) =>
+    `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:0.78rem;font-weight:600;background:${color}15;color:${color};border:1px solid ${color}30;">` +
+    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};"></span>${label}: ${count} คน</span>`;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">`
+    + chip('Fail 1 ครั้ง', fail1, '#f59e0b')
+    + chip('Fail 2 ครั้งติดต่อกัน', fail2, '#ea580c')
+    + chip('Fail 3+ ครั้งติดต่อกัน', fail3, '#dc2626')
+    + `</div>`;
+}
+
+function _gicaEmpTableAttemptDots(e) {
+  const dot = (color, title) => `<span title="${escapeHtml(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};"></span>`;
+  const items = (e.history || []).slice(-6).map(h => {
+    const passed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
+      (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
+      (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+    const title = `Attempt ${h.n}${h.date ? ' · ' + _gicaFmtDate(h.date) : ''} — ${passed ? 'Pass' : 'Fail'}`;
+    return { html: dot(passed ? '#16a34a' : '#dc2626', title), monthKey: h.date ? h.date.slice(0, 7) : null };
+  });
+  while (items.length < 6) items.push({ html: dot('var(--border-light)', 'ยังไม่สอบ'), monthKey: null });
+
+  // Consecutive attempts in the same calendar month get a connecting ring around them.
+  const groups = [];
+  items.forEach(it => {
+    const prev = groups[groups.length - 1];
+    if (prev && it.monthKey && prev.monthKey === it.monthKey) prev.items.push(it);
+    else groups.push({ monthKey: it.monthKey, items: [it] });
+  });
+  const groupHtml = groups.map(g => {
+    if (g.items.length < 2) return g.items[0].html;
+    return `<span title="สอบในเดือนเดียวกัน (${g.items.length} ครั้ง)" style="display:inline-flex;align-items:center;gap:3px;padding:2px 4px;border:1.3px solid var(--text-muted);border-radius:999px;">${g.items.map(it => it.html).join('')}</span>`;
+  }).join('');
+  return `<div style="display:flex;gap:3px;justify-content:center;align-items:center;">${groupHtml}</div>`;
+}
+
+function _gicaEmpTableHtml(rows, opts = {}) {
+  const sortable = opts.sortable !== false;
+  const st = _gicaTableState;
+  const arrow = k => sortable && st.sortKey === k ? (st.sortDir === 1 ? ' ▲' : ' ▼') : '';
+  const TH = (k, label, extra = '') => sortable
+    ? `<th onclick="_gicaSort('${k}')" style="padding:8px 10px;font-size:0.74rem;font-weight:600;color:var(--text-muted);text-align:left;border-bottom:2px solid var(--border-light);cursor:pointer;white-space:nowrap;${extra}">${label}${arrow(k)}</th>`
+    : `<th style="padding:8px 10px;font-size:0.74rem;font-weight:600;color:var(--text-muted);text-align:left;border-bottom:2px solid var(--border-light);white-space:nowrap;${extra}">${label}</th>`;
+  const TD = 'padding:7px 10px;font-size:0.8rem;color:var(--text);border-bottom:1px solid var(--border-light);';
+
+  const gradeCell = (g, s) => g
+    ? `${_gicaGradeBadge(g)}<span style="font-size:0.68rem;color:var(--text-muted);margin-left:3px;">${s != null ? Math.round(s * 100) + '%' : ''}</span>`
+    : '<span style="color:var(--text-muted);">—</span>';
+
+  return `
+    <div class="gica-emp-table-wrap" style="overflow-x:auto;"><table class="gica-emp-table" style="width:100%;border-collapse:collapse;min-width:1100px;">
+      <thead><tr>
+        ${TH('bu', 'BU')}
+        ${TH('empid', 'Employee ID')}
+        ${TH('name', 'Employee Name')}
+        ${TH('deptname', 'Department')}
+        ${TH('level', 'Level', 'text-align:center;')}
+        ${TH('grade1', 'Measurement Result', 'text-align:center;')}
+        ${TH('grade2', 'Inspection Result', 'text-align:center;')}
+        ${TH('attempt', 'Attempt', 'text-align:center;')}
+        ${TH('lastDate', 'Assessment Date', 'text-align:center;')}
+        ${TH('passed', 'Assessment Result', 'text-align:center;')}
+        ${TH('nextDate', 'Next Assessment Date', 'text-align:center;')}
+        ${TH('nextDate', 'Days Remaining', 'text-align:center;')}
+        ${TH('nextType', 'Status', 'text-align:center;')}
+      </tr></thead>
+      <tbody>
+        ${rows.length === 0
+          ? `<tr><td colspan="13" style="${TD}text-align:center;color:var(--text-muted);padding:20px;">ไม่พบข้อมูล</td></tr>`
+          : rows.map(e => `<tr>
+          <td style="${TD}">${escapeHtml(e.bu)}</td>
+          <td style="${TD}">${escapeHtml(e.empid || '')}</td>
+          <td style="${TD}">${escapeHtml(e.name)}</td>
+          <td style="${TD}">${escapeHtml(e.deptname)}</td>
+          <td style="${TD}">${escapeHtml(e.level || '')}</td>
+          <td style="${TD}text-align:center;">${gradeCell(e.grade1, e.score1)}</td>
+          <td style="${TD}text-align:center;">${gradeCell(e.grade2, e.score2)}</td>
+          <td style="${TD}text-align:center;">${e.attempt}</td>
+          <td style="${TD}text-align:center;">${_gicaFmtDate(e.lastDate)}</td>
+          <td style="${TD}text-align:center;">${_gicaEmpTableAttemptDots(e)}</td>
+          <td style="${TD}text-align:center;">${_gicaFmtDate(e.nextDate)}</td>
+          <td style="${TD}text-align:center;">${_gicaDaysBadge(e.nextDate)}</td>
+          <td style="${TD}text-align:center;">${_gicaTypeBadge(e.nextType)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+}
+
 function _gicaFilteredEmployees() {
   const f = _gicaTableState.filters;
   const q = f.search.trim().toLowerCase();
@@ -6636,95 +6868,51 @@ function renderGicaTable() {
   const start = (st.page - 1) * st.pageSize;
   const pageRows = rows.slice(start, start + st.pageSize);
 
-  let fail1 = 0, fail2 = 0, fail3 = 0;
-  rows.forEach(e => { const s = _gicaFailStreak(e); if (s === 1) fail1++; else if (s === 2) fail2++; else if (s >= 3) fail3++; });
   const statsEl = $('gica-failStats');
-  if (statsEl) {
-    const chip = (label, count, color) =>
-      `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:0.78rem;font-weight:600;background:${color}15;color:${color};border:1px solid ${color}30;">` +
-      `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};"></span>${label}: ${count} คน</span>`;
-    statsEl.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">`
-      + chip('Fail 1 ครั้ง', fail1, '#f59e0b')
-      + chip('Fail 2 ครั้งติดต่อกัน', fail2, '#ea580c')
-      + chip('Fail 3+ ครั้งติดต่อกัน', fail3, '#dc2626')
-      + `</div>`;
-  }
+  if (statsEl) statsEl.innerHTML = _gicaFailStatsHtml(rows);
 
-  const arrow = k => st.sortKey === k ? (st.sortDir === 1 ? ' ▲' : ' ▼') : '';
-  const TH = (k, label, extra = '') =>
-    `<th onclick="_gicaSort('${k}')" style="padding:8px 10px;font-size:0.74rem;font-weight:600;color:var(--text-muted);text-align:left;border-bottom:2px solid var(--border-light);cursor:pointer;white-space:nowrap;${extra}">${label}${arrow(k)}</th>`;
-  const TD = 'padding:7px 10px;font-size:0.8rem;color:var(--text);border-bottom:1px solid var(--border-light);';
-
-  const gradeCell = (g, s) => g
-    ? `${_gicaGradeBadge(g)}<span style="font-size:0.68rem;color:var(--text-muted);margin-left:3px;">${s != null ? Math.round(s * 100) + '%' : ''}</span>`
-    : '<span style="color:var(--text-muted);">—</span>';
-  const attemptDots = e => {
-    const dot = (color, title) => `<span title="${escapeHtml(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};"></span>`;
-    const items = (e.history || []).slice(-6).map(h => {
-      const passed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
-        (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
-        (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
-      const title = `Attempt ${h.n}${h.date ? ' · ' + _gicaFmtDate(h.date) : ''} — ${passed ? 'Pass' : 'Fail'}`;
-      return { html: dot(passed ? '#16a34a' : '#dc2626', title), monthKey: h.date ? h.date.slice(0, 7) : null };
-    });
-    while (items.length < 6) items.push({ html: dot('var(--border-light)', 'ยังไม่สอบ'), monthKey: null });
-
-    // Consecutive attempts in the same calendar month get a connecting ring around them.
-    const groups = [];
-    items.forEach(it => {
-      const prev = groups[groups.length - 1];
-      if (prev && it.monthKey && prev.monthKey === it.monthKey) prev.items.push(it);
-      else groups.push({ monthKey: it.monthKey, items: [it] });
-    });
-    const groupHtml = groups.map(g => {
-      if (g.items.length < 2) return g.items[0].html;
-      return `<span title="สอบในเดือนเดียวกัน (${g.items.length} ครั้ง)" style="display:inline-flex;align-items:center;gap:3px;padding:2px 4px;border:1.3px solid var(--text-muted);border-radius:999px;">${g.items.map(it => it.html).join('')}</span>`;
-    }).join('');
-    return `<div style="display:flex;gap:3px;justify-content:center;align-items:center;">${groupHtml}</div>`;
-  };
-
-  wrap.innerHTML = `
-    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:1100px;">
-      <thead><tr>
-        ${TH('bu', 'BU')}
-        ${TH('empid', 'Employee ID')}
-        ${TH('name', 'Employee Name')}
-        ${TH('deptname', 'Department')}
-        ${TH('level', 'Level', 'text-align:center;')}
-        ${TH('grade1', 'Measurement Result', 'text-align:center;')}
-        ${TH('grade2', 'Inspection Result', 'text-align:center;')}
-        ${TH('attempt', 'Attempt', 'text-align:center;')}
-        ${TH('lastDate', 'Assessment Date', 'text-align:center;')}
-        ${TH('passed', 'Assessment Result', 'text-align:center;')}
-        ${TH('nextDate', 'Next Assessment Date', 'text-align:center;')}
-        ${TH('nextDate', 'Days Remaining', 'text-align:center;')}
-        ${TH('nextType', 'Status', 'text-align:center;')}
-      </tr></thead>
-      <tbody>
-        ${pageRows.length === 0
-          ? `<tr><td colspan="13" style="${TD}text-align:center;color:var(--text-muted);padding:20px;">ไม่พบข้อมูล</td></tr>`
-          : pageRows.map(e => `<tr>
-          <td style="${TD}">${escapeHtml(e.bu)}</td>
-          <td style="${TD}">${escapeHtml(e.empid || '')}</td>
-          <td style="${TD}">${escapeHtml(e.name)}</td>
-          <td style="${TD}">${escapeHtml(e.deptname)}</td>
-          <td style="${TD}">${escapeHtml(e.level || '')}</td>
-          <td style="${TD}text-align:center;">${gradeCell(e.grade1, e.score1)}</td>
-          <td style="${TD}text-align:center;">${gradeCell(e.grade2, e.score2)}</td>
-          <td style="${TD}text-align:center;">${e.attempt}</td>
-          <td style="${TD}text-align:center;">${_gicaFmtDate(e.lastDate)}</td>
-          <td style="${TD}text-align:center;">${attemptDots(e)}</td>
-          <td style="${TD}text-align:center;">${_gicaFmtDate(e.nextDate)}</td>
-          <td style="${TD}text-align:center;">${_gicaDaysBadge(e.nextDate)}</td>
-          <td style="${TD}text-align:center;">${_gicaTypeBadge(e.nextType)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table></div>`;
+  wrap.innerHTML = _gicaEmpTableHtml(pageRows, { sortable: true });
 
   const rangeEl = $('gica-rangeLabel');
   if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} จาก ${total}` : '0 รายการ';
   const pageEl = $('gica-pageLabel');
   if (pageEl) pageEl.textContent = `${st.page} / ${pages}`;
+}
+
+function _gicaShowBuCohortModal(bu, employees) {
+  const modal = $('gica-buCohort-modal');
+  const title = $('gica-buCohort-title');
+  const body  = $('gica-buCohort-body');
+  if (!modal || !body) return;
+  if (title) title.textContent = `${bu} — ต้องเข้าอบรมสัปดาห์นี้ (${employees.length} คน)`;
+  body.innerHTML = `${_gicaFailStatsHtml(employees)}<div class="gica-drill-table-wrap">${_gicaEmpTableHtml(employees, { sortable: false })}</div>`;
+  modal.classList.remove('hidden');
+  modal._cohortBu = bu;
+  modal._cohortEmployees = employees;
+}
+
+function _gicaBuCohortPrint() {
+  const modal = $('gica-buCohort-modal');
+  if (!modal || !modal._cohortEmployees) return;
+  const rows = modal._cohortEmployees;
+  const overlay = document.getElementById('gica-print-overlay') || (() => {
+    const el = document.createElement('div');
+    el.id = 'gica-print-overlay';
+    document.body.appendChild(el);
+    return el;
+  })();
+  const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+  overlay.innerHTML = `
+    <div class="gica-print-header">
+      <div style="font-size:1rem;font-weight:700;">Employee List for GICA Assessment — ${escapeHtml(modal._cohortBu)}</div>
+      <div style="font-size:0.78rem;color:#555;margin-top:3px;">ต้องเข้าอบรมสัปดาห์นี้ · Total: ${rows.length} employees · Report Date: ${printDate}</div>
+    </div>
+    ${_gicaFailStatsHtml(rows)}
+    <div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
+  document.body.classList.add('print-mode');
+  window.print();
+  document.body.classList.remove('print-mode');
+  overlay.innerHTML = '';
 }
 
 // ── Wire controls (once) ──────────────────────────────────────────────────────
