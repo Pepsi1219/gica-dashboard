@@ -5524,7 +5524,6 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
                                        && e.daysOverdue >= -30 && e.daysOverdue <= 0).length;
 
   const retestN = allSchedable.filter(e => e.passed === false).length;
-  const reviewN = allSchedable.filter(e => e.passed === true).length;
   const pendingN = allSchedable.filter(e => e.passed !== true && e.passed !== false).length;
 
   const statusCounts = { upcoming: 0, due_soon: 0, overdue: 0, unknown: 0 };
@@ -5604,7 +5603,7 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
 
   return {
     total, dueWeekN, dueMonthN,
-    retestN, reviewN, pendingN,
+    retestN, pendingN,
     statusCounts, buCards, weeklyBuCards, timeline, timelineMode, schedMode, currentIdx,
     employees: allSchedable,
     availBus, availDepts, buFilter, deptFilter,
@@ -5650,44 +5649,36 @@ function _gicaScheduleHtml(vm) {
       </div>
     </div>`;
 
-  const pBar = (pct, color) => `
-    <div class="pbar pbar--6">
-      <div class="pbar__fill" style="background:${pct >= 100 ? '#16a34a' : color};width:${pct}%;"></div>
-    </div>`;
   const buCardsHtml = vm.weeklyBuCards.map(c => {
     if (c.empty) return `<div class="stat-card stat-card--empty" style="min-width:0;">
       <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
       <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
     </div>`;
-    const buColor   = GICA_BU_COLORS[c.bu] || '#6b7280';
-    const retestPct = c.retestReq > 0 ? Math.min(100, Math.round(c.retestAttended / c.retestReq * 100)) : 0;
-    const reviewPct = c.reviewReq > 0 ? Math.min(100, Math.round(c.reviewAttended / c.reviewReq * 100)) : 0;
+    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
+    const passPct = c.total > 0 ? Math.min(100, Math.round(c.attendedPass / c.total * 100)) : 0;
+    const failPct = c.total > 0 ? Math.min(100, Math.round(c.attendedFail / c.total * 100)) : 0;
     return `
       <div class="stat-card gica-bu-cohort-card" data-bu="${escapeHtml(c.bu)}" style="min-width:0;cursor:pointer;" title="คลิกเพื่อดูรายชื่อ">
         <div class="bu-head">
           <span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span>
           <span class="u-muted bu-count">${c.total} People</span>
         </div>
-        <div style="margin-bottom:5px;">
-          <div class="u-between u-muted" style="font-size:0.7rem;margin-bottom:2px;">
-            <span>Assessment Required</span>
-            <span class="u-text" style="font-weight:600;">${c.retestReq > 0 ? `${c.retestAttended}/${c.retestReq}` : c.retestAttended}</span>
-          </div>
-          ${c.retestReq > 0 ? pBar(retestPct, buColor) : ''}
-        </div>
         <div style="margin-bottom:8px;">
           <div class="u-between u-muted" style="font-size:0.7rem;margin-bottom:2px;">
-            <span>Passed</span>
-            <span class="u-text" style="font-weight:600;">${c.reviewReq > 0 ? `${c.reviewAttended}/${c.reviewReq}` : c.reviewAttended}</span>
+            <span>Assessment Status</span>
+            <span class="u-text" style="font-weight:600;">${c.attended}/${c.total}</span>
           </div>
-          ${c.reviewReq > 0 ? pBar(reviewPct, hexToRgba(buColor, 0.6)) : ''}
+          <div class="pbar pbar--6" style="display:flex;" title="Pass: ${c.attendedPass}, Fail: ${c.attendedFail}">
+            ${passPct > 0 ? `<div class="pbar__fill" style="background:#16a34a;width:${passPct}%;border-radius:0;"></div>` : ''}
+            ${failPct > 0 ? `<div class="pbar__fill" style="background:#86efac;width:${failPct}%;border-radius:0;"></div>` : ''}
+          </div>
         </div>
         <div class="u-muted stat-card__footer">
           <div class="u-between" style="margin-bottom:2px;">
             <span>Attended</span><strong class="u-text">${c.attended}</strong>
           </div>
           <div class="u-between">
-            <span>Overdue</span><strong style="${c.overdue > 0 ? 'color:#dc2626;' : 'color:var(--text);'}">${c.overdue}</strong>
+            <span>Not yet attended</span><strong style="${c.overdue > 0 ? 'color:#dc2626;' : 'color:var(--text);'}">${c.overdue}</strong>
           </div>
         </div>
       </div>`;
@@ -5834,13 +5825,11 @@ function _gicaScheduleHtml(vm) {
     <div class="stat-card">
       <div class="u-between">
         <div>
-          <div class="stat-card__label">Total employees</div>
+          <div class="stat-card__label">Assessment Required</div>
           <div class="stat-card__value"${vm.retestN > 0 ? ' style="color:#dc2626;"' : ''}>${vm.retestN}</div>
         </div>
         <div style="text-align:right;">
-          <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
-            <span class="u-muted">Fail</span><strong style="color:#dc2626;">${vm.retestN}</strong>
-          </div>
+          
           <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
             <span class="u-muted">Pending</span><strong class="u-muted">${vm.pendingN}</strong>
           </div>
