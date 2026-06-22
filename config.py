@@ -10,6 +10,17 @@ AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:5000/auth/callback")
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 SCOPES = ["User.Read", "Files.ReadWrite"]
+
+# Microsoft account email allowed into Admin Sign In (case-insensitive match).
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
+
+# Extra password gate shown before the QE / Admin "Sign in with Microsoft" buttons
+# redirect to Azure AD — restricts the attempt to people who know this password,
+# even if they have a valid organization Microsoft account.
+# No fallback default on purpose — must be set via env var (Vercel / .env), never
+# committed to source control.
+QE_DOOR_PASSWORD    = os.getenv("QE_DOOR_PASSWORD", "")
+ADMIN_DOOR_PASSWORD = os.getenv("ADMIN_DOOR_PASSWORD", "")
 EXCEL_TABLE_NAME = os.getenv("EXCEL_TABLE_NAME", "EmployeeTable")
 
 # Path to the folder in the owner's OneDrive (relative to drive root)
@@ -165,3 +176,13 @@ GICA_FREQ_COLS  = ["department", "level", "role", "frquency (months)",
                    "expectation1", "expectation2"]
 # Grade ranking for pass comparison: a grade passes when its rank >= expectation rank.
 GICA_GRADE_ORDER = {"A": 4, "B": 3, "C": 2, "D": 1}
+
+# ── GICA per-BU KPI target tables (same workbook) ──────────────────────────────
+# One small table per BU — row per Level, target is a plain percentage (e.g. 80 = 80%).
+# Seeds the KPI Setup modal's per-BU tab defaults on load; sliders can still be
+# adjusted in-session for "what if" simulation without writing back to Excel.
+GICA_KPI_TABLES = {
+    "G1": "kpi_g1", "G2": "kpi_g2", "G3": "kpi_g3",
+    "G4": "kpi_g4", "EA": "kpi_ea", "TRM": "kpi_trm",
+}
+GICA_KPI_COLS = ["level", "target"]

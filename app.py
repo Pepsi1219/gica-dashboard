@@ -11,6 +11,8 @@ from flask_session import Session
 import msal
 
 from config import (
+    ADMIN_DOOR_PASSWORD,
+    ADMIN_EMAIL,
     AUTHORITY,
     CLIENT_ID,
     CLIENT_SECRET,
@@ -21,6 +23,8 @@ from config import (
     GICA_FREQ_COLS,
     GICA_FREQ_TABLE,
     GICA_GRADE_ORDER,
+    GICA_KPI_COLS,
+    GICA_KPI_TABLES,
     GICA_MAX_TESTS,
     GICA_TABLE_PREFIX,
     JUMPER_BU_TABLES,
@@ -28,6 +32,7 @@ from config import (
     JUMPER_EXCEL_SHARE_URL,
     JUMPER_SEW_COLS,
     JUMPER_SEW_TABLE,
+    QE_DOOR_PASSWORD,
     REDIRECT_URI,
     SCOPES,
     TRAINER_EXCEL_SHARE_URL,
@@ -41,13 +46,18 @@ from config import (
 )
 from business_rules import calculate_status
 from graph_excel import (
+    GraphExcelError,
     TokenExpiredError,
     create_employee,
+    create_gica_employee,
     encode_sharing_url,
     find_employee,
+    find_gica_employee,
+    get_gica_drive_item,
     get_table_rows,
     graph_request,
     update_employee,
+    update_gica_employee,
 )
 
 # ---------------------------------------------------------------------------
@@ -199,16 +209,16 @@ def require_token():
     return token, None
 
 
-def is_manager():
-    """True when the session was opened via /manager-login (view-only)."""
-    return session.get("role") == "manager"
+def get_role():
+    return session.get("role", "")
 
 
-def require_writable():
-    """Block writes for manager sessions. Returns (response, status) or None."""
-    if is_manager():
+def require_writable(allowed_roles):
+    """Block writes unless the session role is in allowed_roles.
+    Returns (response, status) or None."""
+    if get_role() not in allowed_roles:
         return jsonify({
-            "error": "Read-only access for CSA Manager",
+            "error": "Read-only access for this session role",
             "read_only": True,
         }), 403
     return None
@@ -237,16 +247,30 @@ def index():
 @app.route("/login")
 def login():
     session.permanent = True
+    door = request.args.get("door", "csa")
+    if door not in ("csa", "qe", "admin"):
+        door = "csa"
+
+    # QE / Admin require the door password to be verified first (POST /api/door-unlock
+    # sets this session flag) — without it, refuse to even start the MSAL redirect.
+    if door in ("qe", "admin") and not session.get(f"door_unlocked_{door}"):
+        return redirect(url_for("index") + "?doorLocked=1")
+
     auth_url = _build_msal_app().get_authorization_request_url(
         SCOPES,
         redirect_uri=REDIRECT_URI,
         prompt="select_account",
+        state=door,
     )
     return redirect(auth_url)
 
 
 @app.route("/auth/callback")
 def auth_callback():
+    door = request.args.get("state", "csa")
+    if door not in ("csa", "qe", "admin"):
+        door = "csa"
+
     error = request.args.get("error")
     if error:
         desc = request.args.get("error_description", "No description provided")
@@ -282,18 +306,30 @@ def auth_callback():
             f"<a href='/login'>Try again</a>"
         ), 400
 
+    claims = result.get("id_token_claims") or {}
+    email  = (claims.get("preferred_username") or claims.get("upn") or "").strip().lower()
+
+    # Admin Sign In only succeeds for the account configured in ADMIN_EMAIL — any
+    # other account is rejected without creating a session. The frontend tracks
+    # wrong-attempt count (sessionStorage) and shows the warning/lockout UX.
+    if door == "admin" and (not ADMIN_EMAIL or email != ADMIN_EMAIL):
+        print(f"[AUTH] Admin Sign In rejected for {email or '(no email)'}")
+        return redirect(url_for("index") + "?adminError=1")
+
+    role = {"admin": "admin", "qe": "qe_user", "csa": "csa_user"}[door]
+
     # ── Persist session ───────────────────────────────────────────────────────
     # Store ONLY the refresh token in the cookie (~0.8 KB).
     # Cache the access token in process memory to avoid cookie overflow.
-    claims = result.get("id_token_claims") or {}
     oid = claims.get("oid") or claims.get("sub") or "unknown"
 
     session["rt"] = result.get("refresh_token", "")
     session["user"] = {
-        "name":  claims.get("name") or claims.get("preferred_username") or "User",
-        "email": claims.get("preferred_username") or claims.get("upn") or "",
+        "name":  claims.get("name") or email or "User",
+        "email": email,
         "oid":   oid,
     }
+    session["role"] = role
     session.permanent = True
 
     _AT_CACHE[oid] = {
@@ -301,15 +337,15 @@ def auth_callback():
         "exp": time.time() + result.get("expires_in", 3600),
     }
 
-    print(f"[AUTH] Login OK — {session['user']['name']}")
+    print(f"[AUTH] Login OK — {session['user']['name']} ({role})")
 
-    # ── Setup helper for CSA Manager mode ─────────────────────────────────────
+    # ── Setup helper for CSA Manager / QE View modes ──────────────────────────
     # If the operator hasn't configured MANAGER_REFRESH_TOKEN yet, print the
     # current login's refresh token so they can copy it into .env to enable
-    # the "CSA Manager" (view-only) button on the login screen.
+    # the View Mode buttons on the login screen.
     if not MANAGER_REFRESH_TOKEN and result.get("refresh_token"):
         print("\n" + "=" * 72)
-        print(" CSA MANAGER SETUP — copy the line below into your .env file")
+        print(" VIEW MODE SETUP — copy the line below into your .env file")
         print(" (only printed because MANAGER_REFRESH_TOKEN is not set yet)")
         print("-" * 72)
         print(f"MANAGER_REFRESH_TOKEN={result['refresh_token']}")
@@ -334,35 +370,68 @@ def logout():
     return redirect(url_for("index"))
 
 
-@app.route("/manager-login", methods=["POST"])
-def manager_login():
-    """Open a view-only session using the central MANAGER_REFRESH_TOKEN.
+def _open_view_only_session(role: str, display_name: str):
+    """Open a read-only session using the central MANAGER_REFRESH_TOKEN.
     No password required — the caller just clicks the button.
-    Backend will refuse writes for this session role."""
+    Backend will refuse writes for this session role (require_writable)."""
     if not MANAGER_REFRESH_TOKEN:
         return jsonify({
-            "error": "CSA Manager mode is not configured on the server.",
+            "error": "View Mode is not configured on the server.",
         }), 500
 
     session.permanent = True
     session["rt"] = MANAGER_REFRESH_TOKEN
     session["user"] = {
-        "name":  "CSA Manager",
-        "email": "manager@view-only",
-        "oid":   "manager-shared",
+        "name":  display_name,
+        "email": f"{role}@view-only",
+        "oid":   f"{role}-shared",
     }
-    session["role"] = "manager"
+    session["role"] = role
 
     # Verify the central token actually works before returning success
     token = get_valid_token()
     if not token:
         session.clear()
         return jsonify({
-            "error": "Central manager token is invalid or expired. "
+            "error": "Central view-only token is invalid or expired. "
                      "Ask an admin to refresh MANAGER_REFRESH_TOKEN.",
         }), 500
 
-    print("[AUTH] CSA Manager session opened")
+    print(f"[AUTH] {display_name} session opened ({role})")
+    return jsonify({"ok": True})
+
+
+@app.route("/manager-login", methods=["POST"])
+def manager_login():
+    """CSA Sign In → View Mode."""
+    return _open_view_only_session("csa_view", "CSA View Mode")
+
+
+@app.route("/qe-view-login", methods=["POST"])
+def qe_view_login():
+    """QE Sign In → View Mode."""
+    return _open_view_only_session("qe_view", "QE View Mode")
+
+
+@app.route("/api/door-unlock", methods=["POST"])
+def door_unlock():
+    """Verify the QE/Admin door password before /login is allowed to start the
+    Microsoft OAuth redirect for that door. Does not authenticate anyone by
+    itself — it only unlocks the button for this browser session."""
+    payload  = request.json or {}
+    door     = str(payload.get("door", "")).strip().lower()
+    password = str(payload.get("password", ""))
+    if door not in ("qe", "admin"):
+        return jsonify({"error": "Invalid door"}), 400
+    expected = {"qe": QE_DOOR_PASSWORD, "admin": ADMIN_DOOR_PASSWORD}.get(door)
+    if not expected:
+        # Misconfigured server (env var not set) — refuse rather than silently
+        # accepting an empty password.
+        return jsonify({"error": "Door password is not configured on the server."}), 500
+    if password != expected:
+        return jsonify({"error": "รหัสผ่านไม่ถูกต้อง"}), 401
+    session.permanent = True
+    session[f"door_unlocked_{door}"] = True
     return jsonify({"ok": True})
 
 
@@ -447,7 +516,7 @@ def api_create_employee(department_key):
     _, error = require_token()
     if error:
         return error
-    deny = require_writable()
+    deny = require_writable(("csa_user", "admin"))
     if deny:
         return deny
     department, error = get_department_or_404(department_key)
@@ -474,7 +543,7 @@ def api_update_employee(department_key, employee_id):
     _, error = require_token()
     if error:
         return error
-    deny = require_writable()
+    deny = require_writable(("csa_user", "admin"))
     if deny:
         return deny
     department, error = get_department_or_404(department_key)
@@ -898,9 +967,10 @@ def _gica_num(v):
 
 
 def _fetch_gica_excel_data(token: str) -> tuple:
-    """Resolve GICA.xlsx, auto-discover GICA_* tables + read Table_freq, in parallel.
+    """Resolve GICA.xlsx, auto-discover GICA_* tables + read Table_freq + per-BU
+    KPI target tables, in parallel.
 
-    Returns (employee_rows, freq_rows).
+    Returns (employee_rows, freq_rows, kpi_by_bu).
     """
     share_id = encode_sharing_url(GICA_EXCEL_SHARE_URL)
     item = graph_request(
@@ -948,7 +1018,25 @@ def _fetch_gica_excel_data(token: str) -> tuple:
         print(f'[GICA] {GICA_FREQ_TABLE} skipped: {exc}', flush=True)
         freq_rows = []
 
-    return all_rows, freq_rows
+    kpi_by_bu = {}
+    for bu, tname in GICA_KPI_TABLES.items():
+        try:
+            rows = _read_excel_table(token, drive_id, item_id, tname, GICA_KPI_COLS)
+            targets = {}
+            for r in rows:
+                level = str(r.get('level', '') or '').strip()
+                if not level:
+                    continue
+                try:
+                    targets[level] = float(r.get('target'))
+                except (ValueError, TypeError):
+                    pass
+            kpi_by_bu[bu] = targets
+            print(f'[GICA] {tname}: {len(targets)} levels', flush=True)
+        except Exception as exc:
+            print(f'[GICA] {tname} skipped: {exc}', flush=True)
+
+    return all_rows, freq_rows, kpi_by_bu
 
 
 def _gica_rank(grade) -> int:
@@ -1017,7 +1105,7 @@ def _build_gica_freq_lookup(freq_rows: list) -> dict:
     return lookup
 
 
-def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
+def _build_gica_payload(rows: list, freq_rows: list = None, kpi_by_bu: dict = None) -> dict:
     """Per employee: pick the latest non-empty test slot (#12 → #1) as current
     status. Each test has two sub-parts (result/grade {i}-1 and {i}-2). A person
     "passes" when each sub-grade meets its per-role expectation from Table_freq
@@ -1188,7 +1276,12 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
             'expectation2': str(r.get('expectation2', '') or '').strip().upper(),
         })
 
-    return {'employees': employees, 'bus': bus, 'freqTable': freq_table}
+    return {
+        'employees': employees,
+        'bus': bus,
+        'freqTable': freq_table,
+        'kpiDefaults': kpi_by_bu or {},
+    }
 
 
 @app.route('/api/gica-excel')
@@ -1203,12 +1296,134 @@ def api_gica_excel():
         return jsonify(_GICA_CACHE['data'])
     try:
         token   = _get_manager_access_token()
-        rows, freq_rows = _fetch_gica_excel_data(token)
-        payload = _build_gica_payload(rows, freq_rows)
+        rows, freq_rows, kpi_by_bu = _fetch_gica_excel_data(token)
+        payload = _build_gica_payload(rows, freq_rows, kpi_by_bu)
         _GICA_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
         return jsonify(payload)
     except Exception as exc:
         print(f'[GICA] /api/gica-excel error: {exc}')
+        return jsonify({'error': str(exc)}), 500
+
+
+# ── GICA writes (QE Sign In / Admin only) ──────────────────────────────────────
+# Writes use the LOGGED-IN user's own access token (via call_graph/require_token),
+# not the shared MANAGER_REFRESH_TOKEN used for reads — the GICA.xlsx sharing link
+# must grant Edit (not just View) access for this to succeed.
+
+def _gica_score_to_grade(score):
+    if score is None:
+        return ''
+    if score >= 0.85:
+        return 'A'
+    if score >= 0.65:
+        return 'B'
+    if score >= 0.50:
+        return 'C'
+    return 'D'
+
+
+def _gica_write_create(token, bu, record):
+    table_name = f'{GICA_TABLE_PREFIX}{bu}'
+    item = get_gica_drive_item(token, GICA_EXCEL_SHARE_URL)
+    drive_id = item['parentReference']['driveId']
+    item_id  = item['id']
+    return create_gica_employee(token, drive_id, item_id, table_name, GICA_COLS, record)
+
+
+def _gica_write_add_result(token, bu, empid, meas_frac, insp_frac, assess_date):
+    table_name = f'{GICA_TABLE_PREFIX}{bu}'
+    item = get_gica_drive_item(token, GICA_EXCEL_SHARE_URL)
+    drive_id = item['parentReference']['driveId']
+    item_id  = item['id']
+    employee, _headers = find_gica_employee(token, drive_id, item_id, table_name, GICA_COLS, empid)
+    if not employee:
+        raise GraphExcelError('Employee not found')
+
+    next_n = None
+    for i in range(1, GICA_MAX_TESTS + 1):
+        if employee.get(f'result{i}-1', '') in (None, '', 'null'):
+            next_n = i
+            break
+    if next_n is None:
+        raise GraphExcelError(f'{empid} ทำครบ {GICA_MAX_TESTS} ครั้งแล้ว ไม่สามารถเพิ่มผลสอบใหม่ได้')
+
+    patch = {
+        f'result{next_n}-1': meas_frac,
+        f'result{next_n}-2': insp_frac,
+        f'grade{next_n}-1':  _gica_score_to_grade(meas_frac),
+        f'grade{next_n}-2':  _gica_score_to_grade(insp_frac),
+        f'date{next_n}':     assess_date,
+    }
+    return update_gica_employee(token, drive_id, item_id, table_name, GICA_COLS, empid, patch)
+
+
+@app.route('/api/gica/<bu>/employees', methods=['POST'])
+def api_gica_create_employee(bu):
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_user', 'admin'))
+    if deny:
+        return deny
+
+    bu = str(bu or '').strip().upper()
+    payload = request.json or {}
+    empid = str(payload.get('empid', '')).strip()
+    if not empid or not empid.isdigit():
+        return jsonify({'error': 'Employee ID ต้องเป็นตัวเลข'}), 400
+    name = str(payload.get('name', '')).strip()
+    if not name:
+        return jsonify({'error': 'Employee Name is required'}), 400
+
+    record = {
+        'bu':         bu,
+        'empid':      empid,
+        'name':       name,
+        'deptname':   str(payload.get('deptname', '')).strip(),
+        'level':      str(payload.get('level', '')).strip(),
+        'position':   str(payload.get('position', '')).strip(),
+        'start_date': str(payload.get('start_date', '')).strip(),
+    }
+    try:
+        created = call_graph(_gica_write_create, bu, record)
+        global _GICA_CACHE
+        _GICA_CACHE = {}
+        return jsonify({'message': 'Created', 'employee': created})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/gica/<bu>/employees/<empid>/result', methods=['PATCH'])
+def api_gica_add_result(bu, empid):
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_user', 'admin'))
+    if deny:
+        return deny
+
+    bu = str(bu or '').strip().upper()
+    payload = request.json or {}
+    try:
+        meas_pct = float(payload.get('measurementResult'))
+        insp_pct = float(payload.get('inspectionResult'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Measurement/Inspection Result ต้องเป็นตัวเลข'}), 400
+    assess_date = str(payload.get('assessmentDate', '')).strip()
+    if not assess_date:
+        return jsonify({'error': 'Assessment Date is required'}), 400
+
+    try:
+        updated = call_graph(_gica_write_add_result, bu, empid,
+                              meas_pct / 100, insp_pct / 100, assess_date)
+        global _GICA_CACHE
+        _GICA_CACHE = {}
+        return jsonify({'message': 'Saved', 'employee': updated})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
 

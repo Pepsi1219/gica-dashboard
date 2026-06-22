@@ -665,11 +665,8 @@ function initLang() {
     if (currentUser) {
       $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
     }
-    // Refresh role badge text when language changes
-    if (currentRole === 'manager') {
-      const badge = $('roleBadge');
-      if (badge) badge.textContent = t('managerModeBadge');
-    }
+    // Role badge text is fixed per door/mode (see _roleBadgeText) — not re-set
+    // here since it doesn't change with language.
     if (lastCalc) {
       $('dueDateText').textContent = `${t('dueDate')}: ${lastCalc.due_date || '-'}`;
     }
@@ -2231,6 +2228,22 @@ async function saveEditForm(event) {
 // ===== TAB BAR =====
 let activeMainTab = 'newOperator';
 
+let _adminBtnAllowedByRole = false;
+
+// Role badge label — fixed per door/mode, not run through t() since it's the
+// same in every language (it identifies which door+mode the session came from).
+function _roleBadgeText(role) {
+  switch (role) {
+    case 'csa_view': return 'CSA (View Mode)';
+    case 'csa_user': return 'CSA (Edit Mode)';
+    case 'qe_view':  return 'QE (View Mode)';
+    case 'qe_user':  return 'QE (Edit Mode)';
+    case 'admin':    return 'Admin Mode';
+    case 'manager':  return 'CSA (View Mode)'; // legacy role name
+    default:         return '';
+  }
+}
+
 function initTabBar() {
   const TAB_IDS = ['newOperator', 'jumper', 'trainer', 'sewingOperator', 'gica'];
   const btnGroup = document.getElementById('mainTabBar');
@@ -2247,6 +2260,9 @@ function initTabBar() {
       const el = document.getElementById('tabContent-' + id);
       if (el) el.classList.toggle('hidden', id !== tabKey);
     });
+    // Admin Settings (Special Holidays) is a New Operator feature — never show
+    // it while on the GICA tab, even for admin/csa_user sessions that can write.
+    $('adminBtn')?.classList.toggle('hidden', tabKey === 'gica' || !_adminBtnAllowedByRole);
     if (tabKey === 'gica') requestAnimationFrame(syncGicaSubtabTop);
     // update placeholder text if i18n already loaded
     TAB_IDS.forEach(id => {
@@ -2357,6 +2373,137 @@ function startLoginParticles() {
   window.addEventListener('resize', () => { resize(); initParticles(); });
 }
 
+// ===== LOGIN DOORS (CSA / QE / Admin) + Admin wrong-attempt lockout =====
+const ADMIN_FAIL_KEY   = 'adminFailCount';
+const ADMIN_LOCK_LIMIT = 3;
+const ADMIN_LOCK_SECS  = 60;
+
+function _showLoginDoor(door) {
+  $('loginDoors').classList.add('hidden');
+  ['csa', 'qe', 'admin'].forEach(d => {
+    const panel = $('loginDoor-' + d);
+    if (panel) panel.classList.toggle('hidden', d !== door);
+  });
+}
+function _showLoginDoorPicker() {
+  $('loginDoors').classList.remove('hidden');
+  ['csa', 'qe', 'admin'].forEach(d => $('loginDoor-' + d)?.classList.add('hidden'));
+}
+
+async function _openViewOnlySession(route, btn, errEl) {
+  btn.disabled = true;
+  if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+  try {
+    await api(route, { method: 'POST' });
+    window.location.reload();
+  } catch (err) {
+    btn.disabled = false;
+    const msg = err.message || t('managerLoginFailed');
+    if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
+    else showMessage(msg, true);
+  }
+}
+
+function _startLockoutCountdown() {
+  show($('adminLockoutScreen'));
+  hide($('loginPanel'));
+  const el = $('lockoutCountdown');
+  let remaining = ADMIN_LOCK_SECS;
+  if (el) el.textContent = remaining;
+  const tick = setInterval(() => {
+    remaining--;
+    if (el) el.textContent = Math.max(remaining, 0);
+    if (remaining <= 0) {
+      clearInterval(tick);
+      sessionStorage.removeItem(ADMIN_FAIL_KEY);
+      hide($('adminLockoutScreen'));
+      show($('loginPanel'));
+      _showLoginDoorPicker();
+    }
+  }, 1000);
+}
+
+function _handleAdminLoginError() {
+  const count = Number(sessionStorage.getItem(ADMIN_FAIL_KEY) || 0) + 1;
+  sessionStorage.setItem(ADMIN_FAIL_KEY, String(count));
+  if (count >= ADMIN_LOCK_LIMIT) {
+    _startLockoutCountdown();
+    return;
+  }
+  show($('loginPanel'));
+  startLoginParticles();
+  _showLoginDoor('admin');
+  const warnEl = $('adminLoginWarning');
+  if (warnEl) {
+    warnEl.textContent = `บัญชีนี้ไม่ใช่ Admin — ระบบจะล็อกหากใส่ผิดครบ ${ADMIN_LOCK_LIMIT} ครั้ง (ผิดไปแล้ว ${count} ครั้ง)`;
+    warnEl.classList.remove('hidden');
+  }
+}
+
+let _doorPasswordPending = '';
+
+function _showDoorPasswordPanel(door) {
+  _doorPasswordPending = door;
+  $('loginCard').classList.add('hidden');
+  $('doorPasswordPanel').classList.remove('hidden');
+  $('doorPasswordInput').value = '';
+  $('doorPasswordError').classList.add('hidden');
+  $('doorPasswordInput').focus();
+}
+function _hideDoorPasswordPanel() {
+  $('doorPasswordPanel').classList.add('hidden');
+  $('loginCard').classList.remove('hidden');
+}
+
+async function _submitDoorPassword() {
+  const door     = _doorPasswordPending;
+  const password = $('doorPasswordInput').value;
+  const errEl    = $('doorPasswordError');
+  if (!password) {
+    errEl.textContent = 'กรุณากรอกรหัสผ่าน';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  try {
+    await api('/api/door-unlock', { method: 'POST', body: JSON.stringify({ door, password }) });
+    window.location.href = `/login?door=${door}`;
+  } catch (err) {
+    errEl.textContent = err.message || 'รหัสผ่านไม่ถูกต้อง';
+    errEl.classList.remove('hidden');
+  }
+}
+
+function initLoginDoors() {
+  $('loginDoors')?.querySelectorAll('.login-door-btn[data-door]').forEach(btn => {
+    btn.onclick = () => _showLoginDoor(btn.dataset.door);
+  });
+  document.querySelectorAll('.login-door-back[data-back]').forEach(btn => {
+    btn.onclick = _showLoginDoorPicker;
+  });
+  $('csaViewBtn')?.addEventListener('click', () => _openViewOnlySession('/manager-login', $('csaViewBtn'), $('csaViewError')));
+  $('qeViewBtn')?.addEventListener('click', () => _openViewOnlySession('/qe-view-login', $('qeViewBtn'), $('qeViewError')));
+
+  // QE / Admin "Sign in with Microsoft" — must pass the door password first.
+  document.querySelectorAll('.login-btn[data-door]').forEach(btn => {
+    btn.addEventListener('click', () => _showDoorPasswordPanel(btn.dataset.door));
+  });
+  $('doorPasswordBack')?.addEventListener('click', _hideDoorPasswordPanel);
+  $('doorPasswordSubmit')?.addEventListener('click', _submitDoorPassword);
+  $('doorPasswordInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') _submitDoorPassword(); });
+
+  // If we just bounced back from a failed Admin Sign In (?adminError=1), strip the
+  // query param and run the warning/lockout flow before anything else renders.
+  if (new URLSearchParams(window.location.search).get('adminError') === '1') {
+    window.history.replaceState({}, '', window.location.pathname);
+    _handleAdminLoginError();
+  }
+  // /login redirected back here because the door password hadn't been verified
+  // yet (e.g. URL navigated to directly) — send them to the password prompt.
+  if (new URLSearchParams(window.location.search).get('doorLocked') === '1') {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+
 async function init() {
   initTheme();
   initLang();
@@ -2449,56 +2596,60 @@ async function init() {
     }
   });
 
-  // Manager-login button: opens a view-only session w/o password
-  const managerBtn = $('managerLoginBtn');
-  if (managerBtn) {
-    managerBtn.onclick = async () => {
-      managerBtn.disabled = true;
-      // Clear any prior error
-      const errEl = $('managerLoginError');
-      if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
-      try {
-        await api('/manager-login', { method: 'POST' });
-        window.location.reload();
-      } catch (err) {
-        managerBtn.disabled = false;
-        const msg = err.message || t('managerLoginFailed');
-        // Show inline on the login panel (messageBox is in dashboard which is hidden here)
-        if (errEl) {
-          errEl.textContent = msg;
-          errEl.classList.remove('hidden');
-        } else {
-          showMessage(msg, true);
-        }
-      }
-    };
-  }
+  initLoginDoors();
 
   // Check auth
   const me = await api('/api/me');
   if (!me.authenticated) {
-    show($('loginPanel'));
-    startLoginParticles();
+    // Don't re-show the login doors over an active Admin lockout countdown.
+    if ($('adminLockoutScreen').classList.contains('hidden')) {
+      show($('loginPanel'));
+      startLoginParticles();
+    }
     return;
   }
 
   currentUser = me.user;
   currentRole = me.role || 'user';
 
-  // Apply view-only mode for CSA Manager sessions — hides all write controls
-  if (currentRole === 'manager') {
-    document.body.classList.add('view-only');
-    const badge = $('roleBadge');
-    if (badge) {
-      badge.textContent = t('managerModeBadge');
-      badge.classList.remove('hidden');
-    }
+  const VIEW_ONLY_ROLES = ['manager', 'csa_view', 'qe_view'];
+  const QE_ROLES        = ['qe_view', 'qe_user'];
+  const CSA_ROLES       = ['csa_view', 'csa_user', 'manager'];
+  const isViewOnly = VIEW_ONLY_ROLES.includes(currentRole);
+
+  // Apply view-only mode — hides all write controls
+  if (isViewOnly) document.body.classList.add('view-only');
+
+  // Role badge — fixed labels per door/mode (not translated, same in every language).
+  const badgeText = _roleBadgeText(currentRole);
+  const badge = $('roleBadge');
+  if (badge && badgeText) {
+    badge.textContent = badgeText;
+    badge.classList.remove('hidden');
   }
 
   $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
   show($('mainTabBar'));
-  // Admin panel is a write surface (holidays) — hide it for managers
-  if (currentRole !== 'manager') show($('adminBtn'));
+  // Admin panel is a write surface (holidays) — hide it for any view-only session,
+  // and switchTab() additionally hides it while on the GICA tab (see initTabBar).
+  _adminBtnAllowedByRole = !isViewOnly;
+  if (_adminBtnAllowedByRole) show($('adminBtn'));
+
+  // Role-based tab visibility: CSA roles never see GICA; QE roles see ONLY GICA;
+  // admin sees everything (no filtering needed).
+  if (currentRole === 'admin') {
+    // no-op — all tabs already visible by default
+  } else if (QE_ROLES.includes(currentRole)) {
+    ['newOperator', 'jumper', 'trainer', 'sewingOperator'].forEach(id => {
+      $('tabItem-' + id)?.classList.add('hidden');
+      document.querySelector(`.tab-btn[data-tab="${id}"]`)?.classList.add('hidden');
+    });
+    if (_switchMainTab) _switchMainTab('gica');
+    initGicaTab();
+    return;
+  } else if (CSA_ROLES.includes(currentRole)) {
+    document.querySelector('.tab-btn[data-tab="gica"]')?.classList.add('hidden');
+  }
 
   departments = await api('/api/departments');
   if (!Array.isArray(departments)) departments = [];
@@ -4078,7 +4229,11 @@ let _gicaSchedMode  = 'all';
 let _gicaSchedDate  = '';
 let _gicaSchedBu    = '';
 let _gicaDrillEscHandler = null;
+// { [level]: { all: pct, [bu]: pct } } — "all" is the generic fallback (KPI Setup
+// modal's "All BU" tab); per-BU keys are seeded from kpi_g1/kpi_g2/... on load and
+// can be adjusted in-session per BU for "what if" simulation (not persisted).
 let _gicaKpiTargets = {};
+let _gicaKpiActiveBu = 'all';
 const _gicaTableState = {
   page: 1, pageSize: 25, sortKey: 'nextDate', sortDir: 1,
   filters: { bu: '', grade: '', dept: '', level: '', type: '', search: '' },
@@ -4139,6 +4294,22 @@ function _gicaExpBadge(g) {
     : `<span class="exp-badge exp-badge--expect">—</span>`;
 }
 
+// KPI Setup modal slider list for one tab ('all' or a BU code) — reads the live
+// _gicaKpiTargets global so it can be re-rendered standalone on tab switch.
+function _gicaKpiListHtml(bu) {
+  return GICA_LEVEL_ORDER.filter(l => l !== 'Department Head').map(lv => {
+    const t = _gicaKpiTargets[lv] || { all: 80 };
+    const val = (bu === 'all' ? t.all : (t[bu] ?? t.all)) ?? 80;
+    return `
+      <div class="gica-kpi-row" data-level="${escapeHtml(lv)}">
+        <span class="gica-kpi-row__label">${escapeHtml(lv)}</span>
+        <input type="range" class="gica-kpi-slider" min="0" max="100" step="5"
+          value="${val}" data-level="${escapeHtml(lv)}">
+        <span class="gica-kpi-row__val">${val}%</span>
+      </div>`;
+  }).join('');
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 async function initGicaTab() {
   if (_gicaLoaded) return;
@@ -4154,6 +4325,17 @@ async function initGicaTab() {
     _gicaData = await res.json();
     if (_gicaData.error) throw new Error(_gicaData.error);
     _gicaLoaded = true;
+
+    // Seed KPI targets from kpi_g1/kpi_g2/... (per-BU defaults from Excel) — the
+    // generic "all" fallback stays at 80 unless a level has no BU-specific value.
+    GICA_LEVEL_ORDER.forEach(lv => { _gicaKpiTargets[lv] = { all: 80 }; });
+    Object.entries(_gicaData.kpiDefaults || {}).forEach(([bu, levels]) => {
+      Object.entries(levels || {}).forEach(([lv, pct]) => {
+        if (!_gicaKpiTargets[lv]) _gicaKpiTargets[lv] = { all: 80 };
+        _gicaKpiTargets[lv][bu] = pct;
+      });
+    });
+
     if (loadingEl) loadingEl.classList.add('hidden');
     if (dashEl)    dashEl.classList.remove('hidden');
     requestAnimationFrame(syncGicaSubtabTop);
@@ -4177,6 +4359,27 @@ async function initGicaTab() {
         }
       });
     });
+
+    // Month-dots → attempt-history modal: shared across every table that uses
+    // _gicaEmpTableHtml (Employee List, BU cohort, Calendar drill, Schedule drill),
+    // so wire it once via delegation instead of per-table.
+    dashEl.addEventListener('click', e => {
+      const dotsEl = e.target.closest('.gica-month-dots[data-empid]');
+      if (dotsEl) _gicaShowAttemptDotsModal(dotsEl.dataset.empid);
+    });
+    const attemptDotsModal = $('gica-attempt-dots-modal');
+    const closeAttemptDotsModal = () => attemptDotsModal && attemptDotsModal.classList.add('hidden');
+    $('gica-attempt-dots-close')?.addEventListener('click', closeAttemptDotsModal);
+    $('gica-attempt-dots-backdrop')?.addEventListener('click', closeAttemptDotsModal);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAttemptDotsModal(); });
+
+    // QE/Admin-only write UI on Employee List
+    if (['qe_user', 'admin'].includes(currentRole)) {
+      _wireGicaResultModal();
+      _wireGicaCreateModal();
+      $('gica-create-operator-btn')?.classList.remove('hidden');
+    }
+
     renderGicaSummary();
   } catch (err) {
     if (loadingEl) loadingEl.classList.add('hidden');
@@ -4753,10 +4956,14 @@ function _gicaSummaryHtml(vm) {
   const buThs = vm.expMatrixBus.map(bu =>
     `<th class="exp-th exp-th--bu" style="color:${GICA_BU_COLORS[bu] || 'var(--text)'};">${escapeHtml(bu)}</th>`).join('');
 
+  const kpiPctFor = (level, bu) => {
+    const t = vm.kpiTargets[level];
+    return t ? (t[bu] ?? t.all ?? null) : null;
+  };
+
   const matrixRows = vm.expMatrix.map(row => {
-    const kpiPct = vm.kpiTargets[row.level] ?? null;
     const cells = vm.expMatrixBus.map(bu =>
-      _mkExpCell(row.cells[bu], `data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`, kpiPct)
+      _mkExpCell(row.cells[bu], `data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`, kpiPctFor(row.level, bu))
     ).join('');
     return `<tr>
       <td class="exp-row__head"><div class="exp-row__level">${escapeHtml(row.level)}</div></td>
@@ -4783,9 +4990,8 @@ function _gicaSummaryHtml(vm) {
     }).join('');
 
     const subRows = levelRows.map(row => {
-      const kpiPct = vm.kpiTargets[row.level] ?? null;
       const cells = vm.expMatrixBus.map(bu =>
-        _mkExpCell(row.cells[bu], `data-dept="${escapeHtml(dept)}" data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`, kpiPct)
+        _mkExpCell(row.cells[bu], `data-dept="${escapeHtml(dept)}" data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`, kpiPctFor(row.level, bu))
       ).join('');
       return `<tr class="exp-level-sub-row">
         <td class="exp-row__head exp-row__sub"><div class="exp-row__level">${escapeHtml(row.level)}</div></td>
@@ -4818,31 +5024,37 @@ function _gicaSummaryHtml(vm) {
     const expBadge = g => g
       ? `<span class="exp-badge exp-badge--${g}">${escapeHtml(g)}</span>`
       : '<span class="u-muted">—</span>';
-    return `
-      <div class="gica-freq-table-wrap">
-        <table class="gica-freq-table">
-          <thead><tr>
-            <th>Dept / Level</th>
-            <th>Role</th>
-            <th style="text-align:center;">Frequency</th>
-            <th style="text-align:center;" title="Measurement — เกรดที่คาดหวัง"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
-            <th style="text-align:center;" title="Inspection — เกรดที่คาดหวัง"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
-          </tr></thead>
-          <tbody>
-            ${depts.map(dept => `
-              <tr class="gica-freq-dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>
-              ${sortRows(byDept[dept]).map(r => `
-                <tr>
-                  <td>${escapeHtml(r.level || '—')}</td>
-                  <td class="u-muted">${escapeHtml(r.role || '—')}</td>
-                  <td style="text-align:center;">${r.freqMonths != null ? `${r.freqMonths} เดือน` : '—'}</td>
-                  <td style="text-align:center;">${expBadge(r.expectation1)}</td>
-                  <td style="text-align:center;">${expBadge(r.expectation2)}</td>
-                </tr>`).join('')}
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    const cols = `
+    <colgroup>
+      <col style="width: 20%;"> <col style="width: 35%;"> <col style="width: 21%;"> <col style="width: 12%;"> <col style="width: 12%;"> </colgroup>
+  `;
+
+  return `
+    <div class="gica-freq-table-wrap">
+      <table class="gica-freq-table" style="table-layout: fixed; width: 100%; border-collapse: collapse;">
+        ${cols}
+        <thead><tr>
+          <th>Dept / Level</th>
+          <th>Role</th>
+          <th style="text-align:center;">Frequency</th>
+          <th style="text-align:center;" title="Measurement — Expected grade"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+          <th style="text-align:center;" title="Inspection — Expected grade"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+        </tr></thead>
+        <tbody>
+          ${depts.map(dept => `
+            <tr class="gica-freq-dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>
+            ${sortRows(byDept[dept]).map(r => `
+              <tr>
+                <td style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(r.level || '—')}</td>
+                <td class="u-muted" style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(r.role || '—')}</td>
+                <td style="text-align:center; overflow:hidden; white-space:nowrap;">Every ${r.freqMonths != null ? `${r.freqMonths} mos` : '—'}</td>
+                <td style="text-align:center;">${expBadge(r.expectation1)}</td>
+                <td style="text-align:center;">${expBadge(r.expectation2)}</td>
+              </tr>`).join('')}
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
   })();
 
   const matrix = vm.expMatrix.length ? `
@@ -4910,19 +5122,17 @@ function _gicaSummaryHtml(vm) {
           <button class="gica-modal__close" id="gica-kpi-close" aria-label="ปิด">✕</button>
         </div>
         <div class="gica-kpi-modal__body">
-          <p class="u-muted gica-kpi-modal__desc">กำหนด KPI target (%) สำหรับแต่ละ Level</p>
-          <div class="gica-kpi-list">
-            ${GICA_LEVEL_ORDER.filter(l => l !== 'Department Head').map(lv => `
-              <div class="gica-kpi-row" data-level="${escapeHtml(lv)}">
-                <span class="gica-kpi-row__label">${escapeHtml(lv)}</span>
-                <input type="range" class="gica-kpi-slider" min="0" max="100" step="5"
-                  value="${vm.kpiTargets[lv] ?? 80}" data-level="${escapeHtml(lv)}">
-                <span class="gica-kpi-row__val">${vm.kpiTargets[lv] ?? 80}%</span>
-              </div>`).join('')}
+          <p class="u-muted gica-kpi-modal__desc">Define KPI target (%) for each level </p>
+          <div class="gica-kpi-bu-tabs">
+            <button class="gica-kpi-bu-tab${_gicaKpiActiveBu === 'all' ? ' gica-kpi-bu-tab--active' : ''}" data-bu="all" type="button">All BU</button>
+            ${BU_ORDER.map(bu => `<button class="gica-kpi-bu-tab${_gicaKpiActiveBu === bu ? ' gica-kpi-bu-tab--active' : ''}" data-bu="${escapeHtml(bu)}" type="button">${escapeHtml(bu)}</button>`).join('')}
+          </div>
+          <div class="gica-kpi-list" id="gica-kpi-list">
+            ${_gicaKpiListHtml(_gicaKpiActiveBu)}
           </div>
         </div>
         <div class="gica-kpi-modal__footer">
-          <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-kpi-cancel">ยกเลิก</button>
+          <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-kpi-cancel">Cancel</button>
           <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-kpi-confirm">Confirm</button>
         </div>
       </div>
@@ -4946,14 +5156,14 @@ function _gicaSummaryHtml(vm) {
           <div class="quad-dropdown">
             <button class="quad-dd-btn" id="quad-bu-trigger"><span class="quad-dd-label">BU</span> ▾</button>
             <div class="quad-dd-panel" id="quad-bu-panel" hidden>
-              <button class="quad-btn quad-btn--active" data-bu="all">ทั้งหมด</button>
+              <button class="quad-btn quad-btn--active" data-bu="all">All BU</button>
               ${vm.expMatrixBus.map(bu => `<button class="quad-btn" data-bu="${escapeHtml(bu)}">${escapeHtml(bu)}</button>`).join('')}
             </div>
           </div>
           <div class="quad-dropdown">
-            <button class="quad-dd-btn" id="quad-dept-trigger"><span class="quad-dd-label">แผนก</span> ▾</button>
+            <button class="quad-dd-btn" id="quad-dept-trigger"><span class="quad-dd-label">Department</span> ▾</button>
             <div class="quad-dd-panel" id="quad-dept-panel" hidden>
-              <button class="quad-btn quad-btn--active" data-dept="all">ทั้งหมด</button>
+              <button class="quad-btn quad-btn--active" data-dept="all">All Departments</button>
               ${vm.expMatrixDepts.map(d => `<button class="quad-btn" data-dept="${escapeHtml(d)}">${escapeHtml(d)}</button>`).join('')}
             </div>
           </div>
@@ -5204,9 +5414,33 @@ function _mountGicaSummary(html, vm) {
     });
   }
 
-  // KPI Setup modal
+  // KPI Setup modal — one BU tab + "All BU" fallback tab; switching tabs swaps which
+  // (level → target) bucket the sliders read/write, without losing unsaved edits.
   const kpiModal     = container.querySelector('#gica-kpi-modal');
   const closeKpiModal = () => kpiModal && kpiModal.classList.add('hidden');
+  const _saveKpiSlidersToActiveBu = () => {
+    kpiModal.querySelectorAll('.gica-kpi-slider').forEach(slider => {
+      const lv  = slider.dataset.level;
+      const val = Number(slider.value);
+      if (!_gicaKpiTargets[lv]) _gicaKpiTargets[lv] = { all: 80 };
+      if (_gicaKpiActiveBu === 'all') {
+        // Setting "All BU" cascades to every BU — clear per-BU overrides so the
+        // whole matrix follows this one value uniformly (frontend-only; backend
+        // kpi_g1/kpi_g2/... Excel tables are not touched).
+        const t = _gicaKpiTargets[lv];
+        Object.keys(t).forEach(k => { if (k !== 'all') delete t[k]; });
+        t.all = val;
+      } else {
+        _gicaKpiTargets[lv][_gicaKpiActiveBu] = val;
+      }
+    });
+  };
+  const _wireKpiSliders = () => {
+    kpiModal.querySelectorAll('.gica-kpi-slider').forEach(slider => {
+      const valEl = slider.closest('.gica-kpi-row')?.querySelector('.gica-kpi-row__val');
+      slider.addEventListener('input', () => { if (valEl) valEl.textContent = slider.value + '%'; });
+    });
+  };
   if (kpiModal) {
     container.querySelector('#gica-kpi-setup-btn')?.addEventListener('click', e => {
       e.stopPropagation();
@@ -5215,14 +5449,22 @@ function _mountGicaSummary(html, vm) {
     container.querySelector('#gica-kpi-close')?.addEventListener('click', closeKpiModal);
     container.querySelector('#gica-kpi-cancel')?.addEventListener('click', closeKpiModal);
     container.querySelector('#gica-kpi-backdrop')?.addEventListener('click', closeKpiModal);
-    kpiModal.querySelectorAll('.gica-kpi-slider').forEach(slider => {
-      const valEl = slider.closest('.gica-kpi-row')?.querySelector('.gica-kpi-row__val');
-      slider.addEventListener('input', () => { if (valEl) valEl.textContent = slider.value + '%'; });
+    _wireKpiSliders();
+    kpiModal.querySelectorAll('.gica-kpi-bu-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.dataset.bu === _gicaKpiActiveBu) return;
+        _saveKpiSlidersToActiveBu();
+        _gicaKpiActiveBu = tab.dataset.bu;
+        kpiModal.querySelectorAll('.gica-kpi-bu-tab').forEach(t => t.classList.toggle('gica-kpi-bu-tab--active', t === tab));
+        const list = kpiModal.querySelector('#gica-kpi-list');
+        if (list) {
+          list.innerHTML = _gicaKpiListHtml(_gicaKpiActiveBu);
+          _wireKpiSliders();
+        }
+      });
     });
     container.querySelector('#gica-kpi-confirm')?.addEventListener('click', () => {
-      kpiModal.querySelectorAll('.gica-kpi-slider').forEach(slider => {
-        _gicaKpiTargets[slider.dataset.level] = Number(slider.value);
-      });
+      _saveKpiSlidersToActiveBu();
       closeKpiModal();
       renderGicaSummary();
     });
@@ -5729,8 +5971,8 @@ function _gicaScheduleHtml(vm) {
       <div style="display:flex;gap:16px;margin-top:10px;font-size:0.74rem;color:var(--text-muted);flex-wrap:wrap;">
         ${legendItem('#64748b', 'Total')}
         ${legendItem('#16a34a', 'On-time (Pass)')}
-        ${legendItem('#86efac', 'On-time (Fail)')}
-        ${legendItem('#dc2626', 'Overdue')}
+        ${legendItem('#8def86', 'On-time (Fail)')}
+        ${legendItem('#dc4e4e', 'Overdue')}
       </div>
     </div>`;
 
@@ -5743,7 +5985,7 @@ function _gicaScheduleHtml(vm) {
     const passPct = c.total > 0 ? Math.min(100, Math.round(c.attendedPass / c.total * 100)) : 0;
     const failPct = c.total > 0 ? Math.min(100, Math.round(c.attendedFail / c.total * 100)) : 0;
     return `
-      <div class="stat-card gica-bu-cohort-card" data-bu="${escapeHtml(c.bu)}" style="min-width:0;cursor:pointer;" title="คลิกเพื่อดูรายชื่อ">
+      <div class="stat-card gica-bu-cohort-card" data-bu="${escapeHtml(c.bu)}" style="min-width:0;cursor:pointer;" title="Click to view the name list">
         <div class="bu-head">
           <span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span>
           <span class="u-muted bu-count">${c.total} People</span>
@@ -5962,7 +6204,7 @@ function _gicaScheduleHtml(vm) {
 
   // On-time Rate = attended this week / required this week — pass/fail doesn't matter
   // here, only whether they showed up by their scheduled date (see weeklyBuCards above).
-  const onTimePctColor = pct => pct == null ? 'var(--text)' : pct >= 80 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626';
+  const onTimePctColor = pct => pct == null ? 'var(--text)' : pct >= 80 ? '#3e9f61' : pct >= 60 ? '#f1ba5a' : '#d54949';
   const overallOnTimePct = weekTotal ? Math.round(weekAttended / weekTotal * 100) : null;
   const onTimeBuRows = vm.weeklyBuCards.map(c => {
     const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
@@ -6617,14 +6859,14 @@ function _gicaFailStatsHtml(rows) {
 
 function _gicaEmpTableAttemptDots(e) {
   const dot = (color, title) => `<span title="${escapeHtml(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};"></span>`;
-  const items = (e.history || []).slice(-6).map(h => {
+  const items = (e.history || []).slice(-12).map(h => {
     const passed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
       (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
       (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
     const title = `Attempt ${h.n}${h.date ? ' · ' + _gicaFmtDate(h.date) : ''} — ${passed ? 'Pass' : 'Fail'}`;
     return { html: dot(passed ? '#16a34a' : '#dc2626', title), monthKey: h.date ? h.date.slice(0, 7) : null };
   });
-  while (items.length < 6) items.push({ html: dot('var(--border-light)', 'ยังไม่สอบ'), monthKey: null });
+  while (items.length < 12) items.push({ html: dot('var(--border-light)', 'ยังไม่สอบ'), monthKey: null });
 
   // Consecutive attempts in the same calendar month get a connecting ring around them.
   const groups = [];
@@ -6637,11 +6879,72 @@ function _gicaEmpTableAttemptDots(e) {
     if (g.items.length < 2) return g.items[0].html;
     return `<span title="Assessments in the same month (${g.items.length} attempts)" style="display:inline-flex;align-items:center;gap:3px;padding:2px 4px;border:1.3px solid var(--text-muted);border-radius:999px;">${g.items.map(it => it.html).join('')}</span>`;
   }).join('');
-  return `<div style="display:flex;gap:3px;justify-content:center;align-items:center;">${groupHtml}</div>`;
+  return `<div style="display:flex;gap:3px;justify-content:flex-start;align-items:center;">${groupHtml}</div>`;
+}
+
+// Front-facing "Assessment Result" cell — one dot per expected testing checkpoint in a
+// year (12 / freqMonths, e.g. freq=3 → 4 dots, freq=1 → 12 dots), each dot representing
+// a calendar month (month-of-year) rather than an attempt index. When this person has
+// tested more than once in the same month, the dot shows that month's LATEST result.
+// Clicking opens the full per-attempt history (_gicaEmpTableAttemptDots) in a modal.
+const GICA_MONTH_ABBR_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+function _gicaEmpTableMonthDots(e) {
+  const freq    = e.freqMonths || 12;
+  const numDots = Math.max(1, Math.min(12, Math.round(12 / freq)));
+
+  // Group history by calendar month-of-year (1-12); keep only the latest attempt per month.
+  const byMonth = {};
+  (e.history || []).forEach(h => {
+    if (!h.date) return;
+    const m = parseInt(h.date.slice(5, 7), 10);
+    if (!byMonth[m] || h.date > byMonth[m].date) byMonth[m] = h;
+  });
+  const monthEntries = Object.values(byMonth).sort((a, b) => a.date.localeCompare(b.date));
+  const recent = monthEntries.slice(-numDots);
+  const padCount = numDots - recent.length;
+
+  const dot = (color, title) => `<span title="${escapeHtml(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};"></span>`;
+  const dots = [];
+  recent.forEach(h => {
+    const passed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
+      (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
+      (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+    const m = parseInt(h.date.slice(5, 7), 10);
+    const title = `${GICA_MONTH_ABBR_TH[m - 1]} · ${_gicaFmtDate(h.date)} — ${passed ? 'Pass' : 'Fail'}`;
+    dots.push(dot(passed ? '#16a34a' : '#dc2626', title));
+  });
+  // Pad after the real dots (not before) so colored dots always start at the left edge.
+  for (let i = 0; i < padCount; i++) dots.push(dot('var(--border-light)', 'Not yet assessed'));
+
+  return `<div class="gica-month-dots" data-empid="${escapeHtml(e.empid || '')}" title="Click to view assessment history" style="display:flex;gap:3px;justify-content:flex-start;align-items:center;cursor:pointer;">${dots.join('')}</div>`;
+}
+
+function _gicaShowAttemptDotsModal(empid) {
+  const e = (_gicaData.employees || []).find(x => String(x.empid) === String(empid));
+  if (!e) return;
+  const modal = $('gica-attempt-dots-modal');
+  const title = $('gica-attempt-dots-title');
+  const body  = $('gica-attempt-dots-body');
+  if (!modal || !body) return;
+  if (title) {
+    title.innerHTML = `
+      <small class="gica-modal__close" style="padding:0; background:transparent; cursor:default; display:block; margin-bottom:4px;">
+        Assessment History
+      </small>
+      
+      <strong class="exp-modal-table" style="font-size: 0.85rem; color: var(--text); display: block; font-weight: 900;">
+        ${escapeHtml(e.name || e.empid || '')}
+      </strong>
+    `;
+  }
+  
+  body.innerHTML = _gicaEmpTableAttemptDots(e);
+  modal.classList.remove('hidden');
 }
 
 function _gicaEmpTableHtml(rows, opts = {}) {
   const sortable = opts.sortable !== false;
+  const editable = !!opts.editable;
   const st = _gicaTableState;
   const arrow = k => sortable && st.sortKey === k ? (st.sortDir === 1 ? ' ▲' : ' ▼') : '';
   const TH = (k, label, extra = '') => sortable
@@ -6676,14 +6979,14 @@ function _gicaEmpTableHtml(rows, opts = {}) {
           : rows.map(e => `<tr>
           <td style="${TD}">${escapeHtml(e.bu)}</td>
           <td style="${TD}">${escapeHtml(e.empid || '')}</td>
-          <td style="${TD}">${escapeHtml(e.name)}</td>
+          <td style="${TD}${editable ? 'cursor:pointer;color:var(--primary, #6366f1);text-decoration:underline;' : ''}"${editable ? ` class="gica-emp-name-cell" data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" title="คลิกเพื่อบันทึกผลสอบ"` : ''}>${escapeHtml(e.name)}</td>
           <td style="${TD}">${escapeHtml(e.deptname)}</td>
           <td style="${TD}">${escapeHtml(e.level || '')}</td>
           <td style="${TD}text-align:center;">${gradeCell(e.grade1, e.score1)}</td>
           <td style="${TD}text-align:center;">${gradeCell(e.grade2, e.score2)}</td>
           <td style="${TD}text-align:center;">${e.attempt}</td>
           <td style="${TD}text-align:center;">${_gicaFmtDate(e.lastDate)}</td>
-          <td style="${TD}text-align:center;">${_gicaEmpTableAttemptDots(e)}</td>
+          <td style="${TD}text-align:center;">${_gicaEmpTableMonthDots(e)}</td>
           <td style="${TD}text-align:center;">${_gicaFmtDate(e.nextDate)}</td>
           <td style="${TD}text-align:center;">${_gicaDaysBadge(e.nextDate)}</td>
           <td style="${TD}text-align:center;">${_gicaTypeBadge(e.nextType)}</td>
@@ -6737,12 +7040,247 @@ function renderGicaTable() {
   const statsEl = $('gica-failStats');
   if (statsEl) statsEl.innerHTML = _gicaFailStatsHtml(rows);
 
-  wrap.innerHTML = _gicaEmpTableHtml(pageRows, { sortable: true });
+  const editable = ['qe_user', 'admin'].includes(currentRole);
+  wrap.innerHTML = _gicaEmpTableHtml(pageRows, { sortable: true, editable });
+  if (editable) _wireGicaEmpNameClicks(wrap);
 
   const rangeEl = $('gica-rangeLabel');
   if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} จาก ${total}` : '0 รายการ';
   const pageEl = $('gica-pageLabel');
   if (pageEl) pageEl.textContent = `${st.page} / ${pages}`;
+}
+
+function _wireGicaEmpNameClicks(wrap) {
+  wrap.querySelectorAll('.gica-emp-name-cell[data-empid]').forEach(td => {
+    td.addEventListener('click', () => _gicaOpenResultModal(td.dataset.bu, td.dataset.empid));
+  });
+}
+
+// ── Generic Yes/No confirm overlay — reused by the Result and Create modals ───
+function _gicaConfirm(text, onYes) {
+  const overlay = $('gica-confirm-overlay');
+  const textEl  = $('gica-confirm-text');
+  const yesBtn  = $('gica-confirm-yes');
+  const noBtn   = $('gica-confirm-no');
+  if (!overlay || !textEl || !yesBtn || !noBtn) { onYes && onYes(); return; }
+  textEl.textContent = text;
+  overlay.classList.remove('hidden');
+  const cleanup = () => {
+    overlay.classList.add('hidden');
+    yesBtn.onclick = null;
+    noBtn.onclick  = null;
+  };
+  yesBtn.onclick = () => { cleanup(); onYes && onYes(); };
+  noBtn.onclick  = cleanup;
+}
+
+// Re-fetch GICA data without re-running initGicaTab() (which would re-wire the
+// subtab buttons a second time) — used to reflect a just-saved write immediately.
+async function _gicaRefreshData() {
+  try {
+    const res = await fetch('/api/gica-excel');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _gicaData = data;
+  } catch (err) {
+    console.error('[GICA] refresh after save failed', err);
+  }
+}
+
+// ── Add/Edit Result modal (existing employee → next attempt slot) ─────────────
+let _gicaResultCtx = null; // { bu, empid }
+
+function _gicaOpenResultModal(bu, empid) {
+  _gicaResultCtx = { bu, empid };
+  const emp = (_gicaData.employees || []).find(e => e.bu === bu && String(e.empid) === String(empid));
+  const title = $('gica-result-title');
+  if (title) title.textContent = `${emp ? emp.name : empid} — Add Assessment Result`;
+  $('gica-result-meas').value = '';
+  $('gica-result-insp').value = '';
+  $('gica-result-date').value = '';
+  $('gica-result-error').classList.add('hidden');
+  $('gica-result-modal').classList.remove('hidden');
+}
+function _gicaCloseResultModal() {
+  $('gica-result-modal').classList.add('hidden');
+}
+
+function _gicaValidateResultForm() {
+  const errEl = $('gica-result-error');
+  const meas = $('gica-result-meas').value;
+  const insp = $('gica-result-insp').value;
+  const date = $('gica-result-date').value;
+  if (meas === '' || insp === '' || !date) {
+    errEl.textContent = 'กรุณากรอกข้อมูลให้ครบทุกช่อง';
+    errEl.classList.remove('hidden');
+    return null;
+  }
+  errEl.classList.add('hidden');
+  return { meas, insp, date };
+}
+
+// Closes the modal and shows a "saving" toast IMMEDIATELY on Yes — waiting for the
+// PATCH to resolve before giving any feedback made it look stuck, so people clicked
+// Confirm again and submitted the same result twice.
+async function _gicaSaveResult(fields) {
+  const { bu, empid } = _gicaResultCtx;
+  _gicaCloseResultModal();
+  _gicaShowToast('กำลังบันทึกข้อมูล...');
+  try {
+    await api(`/api/gica/${bu}/employees/${empid}/result`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        measurementResult: Number(fields.meas),
+        inspectionResult: Number(fields.insp),
+        assessmentDate: fields.date,
+      }),
+    });
+    await _gicaRefreshData();
+    renderGicaTable();
+    _gicaShowToast('บันทึกข้อมูลแล้ว');
+  } catch (err) {
+    _gicaShowToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
+  }
+}
+
+// GICA tab lives in its own container, separate from #messageBox (which only
+// exists inside the New Operator dashboard and is hidden while on this tab) —
+// so a small self-contained toast is used here instead of showMessage().
+function _gicaShowToast(text) {
+  let toast = document.getElementById('gica-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'gica-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = text;
+  toast.classList.add('gica-toast--show');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove('gica-toast--show'), 2500);
+}
+
+function _wireGicaResultModal() {
+  $('gica-result-close')?.addEventListener('click', _gicaCloseResultModal);
+  $('gica-result-backdrop')?.addEventListener('click', _gicaCloseResultModal);
+  $('gica-result-cancel')?.addEventListener('click', () => {
+    _gicaConfirm('Cancel this entry?', () => {
+      $('gica-result-meas').value = '';
+      $('gica-result-insp').value = '';
+      $('gica-result-date').value = '';
+      _gicaCloseResultModal();
+    });
+  });
+  $('gica-result-confirm')?.addEventListener('click', () => {
+    const fields = _gicaValidateResultForm();
+    if (!fields) return; // empty field — don't even show the confirm dialog
+    _gicaConfirm('Save this record?', () => _gicaSaveResult(fields));
+  });
+}
+
+// ── Create new operator modal (brand-new GICA employee row) ───────────────────
+// Department/Level/Position dropdowns are sourced from Table_freq so a new
+// employee can only be assigned combinations that Table_freq actually defines
+// an expectation for.
+function _gicaPopulateCreateDropdowns() {
+  const freq    = _gicaData.freqTable || [];
+  const buSel   = $('gica-create-bu');
+  const deptSel = $('gica-create-dept');
+  const lvlSel  = $('gica-create-level');
+  const posSel  = $('gica-create-position');
+  if (!buSel || !deptSel || !lvlSel || !posSel) return;
+
+  buSel.innerHTML = BU_ORDER.map(bu => `<option value="${escapeHtml(bu)}">${escapeHtml(bu)}</option>`).join('');
+
+  const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+  const placeholder = `<option value="">— เลือก —</option>`;
+
+  const depts = [...new Set(freq.map(r => r.department).filter(Boolean))].sort();
+  deptSel.innerHTML = placeholder + depts.map(opt).join('');
+
+  const levels = [...new Set(freq.map(r => r.level).filter(Boolean))].sort((a, b) => {
+    const ia = GICA_LEVEL_ORDER.indexOf(a), ib = GICA_LEVEL_ORDER.indexOf(b);
+    if (ia !== ib) return (ia === -1 ? 1 : ib === -1 ? -1 : ia - ib);
+    return a.localeCompare(b);
+  });
+  lvlSel.innerHTML = placeholder + levels.map(opt).join('');
+
+  const roles = [...new Set(freq.map(r => r.role).filter(Boolean))].sort();
+  posSel.innerHTML = placeholder + roles.map(opt).join('');
+}
+
+function _gicaOpenCreateModal() {
+  _gicaPopulateCreateDropdowns();
+  $('gica-create-empid').value = '';
+  $('gica-create-name').value = '';
+  $('gica-create-startdate').value = '';
+  $('gica-create-error').classList.add('hidden');
+  $('gica-create-modal').classList.remove('hidden');
+}
+function _gicaCloseCreateModal() {
+  $('gica-create-modal').classList.add('hidden');
+}
+function _gicaClearCreateForm() {
+  $('gica-create-empid').value = '';
+  $('gica-create-name').value = '';
+  $('gica-create-startdate').value = '';
+}
+
+function _gicaValidateCreateForm() {
+  const errEl     = $('gica-create-error');
+  const bu        = $('gica-create-bu').value;
+  const empid     = $('gica-create-empid').value.trim();
+  const name      = $('gica-create-name').value.trim();
+  const dept      = $('gica-create-dept').value;
+  const level     = $('gica-create-level').value;
+  const position  = $('gica-create-position').value;
+  const startDate = $('gica-create-startdate').value;
+
+  if (!bu || !empid || !/^\d+$/.test(empid) || !name || !dept || !level || !position || !startDate) {
+    errEl.textContent = 'กรุณากรอกข้อมูลให้ครบและถูกต้องทุกช่อง (Employee ID ต้องเป็นตัวเลข)';
+    errEl.classList.remove('hidden');
+    return null;
+  }
+  errEl.classList.add('hidden');
+  return { bu, empid, name, dept, level, position, startDate };
+}
+
+// Closes the modal and shows a "saving" toast IMMEDIATELY on Yes — see _gicaSaveResult
+// for why (waiting for the response before any feedback caused double-submits).
+async function _gicaSaveCreate(fields) {
+  _gicaCloseCreateModal();
+  _gicaShowToast('กำลังบันทึกข้อมูล...');
+  try {
+    await api(`/api/gica/${fields.bu}/employees`, {
+      method: 'POST',
+      body: JSON.stringify({
+        empid: fields.empid, name: fields.name, deptname: fields.dept,
+        level: fields.level, position: fields.position, start_date: fields.startDate,
+      }),
+    });
+    await _gicaRefreshData();
+    renderGicaTable();
+    _gicaShowToast('บันทึกข้อมูลแล้ว');
+  } catch (err) {
+    _gicaShowToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
+  }
+}
+
+function _wireGicaCreateModal() {
+  $('gica-create-operator-btn')?.addEventListener('click', _gicaOpenCreateModal);
+  $('gica-create-close')?.addEventListener('click', _gicaCloseCreateModal);
+  $('gica-create-backdrop')?.addEventListener('click', _gicaCloseCreateModal);
+  $('gica-create-cancel')?.addEventListener('click', () => {
+    _gicaConfirm('Cancel this entry?', () => {
+      _gicaClearCreateForm();
+      _gicaCloseCreateModal();
+    });
+  });
+  $('gica-create-confirm')?.addEventListener('click', () => {
+    const fields = _gicaValidateCreateForm();
+    if (!fields) return; // empty/invalid field — don't even show the confirm dialog
+    _gicaConfirm('Save this record?', () => _gicaSaveCreate(fields));
+  });
 }
 
 function _gicaShowBuCohortModal(bu, employees) {

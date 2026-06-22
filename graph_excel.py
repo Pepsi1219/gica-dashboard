@@ -187,27 +187,27 @@ def find_employee(token, department, employee_id):
 
 # ── Write via Workbook API (with session) ─────────────────────────────────────
 
-def _write_row_add(token, drive_id, item_id, row_values):
-    """Add a new row to the table — uses a workbook session for proper write access."""
+def _write_row_add(token, drive_id, item_id, table_name, row_values):
+    """Add a new row to the given table — uses a workbook session for proper write access."""
     with _workbook_session(token, drive_id, item_id) as sess_hdrs:
         body = {"index": None, "values": [row_values]}
         graph_request(
             token, "POST",
             f"/drives/{drive_id}/items/{item_id}"
-            f"/workbook/tables/{EXCEL_TABLE_NAME}/rows/add",
+            f"/workbook/tables/{table_name}/rows/add",
             json=body,
             headers=sess_hdrs,
         )
 
 
-def _write_row_patch(token, drive_id, item_id, row_index, row_values):
-    """Update an existing table row range — uses a workbook session."""
+def _write_row_patch(token, drive_id, item_id, table_name, row_index, row_values):
+    """Update an existing row range in the given table — uses a workbook session."""
     with _workbook_session(token, drive_id, item_id) as sess_hdrs:
         body = {"values": [row_values]}
         graph_request(
             token, "PATCH",
             f"/drives/{drive_id}/items/{item_id}"
-            f"/workbook/tables/{EXCEL_TABLE_NAME}"
+            f"/workbook/tables/{table_name}"
             f"/rows/itemAt(index={row_index})/range",
             json=body,
             headers=sess_hdrs,
@@ -239,7 +239,7 @@ def create_employee(token, department, record):
 
     drive_id = item["parentReference"]["driveId"]
     item_id  = item["id"]
-    _write_row_add(token, drive_id, item_id, object_to_row(new_record, item["_headers"]))
+    _write_row_add(token, drive_id, item_id, EXCEL_TABLE_NAME, object_to_row(new_record, item["_headers"]))
     return new_record
 
 
@@ -259,5 +259,74 @@ def update_employee(token, department, employee_id, patch_record):
     drive_id  = item["parentReference"]["driveId"]
     item_id   = item["id"]
     row_index = employee["_row_index"]
-    _write_row_patch(token, drive_id, item_id, row_index, object_to_row(merged, item["_headers"]))
+    _write_row_patch(token, drive_id, item_id, EXCEL_TABLE_NAME, row_index, object_to_row(merged, item["_headers"]))
+    return merged
+
+
+# ── GICA per-BU table CRUD (QE Sign In write access) ───────────────────────────
+# GICA.xlsx is one workbook with one named table per BU (GICA_G1, GICA_G2, ...),
+# resolved via GICA_EXCEL_SHARE_URL rather than the DEPARTMENTS dict used above.
+
+def get_gica_drive_item(token, share_url):
+    share_id = encode_sharing_url(share_url)
+    return graph_request(
+        token, "GET", f"/shares/{share_id}/driveItem",
+        headers={"Prefer": "redeemSharingLinkIfNecessary"},
+    )
+
+
+def get_gica_table_rows(token, drive_id, item_id, table_name, cols):
+    """Read a GICA_{bu} table's rows mapped by header name, keeping _row_index
+    (needed for writes) and the table's actual header order (needed to write back
+    in the right column positions)."""
+    base = f"/drives/{drive_id}/items/{item_id}/workbook/tables/{table_name}"
+    col_resp = graph_request(token, "GET", f"{base}/columns?$select=name")
+    headers  = [c.get("name", "") for c in col_resp.get("value", [])]
+
+    row_resp = graph_request(token, "GET", f"{base}/rows")
+    rows = []
+    for index, row in enumerate(row_resp.get("value", [])):
+        values  = (row.get("values") or [[]])[0]
+        by_name = {headers[i]: (values[i] if i < len(values) else "")
+                   for i in range(len(headers))}
+        obj = {col: by_name.get(col, "") for col in cols}
+        if str(obj.get("empid", "")).strip():
+            obj["_row_index"] = index
+            rows.append(obj)
+    return rows, headers
+
+
+def find_gica_employee(token, drive_id, item_id, table_name, cols, empid):
+    rows, headers = get_gica_table_rows(token, drive_id, item_id, table_name, cols)
+    empid = str(empid or "").strip()
+    for r in rows:
+        if str(r.get("empid", "")).strip() == empid:
+            return r, headers
+    return None, headers
+
+
+def create_gica_employee(token, drive_id, item_id, table_name, cols, record):
+    rows, headers = get_gica_table_rows(token, drive_id, item_id, table_name, cols)
+    empid = str(record.get("empid", "")).strip()
+    if not empid:
+        raise GraphExcelError("Employee ID is required")
+    if any(str(r.get("empid", "")).strip() == empid for r in rows):
+        raise GraphExcelError(f"Employee ID {empid} already exists in {table_name}")
+
+    new_record = {col: "" for col in cols}
+    new_record.update(record)
+    _write_row_add(token, drive_id, item_id, table_name, object_to_row(new_record, headers))
+    return new_record
+
+
+def update_gica_employee(token, drive_id, item_id, table_name, cols, empid, patch):
+    employee, headers = find_gica_employee(token, drive_id, item_id, table_name, cols, empid)
+    if not employee:
+        raise GraphExcelError("Employee not found")
+
+    merged = {col: employee.get(col, "") for col in cols}
+    merged.update({k: v for k, v in patch.items() if k in cols})
+
+    row_index = employee["_row_index"]
+    _write_row_patch(token, drive_id, item_id, table_name, row_index, object_to_row(merged, headers))
     return merged
