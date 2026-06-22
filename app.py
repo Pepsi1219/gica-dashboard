@@ -1167,7 +1167,28 @@ def _build_gica_payload(rows: list, freq_rows: list = None) -> dict:
         })
 
     bus = sorted({e['bu'] for e in employees if e['bu']})
-    return {'employees': employees, 'bus': bus}
+
+    freq_table = []
+    for r in (freq_rows or []):
+        dept  = str(r.get('department', '') or '').strip()
+        level = str(r.get('level', '') or '').strip()
+        role  = str(r.get('role', '') or '').strip()
+        if not (dept or level or role):
+            continue
+        try:
+            freq_months = int(float(r.get('frquency (months)')))
+        except (ValueError, TypeError):
+            freq_months = None
+        freq_table.append({
+            'department':   dept,
+            'level':        level,
+            'role':         role,
+            'freqMonths':   freq_months,
+            'expectation1': str(r.get('expectation1', '') or '').strip().upper(),
+            'expectation2': str(r.get('expectation2', '') or '').strip().upper(),
+        })
+
+    return {'employees': employees, 'bus': bus, 'freqTable': freq_table}
 
 
 @app.route('/api/gica-excel')

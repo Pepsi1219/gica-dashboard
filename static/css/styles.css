@@ -2203,6 +2203,13 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-kpi-modal__body { padding:0 0 4px; }
 .gica-kpi-modal__desc { margin:0 0 16px; font-size:0.8rem; }
 .gica-kpi-list { display:flex; flex-direction:column; gap:10px; }
+/* — Table_freq reference modal — */
+.gica-freq-table-wrap { overflow-x:auto; }
+.gica-freq-table { width:100%; border-collapse:collapse; font-size:0.8rem; }
+.gica-freq-table th { text-align:left; padding:8px 10px; font-size:0.74rem; font-weight:600; color:var(--text-muted); border-bottom:2px solid var(--border-light); white-space:nowrap; }
+.gica-freq-table td { padding:7px 10px; border-bottom:1px solid var(--border-light); color:var(--text); }
+.gica-freq-dept-row td { padding:10px 10px 4px; font-weight:700; color:var(--text); border-bottom:none; font-size:0.82rem; }
+.gica-freq-dept-row:not(:first-child) td { padding-top:18px; }
 .gica-kpi-row { display:grid; grid-template-columns:105px 1fr 38px; align-items:center; gap:10px; }
 .gica-kpi-row__label { font-size:0.8rem; font-weight:600; color:var(--text); }
 .gica-kpi-row__val { font-size:0.75rem; font-weight:700; color:var(--primary, #6366f1); text-align:right; }

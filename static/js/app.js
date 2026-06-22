@@ -128,8 +128,8 @@ const TRANSLATIONS = {
     trendMonth:             'เดือน',
     yearLabel:              'ปี',
     managerLoginBtn:        'เข้าสู่ระบบ',
-    managerModeBadge:       'CSA Manager',
-    managerLoginFailed:     'ไม่สามารถเข้าสู่ระบบ CSA Manager ได้',
+    managerModeBadge:       'View Mode',
+    managerLoginFailed:     'ไม่สามารถเข้าสู่ระบบ View Mode ได้',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
     tabTrainer:             'CSA Trainer',
@@ -264,8 +264,8 @@ const TRANSLATIONS = {
     trendMonth:             'Month',
     yearLabel:              'Year',
     managerLoginBtn:        'Sign In',
-    managerModeBadge:       'CSA Manager',
-    managerLoginFailed:     'Could not sign in as CSA Manager',
+    managerModeBadge:       'View Mode',
+    managerLoginFailed:     'Could not sign in as View Mode',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
     tabTrainer:             'CSA Trainer',
@@ -400,8 +400,8 @@ const TRANSLATIONS = {
     trendMonth:             'ເດືອນ',
     yearLabel:              'ປີ',
     managerLoginBtn:        'ເຂົ້າສູ່ລະບົບ',
-    managerModeBadge:       'CSA Manager',
-    managerLoginFailed:     'ບໍ່ສາມາດເຂົ້າສູ່ລະບົບ CSA Manager ໄດ້',
+    managerModeBadge:       'View Mode',
+    managerLoginFailed:     'ບໍ່ສາມາດເຂົ້າສູ່ລະບົບ View Mode ໄດ້',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
     tabTrainer:             'CSA Trainer',
@@ -536,8 +536,8 @@ const TRANSLATIONS = {
     trendMonth:             'Tháng',
     yearLabel:              'Năm',
     managerLoginBtn:        'Đăng nhập',
-    managerModeBadge:       'CSA Manager',
-    managerLoginFailed:     'Không thể đăng nhập CSA Manager',
+    managerModeBadge:       'View Mode',
+    managerLoginFailed:     'Không thể đăng nhập View Mode',
     tabNewOperator:         'New Operator',
     tabJumper:              'Jumper',
     tabTrainer:             'CSA Trainer',
@@ -4211,10 +4211,13 @@ function _computeGicaQuadrant(emps, groupId, buSet, deptSet) {
     if (deptSet.size > 0 && !deptSet.has(e.deptname)) return;
     if (grp.levels && !grp.levels.includes(e.level)) return;
     const rx = e.score1 || 0, ry = e.score2 || 0;
+    // Jitter is for plot position ONLY (so overlapping dots are visible) — pass/fail
+    // quadrant must be decided from the raw, unjittered score or borderline scores
+    // (e.g. right at the B/B threshold) can randomly land on the wrong side of the line.
     const x  = Math.max(0.0, Math.min(1.0, rx + jitter(i, 0)));
     const y  = Math.max(0.0, Math.min(1.0, ry + jitter(i, 1)));
     const quad = xT !== null
-      ? (x >= xT && y >= yT ? 'I' : x < xT && y >= yT ? 'II' : x >= xT ? 'III' : 'IV')
+      ? (rx >= xT && ry >= yT ? 'I' : rx < xT && ry >= yT ? 'II' : rx >= xT ? 'III' : 'IV')
       : (e.passed === true ? 'pass' : e.passed === false ? 'fail' : 'na');
     points.push({ x, y, raw1: rx, raw2: ry, quad,
       name: e.name, bu: e.bu, level: e.level, grade1: e.grade1, grade2: e.grade2 });
@@ -4225,7 +4228,7 @@ function _computeGicaQuadrant(emps, groupId, buSet, deptSet) {
   return { points, xT, yT, counts, grp, total: points.length };
 }
 
-function _computeGicaSummary(emps, busRaw, kpiTargets = {}) {
+function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
   const total = emps.length;
   const byGrade = { A: 0, B: 0, C: 0, D: 0 };
   // Grade distribution split by sub-test: Measurement = grade{i}-1, Inspection = grade{i}-2
@@ -4400,19 +4403,31 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}) {
     if (!inBu.length) { trendByBu[bu] = null; return; }
     const measAcc = Array.from({length: GICA_TREND_MAX}, () => ({ s: 0, n: 0 }));
     const inspAcc = Array.from({length: GICA_TREND_MAX}, () => ({ s: 0, n: 0 }));
+    let testedCount = 0;
+    // Carry-forward only goes as far as the BU's actual highest attempt count — if
+    // nobody in the BU has tested past attempt 3, slots 4-12 must stay null (no data)
+    // rather than flat-lining everyone's attempt-3 score out to slot 12.
+    const maxLen = Math.min(GICA_TREND_MAX, inBu.reduce((m, e) => Math.max(m, (e.history || []).length), 0));
     inBu.forEach(e => {
-      (e.history || []).forEach(h => {
-        const idx = h.n - 1;
-        if (idx < 0 || idx >= GICA_TREND_MAX) return;
-        if (h.score1 != null) { measAcc[idx].s += h.score1; measAcc[idx].n++; }
-        if (h.score2 != null) { inspAcc[idx].s += h.score2; inspAcc[idx].n++; }
-      });
+      const hist = e.history || [];
+      if (!hist.length) return; // never tested — no "latest" score to carry forward
+      testedCount++;
+      // Carry-forward: every attempt slot (up to maxLen) uses this person's LATEST
+      // recorded score as of that point (their actual attempt k if they've taken it,
+      // otherwise their most recent prior attempt) — same "always everyone's latest
+      // data" philosophy as the row-2 front-face cards, instead of leaving slots blank
+      // for people who simply haven't been re-tested yet.
+      for (let k = 0; k < maxLen; k++) {
+        const h = hist[Math.min(k, hist.length - 1)];
+        if (h.score1 != null) { measAcc[k].s += h.score1; measAcc[k].n++; }
+        if (h.score2 != null) { inspAcc[k].s += h.score2; inspAcc[k].n++; }
+      }
     });
-    // Divide by the BU's total headcount, not just the count of people who have a
-    // score for this attempt — a partial response set must not look like a full one.
+    // Divide by the count of people who have ever tested at least once — not the BU's
+    // full headcount (people with zero attempts have no "latest" score to contribute).
     trendByBu[bu] = {
-      meas: measAcc.map(x => x.n ? Math.round(x.s / inBu.length * 100) : null),
-      insp: inspAcc.map(x => x.n ? Math.round(x.s / inBu.length * 100) : null),
+      meas: measAcc.map(x => x.n ? Math.round(x.s / testedCount * 100) : null),
+      insp: inspAcc.map(x => x.n ? Math.round(x.s / testedCount * 100) : null),
     };
   });
 
@@ -4436,6 +4451,7 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}) {
     expMatrixDepts: [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort(),
     kpiTargets,
     trendByBu,
+    freqTable,
   };
 }
 
@@ -4511,7 +4527,7 @@ function _gicaSummaryHtml(vm) {
         ${segs.join('')}
         ${lines.join('')}
         <text x="${CX}" y="${CY + 8}" text-anchor="middle" font-size="22" font-weight="800" fill="${gc}">${ap}%</text>
-        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)" letter-spacing="0.5">Avg Score</text>
+        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)" letter-spacing="0.5">Avg. Score</text>
       </svg>`;
   };
   const legend = cnt => `
@@ -4559,7 +4575,7 @@ function _gicaSummaryHtml(vm) {
         ${segs.join('')}
         ${lines.join('')}
         <text x="${CX}" y="${CY + 6}" text-anchor="middle" font-size="20" font-weight="800" fill="${gc}">${ap}%</text>
-        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="9" fill="var(--text-muted)" letter-spacing="0.5">Avg Score</text>
+        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="9" fill="var(--text-muted)" letter-spacing="0.5">Avg. Score</text>
       </svg>`;
   };
 
@@ -4651,15 +4667,15 @@ function _gicaSummaryHtml(vm) {
         <div class="flip-card-inner">
           <div class="flip-card-front stat-card">
             <div class="u-between">
-              <div class="stat-card__label">Avg Score</div>
-              <div class="flip-indicator" style="margin-top:0;">↩ ดูเกณฑ์การตัดเกรด</div>
+              <div class="stat-card__label">Overall Average Score</div>
+              <div class="flip-indicator" style="margin-top:0;">↩ Grading criteria</div>
             </div>
             ${donutLabeled(avgCounts, avgTot, avgOverallPct)}
           </div>
           <div class="flip-card-back stat-card">
             <div class="stat-card__label">Criteria</div>
             <div class="criteria-list">
-              <span class="u-muted criteria-list__head">เกณฑ์การตัดเกรด</span>
+              <span class="u-muted criteria-list__head">Grading Criteria</span>
               ${[{g:'A',r:'85 – 100%'},{g:'B',r:'65 – 84%'},{g:'C',r:'50 – 64%'},{g:'D',r:'≤ 49%'}]
                 .map(c => `<div class="criteria-list__row">
                   <span class="donut-legend__dot" style="background:${GICA_GRADE_COLORS[c.g]};"></span>
@@ -4667,7 +4683,7 @@ function _gicaSummaryHtml(vm) {
                   <span class="criteria-list__range">${c.r}</span>
                 </div>`).join('')}
             </div>
-            <div class="flip-indicator">↩ กลับ</div>
+            <div class="flip-indicator">↩ Back</div>
           </div>
         </div>
       </div>
@@ -4785,6 +4801,50 @@ function _gicaSummaryHtml(vm) {
       </tr>${subRows}`;
   }).join('');
 
+  // Table_freq reference modal: per (department, level, role) — how often someone is
+  // tested and the minimum grade each sub-test must reach. Grouped by department for
+  // readability, sorted by GICA_LEVEL_ORDER within each department.
+  const freqModalBody = (() => {
+    const rows = vm.freqTable || [];
+    if (!rows.length) return `<p class="u-muted" style="text-align:center;padding:24px 0;">ไม่มีข้อมูล Table_freq</p>`;
+    const byDept = {};
+    rows.forEach(r => { (byDept[r.department || '—'] = byDept[r.department || '—'] || []).push(r); });
+    const depts = Object.keys(byDept).sort((a, b) => a.localeCompare(b));
+    const sortRows = list => list.slice().sort((a, b) => {
+      const ia = GICA_LEVEL_ORDER.indexOf(a.level), ib = GICA_LEVEL_ORDER.indexOf(b.level);
+      if (ia !== ib) return (ia === -1 ? 1 : ib === -1 ? -1 : ia - ib);
+      return (a.role || '').localeCompare(b.role || '');
+    });
+    const expBadge = g => g
+      ? `<span class="exp-badge exp-badge--${g}">${escapeHtml(g)}</span>`
+      : '<span class="u-muted">—</span>';
+    return `
+      <div class="gica-freq-table-wrap">
+        <table class="gica-freq-table">
+          <thead><tr>
+            <th>Dept / Level</th>
+            <th>Role</th>
+            <th style="text-align:center;">Frequency</th>
+            <th style="text-align:center;" title="Measurement — เกรดที่คาดหวัง"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+            <th style="text-align:center;" title="Inspection — เกรดที่คาดหวัง"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+          </tr></thead>
+          <tbody>
+            ${depts.map(dept => `
+              <tr class="gica-freq-dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>
+              ${sortRows(byDept[dept]).map(r => `
+                <tr>
+                  <td>${escapeHtml(r.level || '—')}</td>
+                  <td class="u-muted">${escapeHtml(r.role || '—')}</td>
+                  <td style="text-align:center;">${r.freqMonths != null ? `${r.freqMonths} เดือน` : '—'}</td>
+                  <td style="text-align:center;">${expBadge(r.expectation1)}</td>
+                  <td style="text-align:center;">${expBadge(r.expectation2)}</td>
+                </tr>`).join('')}
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  })();
+
   const matrix = vm.expMatrix.length ? `
     <div class="card card--section gica-expect-section">
       <div class="chart-header">
@@ -4795,6 +4855,9 @@ function _gicaSummaryHtml(vm) {
         <div class="exp-legend">
           <button id="gica-kpi-setup-btn" class="gica-kpi-setup-btn" title="กำหนด KPI target สำหรับแต่ละ Level">
             <i class="ti ti-target-arrow" aria-hidden="true"></i> KPI Setup
+          </button>
+          <button id="gica-freq-info-btn" class="gica-kpi-setup-btn" title="เกณฑ์ความถี่การประเมิน (Table_freq)">
+            <i class="ti ti-file-text" aria-hidden="true"></i>
           </button>
           <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#16a34a;"></span>KPI Achieved</span>
           <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#dc2626;"></span>KPI Not Achieved</span>
@@ -4862,6 +4925,16 @@ function _gicaSummaryHtml(vm) {
           <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-kpi-cancel">ยกเลิก</button>
           <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-kpi-confirm">Confirm</button>
         </div>
+      </div>
+    </div>
+    <div id="gica-freq-modal" class="gica-modal hidden">
+      <div class="gica-modal__backdrop" id="gica-freq-backdrop"></div>
+      <div class="gica-modal__panel">
+        <div class="gica-modal__head">
+          <h4 style="margin:0;font-size:1rem;">Assessment Frequency &amp; Expectation</h4>
+          <button class="gica-modal__close" id="gica-freq-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="gica-modal__body">${freqModalBody}</div>
       </div>
     </div>` : '';
 
@@ -5155,6 +5228,18 @@ function _mountGicaSummary(html, vm) {
     });
   }
 
+  // Table_freq reference modal
+  const freqModal = container.querySelector('#gica-freq-modal');
+  const closeFreqModal = () => freqModal && freqModal.classList.add('hidden');
+  if (freqModal) {
+    container.querySelector('#gica-freq-info-btn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      freqModal.classList.remove('hidden');
+    });
+    container.querySelector('#gica-freq-close')?.addEventListener('click', closeFreqModal);
+    container.querySelector('#gica-freq-backdrop')?.addEventListener('click', closeFreqModal);
+  }
+
   // Expectation matrix drill-down
   const modal     = container.querySelector('#gica-expect-modal');
   const modalTtl  = container.querySelector('#gica-expect-modal-title');
@@ -5164,7 +5249,7 @@ function _mountGicaSummary(html, vm) {
     modal.querySelectorAll('[data-close="1"]').forEach(el => el.addEventListener('click', closeModal));
   }
   if (window._gicaEscHandler) document.removeEventListener('keydown', window._gicaEscHandler);
-  window._gicaEscHandler = e => { if (e.key === 'Escape') { closeModal(); closeKpiModal(); } };
+  window._gicaEscHandler = e => { if (e.key === 'Escape') { closeModal(); closeKpiModal(); closeFreqModal(); } };
   document.addEventListener('keydown', window._gicaEscHandler);
 
   const _showModal = (list, title) => {
@@ -5307,7 +5392,7 @@ function _mountGicaSummary(html, vm) {
 }
 
 function renderGicaSummary() {
-  const vm = _computeGicaSummary(_gicaData.employees || [], _gicaData.bus || [], _gicaKpiTargets);
+  const vm = _computeGicaSummary(_gicaData.employees || [], _gicaData.bus || [], _gicaKpiTargets, _gicaData.freqTable || []);
   _mountGicaSummary(_gicaSummaryHtml(vm), vm);
 }
 
@@ -5686,7 +5771,7 @@ function _gicaScheduleHtml(vm) {
   const upcomingCard = `
     <div class="card card--section">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <h3 style="margin:0;font-size:1rem;color:var(--text);">Upcoming test schedule</h3>
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">Upcoming Assessments</h3>
         <div id="gica-schedToggle" class="toggle-group">
           <button class="toggle-btn${vm.schedMode === 'all'    ? ' active' : ''}" data-mode="all"    type="button">All</button>
           <button class="toggle-btn${vm.schedMode === 'Retest' ? ' active' : ''}" data-mode="Retest" type="button">Retest</button>
