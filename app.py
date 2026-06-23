@@ -370,13 +370,15 @@ def logout():
     return redirect(url_for("index"))
 
 
-def _open_view_only_session(role: str, display_name: str):
-    """Open a read-only session using the central MANAGER_REFRESH_TOKEN.
-    No password required — the caller just clicks the button.
-    Backend will refuse writes for this session role (require_writable)."""
+def _open_shared_token_session(role: str, display_name: str):
+    """Open a session using the central MANAGER_REFRESH_TOKEN (the file owner's
+    own Microsoft account) instead of a per-person OAuth login. Whether writes
+    are actually allowed for this session depends entirely on `role` being on
+    the allow-list passed to require_writable() at the route — this function
+    itself does not distinguish read-only from writable roles."""
     if not MANAGER_REFRESH_TOKEN:
         return jsonify({
-            "error": "View Mode is not configured on the server.",
+            "error": "This sign-in mode is not configured on the server.",
         }), 500
 
     session.permanent = True
@@ -393,7 +395,7 @@ def _open_view_only_session(role: str, display_name: str):
     if not token:
         session.clear()
         return jsonify({
-            "error": "Central view-only token is invalid or expired. "
+            "error": "Central shared token is invalid or expired. "
                      "Ask an admin to refresh MANAGER_REFRESH_TOKEN.",
         }), 500
 
@@ -404,13 +406,26 @@ def _open_view_only_session(role: str, display_name: str):
 @app.route("/manager-login", methods=["POST"])
 def manager_login():
     """CSA Sign In → View Mode."""
-    return _open_view_only_session("csa_view", "CSA View Mode")
+    return _open_shared_token_session("csa_view", "CSA View Mode")
 
 
 @app.route("/qe-view-login", methods=["POST"])
 def qe_view_login():
     """QE Sign In → View Mode."""
-    return _open_view_only_session("qe_view", "QE View Mode")
+    return _open_shared_token_session("qe_view", "QE View Mode")
+
+
+@app.route("/qe-edit-login", methods=["POST"])
+def qe_edit_login():
+    """QE Sign In → Edit Mode. Requires the door password to already be verified
+    via POST /api/door-unlock — writes go through the shared MANAGER_REFRESH_TOKEN
+    (the GICA.xlsx file owner's own account) instead of each QE staff member's own
+    Microsoft login, sidestepping per-person OneDrive sharing-permission issues on
+    a personal OneDrive file. Role qe_user is on require_writable()'s allow-list
+    for the GICA write routes, so this session can actually save changes."""
+    if not session.get("door_unlocked_qe"):
+        return jsonify({"error": "ต้องยืนยันรหัสผ่านก่อน"}), 403
+    return _open_shared_token_session("qe_user", "QE Edit Mode")
 
 
 @app.route("/api/door-unlock", methods=["POST"])

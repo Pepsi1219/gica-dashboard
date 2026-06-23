@@ -2466,7 +2466,15 @@ async function _submitDoorPassword() {
   }
   try {
     await api('/api/door-unlock', { method: 'POST', body: JSON.stringify({ door, password }) });
-    window.location.href = `/login?door=${door}`;
+    if (door === 'qe') {
+      // QE Edit Mode writes through the shared MANAGER_REFRESH_TOKEN (the file
+      // owner's own account) instead of each person's own Microsoft login — no
+      // OAuth redirect needed once the door password is verified.
+      await api('/qe-edit-login', { method: 'POST' });
+      window.location.reload();
+    } else {
+      window.location.href = `/login?door=${door}`;
+    }
   } catch (err) {
     errEl.textContent = err.message || 'รหัสผ่านไม่ถูกต้อง';
     errEl.classList.remove('hidden');
