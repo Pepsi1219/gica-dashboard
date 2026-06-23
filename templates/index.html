@@ -166,22 +166,22 @@
           </button>
           <button class="login-door-btn" data-door="admin">
             <span class="login-door-btn__title">Admin Sign In</span>
-            <span class="login-door-btn__sub">Full access</span>
+            <span class="login-door-btn__sub">Setup Mode</span>
           </button>
         </div>
 
         <!-- CSA sub-panel -->
         <div id="loginDoor-csa" class="login-door-panel hidden">
-          <button class="login-door-back" data-back="1">← กลับ</button>
+          <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">CSA Sign In</h3>
           <button id="csaViewBtn" class="login-btn">View Mode</button>
-          <button id="csaMsBtn" class="login-btn login-btn--disabled" disabled title="ยังไม่เปิดใช้งาน">Sign in with Microsoft</button>
+          <button id="csaMsBtn" class="login-btn login-btn--disabled" disabled title="ยังไม่เปิดใช้งาน">CSA Edit Mode</button>
           <p id="csaViewError" class="login-error hidden"></p>
         </div>
 
         <!-- QE sub-panel -->
         <div id="loginDoor-qe" class="login-door-panel hidden">
-          <button class="login-door-back" data-back="1">← กลับ</button>
+          <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">QE Sign In</h3>
           <button id="qeViewBtn" class="login-btn">View Mode</button>
           <button id="qeEditBtn" class="login-btn" data-door="qe">QE Edit Mode</button>
@@ -190,7 +190,7 @@
 
         <!-- Admin sub-panel -->
         <div id="loginDoor-admin" class="login-door-panel hidden">
-          <button class="login-door-back" data-back="1">← กลับ</button>
+          <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">Admin Sign In</h3>
           <button id="adminMsBtn" class="login-btn" data-door="admin">Sign in with Microsoft</button>
           <p id="adminLoginWarning" class="login-error hidden"></p>
@@ -199,10 +199,10 @@
 
       <!-- Door password prompt (QE / Admin) before the Microsoft redirect starts -->
       <div id="doorPasswordPanel" class="login-card login-card--overlay hidden">
-        <button class="login-door-back" id="doorPasswordBack">← กลับ</button>
-        <h3 class="login-door-panel__title">ใส่รหัสผ่าน</h3>
-        <input type="password" id="doorPasswordInput" class="gica-form-input" placeholder="รหัสผ่าน" style="margin-bottom:14px;">
-        <button id="doorPasswordSubmit" class="login-btn">เข้าสู่ระบบ</button>
+        <button class="login-door-back" id="doorPasswordBack">← back</button>
+        <h3 class="login-door-panel__title">Enter your password</h3>
+        <input type="password" id="doorPasswordInput" class="gica-form-input" placeholder="Password" style="margin-bottom:14px;">
+        <button id="doorPasswordSubmit" class="login-btn">Sign In</button>
         <p id="doorPasswordError" class="login-error hidden"></p>
       </div>
     </section>
@@ -210,9 +210,9 @@
     <!-- Admin lockout — shown after 3 wrong Admin Sign In attempts -->
     <section id="adminLockoutScreen" class="hidden">
       <div class="login-card login-card--lockout">
-        <p class="lockout-text">ใส่ข้อมูลผิดครบ 3 ครั้ง ระบบจะให้รอสักครู่</p>
+        <p class="lockout-text">Too many failed attempts. Please try again later.</p>
         <div id="lockoutCountdown" class="lockout-countdown">60</div>
-        <p class="lockout-text">กรุณารอ...</p>
+        <p class="lockout-text">Please wait...</p>
       </div>
     </section>
 
@@ -220,7 +220,7 @@
     <section id="homePage" class="page hidden">
       <!-- BU selection moved to hover sub-menu on New Operator tab — hidden here -->
       <section class="card home-card" style="display:none">
-        <h2 data-i18n="selectDept">เลือก BU</h2>
+        <h2 data-i18n="selectDept">Select BU</h2>
         <div id="departmentGrid" class="department-grid"></div>
       </section>
 
@@ -243,12 +243,12 @@
 
       <section id="homeDashCard" class="card home-dash-card hidden">
         <div class="home-dash-header">
-          <h2 data-i18n="overallDashboard">ภาพรวมทั้งหมด</h2>
+          <h2 data-i18n="overallDashboard">Overall Dashboard</h2>
           <div class="home-dash-controls">
             <button id="exportPngBtn" class="small export-btn" title="Export PNG">PNG</button>
             <button id="exportPdfBtn" class="small export-btn" title="Export PDF">PDF</button>
             <select id="homeDashYearFilter" class="year-select"></select>
-            <button id="homeDashRefreshBtn" class="small" data-i18n="refresh">โหลดใหม่</button>
+            <button id="homeDashRefreshBtn" class="small" data-i18n="refresh">Refresh</button>
           </div>
         </div>
 
@@ -260,7 +260,7 @@
     <!-- Dashboard Page -->
     <section id="dashboardPage" class="page hidden">
       <div class="dashboard-title">
-        <button id="backHomeBtn" data-i18n="backHome">← กลับหน้าแรก</button>
+        <button id="backHomeBtn" data-i18n="backHome">← back</button>
         <h2 id="dashboardTitle"></h2>
         <button id="refreshBtn" data-i18n="refresh">Refresh</button>
       </div>
@@ -807,6 +807,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=285"></script>
+  <script src="/static/js/app.js?v=286"></script>
 </body>
 </html>

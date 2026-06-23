@@ -2499,6 +2499,17 @@ function initLoginDoors() {
   $('doorPasswordSubmit')?.addEventListener('click', _submitDoorPassword);
   $('doorPasswordInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') _submitDoorPassword(); });
 
+  // Esc does the same thing as the ← back button, whichever screen is open.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('doorPasswordPanel').classList.contains('hidden')) {
+      _hideDoorPasswordPanel();
+      return;
+    }
+    const openDoor = ['csa', 'qe', 'admin'].find(d => !$('loginDoor-' + d)?.classList.contains('hidden'));
+    if (openDoor) _showLoginDoorPicker();
+  });
+
   // If we just bounced back from a failed Admin Sign In (?adminError=1), strip the
   // query param and run the warning/lockout flow before anything else renders.
   if (new URLSearchParams(window.location.search).get('adminError') === '1') {
