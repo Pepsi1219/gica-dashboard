@@ -151,7 +151,7 @@ TRAINER_SKILL_COLS  = [
 GICA_EXCEL_SHARE_URL = (
     "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/"
     "pongsathon_s_nanyangtextile_com/"
-    "IQB-f6_7UzyGRov5bH30_tdxAfELOuKcgkN9lChBvw_wr4E?e=srksPb"
+    "IQB-f6_7UzyGRov5bH30_tdxAVl-clDmBoBC7151yPvXrrc?e=eGb29d"
 )
 GICA_TABLE_PREFIX = "GICA_"
 GICA_MAX_TESTS    = 12
