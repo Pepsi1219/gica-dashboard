@@ -2435,7 +2435,7 @@ function _handleAdminLoginError() {
   _showLoginDoor('admin');
   const warnEl = $('adminLoginWarning');
   if (warnEl) {
-    warnEl.textContent = `บัญชีนี้ไม่ใช่ Admin — ระบบจะล็อกหากใส่ผิดครบ ${ADMIN_LOCK_LIMIT} ครั้ง (ผิดไปแล้ว ${count} ครั้ง)`;
+    warnEl.textContent = `This is not an Admin account — the system will lock if you enter the wrong password ${ADMIN_LOCK_LIMIT} times (already entered incorrectly ${count} times)`;
     warnEl.classList.remove('hidden');
   }
 }
@@ -2476,7 +2476,7 @@ async function _submitDoorPassword() {
       window.location.href = `/login?door=${door}`;
     }
   } catch (err) {
-    errEl.textContent = err.message || 'รหัสผ่านไม่ถูกต้อง';
+    errEl.textContent = err.message || 'Incorrect password';
     errEl.classList.remove('hidden');
   }
 }
@@ -4296,7 +4296,7 @@ function _gicaDaysBadge(iso) {
   const d = _gicaDaysUntil(iso);
   if (d == null) return '';
   let bg, col, txt;
-  if (d < 0)       { bg = '#fee2e2'; col = '#b91c1c'; txt = `เลย ${Math.abs(d)} วัน`; }
+  if (d < 0)       { bg = '#fee2e2'; col = '#b91c1c'; txt = `${Math.abs(d)} days overdue`; }
   else if (d <= 3) { bg = '#fee2e2'; col = '#b91c1c'; txt = `${d} วัน`; }
   else if (d <= 7) { bg = '#fef3c7'; col = '#b45309'; txt = `${d} วัน`; }
   else             { bg = '#dbeafe'; col = '#1d4ed8'; txt = `${d} วัน`; }
@@ -6876,36 +6876,11 @@ function _gicaFailStatsHtml(rows) {
     + `</div>`;
 }
 
-function _gicaEmpTableAttemptDots(e) {
-  const dot = (color, title) => `<span title="${escapeHtml(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};"></span>`;
-  const items = (e.history || []).slice(-12).map(h => {
-    const passed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
-      (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
-      (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
-    const title = `Attempt ${h.n}${h.date ? ' · ' + _gicaFmtDate(h.date) : ''} — ${passed ? 'Pass' : 'Fail'}`;
-    return { html: dot(passed ? '#16a34a' : '#dc2626', title), monthKey: h.date ? h.date.slice(0, 7) : null };
-  });
-  while (items.length < 12) items.push({ html: dot('var(--border-light)', 'ยังไม่สอบ'), monthKey: null });
-
-  // Consecutive attempts in the same calendar month get a connecting ring around them.
-  const groups = [];
-  items.forEach(it => {
-    const prev = groups[groups.length - 1];
-    if (prev && it.monthKey && prev.monthKey === it.monthKey) prev.items.push(it);
-    else groups.push({ monthKey: it.monthKey, items: [it] });
-  });
-  const groupHtml = groups.map(g => {
-    if (g.items.length < 2) return g.items[0].html;
-    return `<span title="Assessments in the same month (${g.items.length} attempts)" style="display:inline-flex;align-items:center;gap:3px;padding:2px 4px;border:1.3px solid var(--text-muted);border-radius:999px;">${g.items.map(it => it.html).join('')}</span>`;
-  }).join('');
-  return `<div style="display:flex;gap:3px;justify-content:flex-start;align-items:center;">${groupHtml}</div>`;
-}
-
 // Front-facing "Assessment Result" cell — one dot per expected testing checkpoint in a
 // year (12 / freqMonths, e.g. freq=3 → 4 dots, freq=1 → 12 dots), each dot representing
 // a calendar month (month-of-year) rather than an attempt index. When this person has
 // tested more than once in the same month, the dot shows that month's LATEST result.
-// Clicking opens the full per-attempt history (_gicaEmpTableAttemptDots) in a modal.
+// Clicking opens the full per-attempt history charts (_gicaShowAttemptDotsModal).
 const GICA_MONTH_ABBR_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 function _gicaEmpTableMonthDots(e) {
   const freq    = e.freqMonths || 12;
@@ -6938,6 +6913,113 @@ function _gicaEmpTableMonthDots(e) {
   return `<div class="gica-month-dots" data-empid="${escapeHtml(e.empid || '')}" title="Click to view assessment history" style="display:flex;gap:3px;justify-content:flex-start;align-items:center;cursor:pointer;">${dots.join('')}</div>`;
 }
 
+// Standard stats block for the Assessment History modal — total attempts,
+// pass/fail count+%, current fail streak, and avg/min/max per sub-test.
+function _gicaAttemptStats(e) {
+  const hist = e.history || [];
+  let passN = 0, failN = 0;
+  const meas = [], insp = [], avg = [];
+  hist.forEach(h => {
+    if (h.score1 != null) meas.push(h.score1);
+    if (h.score2 != null) insp.push(h.score2);
+    if (h.score  != null) avg.push(h.score);
+    const passed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
+      (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
+      (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+    if (passed) passN++;
+    else if (h.grade1 && h.grade2) failN++;
+  });
+  const total   = hist.length;
+  const avgOf   = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+  const last = hist[hist.length - 1] || null;
+  const prev = hist.length >= 2 ? hist[hist.length - 2] : null;
+  return {
+    total, passN, failN,
+    passPct: total ? Math.round(passN / total * 100) : 0,
+    failStreak: _gicaFailStreak(e),
+    lastMeas: e.score1, lastInsp: e.score2,
+    prevMeas: prev ? prev.score1 : null, prevInsp: prev ? prev.score2 : null,
+    avgMeas: avgOf(meas), avgInsp: avgOf(insp), avgOverall: avgOf(avg),
+    minMeas: meas.length ? Math.min(...meas) : null, maxMeas: meas.length ? Math.max(...meas) : null,
+    minInsp: insp.length ? Math.min(...insp) : null, maxInsp: insp.length ? Math.max(...insp) : null,
+  };
+}
+
+// "%": rounds to 1 decimal place but drops a trailing ".0" (e.g. 76% not 76.0%,
+// but 65.5% kept) — matches how the Previous/Last/Diff comparison is displayed.
+function _gicaFmtPct1(v) {
+  const p = Math.round(v * 1000) / 10;
+  return p % 1 === 0 ? String(Math.round(p)) : String(p);
+}
+
+// Div/grid layout, not a <table> — this app has a global unscoped
+// `table { min-width:1050px; } th { background:var(--blue); position:sticky; }`
+// rule (styles.css, written for the main data tables) that leaks into ANY
+// <table> with no class to override it, blowing out narrow containers like
+// this stat card. Grid avoids that entirely.
+function _gicaCompareTableHtml(s) {
+  const cell = v => v == null ? '—' : `${_gicaFmtPct1(v)}% (${_gicaScoreToGrade(v)})`;
+  const diffCell = (a, b) => {
+    if (a == null || b == null) return '—';
+    const d = b - a;
+    return `<span style="color:${d < 0 ? '#dc2626' : '#16a34a'};">${d >= 0 ? '+' : ''}${_gicaFmtPct1(d)}%</span>`;
+  };
+  const gridRow = (label, a, b, bold) => `
+    <div class="gica-compare-row${bold ? ' gica-compare-row--bold' : ''}">
+      <span class="gica-compare-cell gica-compare-cell--label">${label}</span>
+      <span class="gica-compare-cell">${cell(a)}</span>
+      <span class="gica-compare-cell" style="font-weight:600;">${cell(b)}</span>
+      <span class="gica-compare-cell">${diffCell(a, b)}</span>
+    </div>`;
+  const avgPrev = (s.prevMeas != null && s.prevInsp != null) ? (s.prevMeas + s.prevInsp) / 2 : null;
+  const avgLast = (s.lastMeas != null && s.lastInsp != null) ? (s.lastMeas + s.lastInsp) / 2 : null;
+  return `
+    <div class="gica-compare-table">
+      <div class="gica-compare-row gica-compare-row--head">
+        <span class="gica-compare-cell gica-compare-cell--label"></span>
+        <span class="gica-compare-cell">Prev</span>
+        <span class="gica-compare-cell">Last</span>
+        <span class="gica-compare-cell">Diff</span>
+      </div>
+      ${gridRow('Measurement', s.prevMeas, s.lastMeas)}
+      ${gridRow('Inspection', s.prevInsp, s.lastInsp)}
+      <div class="gica-compare-divider"></div>
+      ${gridRow('Avg', avgPrev, avgLast, true)}
+    </div>`;
+}
+
+function _gicaAttemptStatsHtml(s) {
+  const pctGrade = v => v == null ? '—' : `${_gicaFmtPct1(v)}% (${_gicaScoreToGrade(v)})`;
+  const rangeGrade = (mn, mx) => (mn == null || mx == null)
+    ? '—'
+    : `${_gicaFmtPct1(mn)}% – ${_gicaFmtPct1(mx)}% (${_gicaScoreToGrade(mn)}-${_gicaScoreToGrade(mx)})`;
+  const row = (label, value, color) => `
+    <div class="u-between" style="font-size:0.78rem;padding:3px 0;">
+      <span class="u-muted">${label}</span><strong${color ? ` style="color:${color};"` : ''}>${value}</strong>
+    </div>`;
+  return `
+    <div class="gica-attempt-stats">
+      <div class="gica-attempt-stats__col">
+        ${row('Total Attempts', s.total)}
+        ${row('Pass', s.passN, '#16a34a')}
+        ${row('Fail', s.failN, '#dc2626')}
+        ${row('Pass Rate', s.passPct + '%')}
+        ${row('Current Fail Streak', s.failStreak, s.failStreak > 0 ? '#dc2626' : null)}
+      </div>
+      <div class="gica-attempt-stats__col">
+        ${_gicaCompareTableHtml(s)}
+      </div>
+      <div class="gica-attempt-stats__col">
+        ${row('Avg Measurement', pctGrade(s.avgMeas))}
+        ${row('Avg Inspection', pctGrade(s.avgInsp))}
+        ${row('Measurement Range', rangeGrade(s.minMeas, s.maxMeas))}
+        ${row('Inspection Range', rangeGrade(s.minInsp, s.maxInsp))}
+      </div>
+    </div>`;
+}
+
+let _gicaAttemptDotsCharts = {};
+
 function _gicaShowAttemptDotsModal(empid) {
   const e = (_gicaData.employees || []).find(x => String(x.empid) === String(empid));
   if (!e) return;
@@ -6950,15 +7032,82 @@ function _gicaShowAttemptDotsModal(empid) {
       <small class="gica-modal__close" style="padding:0; background:transparent; cursor:default; display:block; margin-bottom:4px;">
         Assessment History
       </small>
-      
       <strong class="exp-modal-table" style="font-size: 0.85rem; color: var(--text); display: block; font-weight: 900;">
         ${escapeHtml(e.name || e.empid || '')}
       </strong>
     `;
   }
-  
-  body.innerHTML = _gicaEmpTableAttemptDots(e);
+
+  Object.values(_gicaAttemptDotsCharts).forEach(ch => { try { ch.destroy(); } catch (_) {} });
+  _gicaAttemptDotsCharts = {};
+
+  const safeId = escapeHtml(e.empid || 'x');
+  const stats  = _gicaAttemptStats(e);
+  body.innerHTML = `
+    <div class="gica-attempt-charts-container">
+      <div class="gica-attempt-chart-block">
+        <div class="gica-attempt-chart-label">Measurement Result</div>
+        <div class="gica-trend-canvas-wrap"><canvas id="gica-attchart-meas-${safeId}"></canvas></div>
+      </div>
+      <div class="gica-attempt-chart-block">
+        <div class="gica-attempt-chart-label">Inspection Result</div>
+        <div class="gica-trend-canvas-wrap"><canvas id="gica-attchart-insp-${safeId}"></canvas></div>
+      </div>
+      <div class="gica-attempt-chart-block">
+        <div class="gica-attempt-chart-label">Total average score</div>
+        <div class="gica-trend-canvas-wrap"><canvas id="gica-attchart-avg-${safeId}"></canvas></div>
+      </div>
+    </div>
+    ${_gicaAttemptStatsHtml(stats)}`;
   modal.classList.remove('hidden');
+
+  if (typeof Chart === 'undefined') return;
+  const hist   = e.history || [];
+  const X_SLOTS = 12;
+  const labels  = Array.from({ length: X_SLOTS }, (_, i) => `#${i + 1}`);
+  // Fixed 1-12 axis — place each history entry at its actual attempt slot
+  // (h.n - 1) so a gap in testing shows as a gap, not a shifted-left series.
+  const buildSeries = field => {
+    const arr = new Array(X_SLOTS).fill(null);
+    hist.forEach(h => {
+      const idx = h.n - 1;
+      if (idx >= 0 && idx < X_SLOTS && h[field] != null) arr[idx] = Math.round(h[field] * 100);
+    });
+    return arr;
+  };
+  const buildChart = (id, data, color, passPct) => {
+    const canvas = $(id);
+    if (!canvas) return null;
+    const annotation = passPct != null ? {
+      annotations: {
+        passLine: {
+          type: 'line', yMin: passPct, yMax: passPct,
+          borderColor: '#dc2626', borderWidth: 1.5, borderDash: [6, 4],
+          label: { display: true, content: `Pass ${passPct}%`, position: 'end',
+            font: { size: 8 }, color: '#dc2626', backgroundColor: 'transparent' },
+        },
+      },
+    } : undefined;
+    return new Chart(canvas, {
+      type: 'line',
+      data: { labels, datasets: [{
+        data, borderColor: color, backgroundColor: color + '18', fill: true,
+        tension: 0.4, pointRadius: 2.5, pointHoverRadius: 4, spanGaps: true,
+      }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, ...(annotation ? { annotation } : {}) },
+        scales: {
+          x: { ticks: { font: { size: 9 } } },
+          y: { min: 0, max: 100, ticks: { stepSize: 20, font: { size: 9 } } },
+        },
+      },
+    });
+  };
+  const passPctOf = exp => exp && GICA_GRADE_THRESH[exp] != null ? Math.round(GICA_GRADE_THRESH[exp] * 100) : null;
+  _gicaAttemptDotsCharts.meas = buildChart(`gica-attchart-meas-${safeId}`, buildSeries('score1'), '#2563eb', passPctOf(e.exp1));
+  _gicaAttemptDotsCharts.insp = buildChart(`gica-attchart-insp-${safeId}`, buildSeries('score2'), '#16a34a', passPctOf(e.exp2));
+  _gicaAttemptDotsCharts.avg  = buildChart(`gica-attchart-avg-${safeId}`,  buildSeries('score'),  '#f59e0b');
 }
 
 function _gicaEmpTableHtml(rows, opts = {}) {

@@ -2265,8 +2265,87 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-kpi-setup-btn { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:6px; background:var(--surface); border:1px solid var(--border); font-size:0.76rem; font-weight:600; color:var(--text-muted); cursor:pointer; transition:color .15s, background .15s; }
 .gica-kpi-setup-btn:hover { color:var(--primary, #6366f1); background:var(--bg-hover, rgba(99,102,241,0.08)); border-color:var(--primary, #6366f1); }
 /* — Assessment Result month-dots → attempt history modal — */
-.gica-month-dots:hover span { filter:brightness(1.15); }
-.gica-attempt-dots-modal__panel { width:320px; max-width:92vw; }
+.gica-month-dots:hover span { 
+  filter: brightness(1.15); 
+}
+
+/* 1. แผงหน้าต่างหลัก: คงความกว้าง 960px และปรับโครงสร้างภายใน */
+.gica-attempt-dots-modal__panel {
+  width: 1200px;
+  max-width: 94vw;
+  padding: 32px 40px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+
+  /* บังคับให้เนื้อหาภายในเรียงตัวจากบนลงล่างตามปกติ */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 2. แผงแม่มัดรวมกราฟทั้ง 3 ตัวให้อยู่แถวเดียวกัน */
+.gica-attempt-charts-container {
+  display: flex;
+  gap: 16px;          /* ระยะห่างช่องไฟระหว่างกล่องกราฟ */
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+/* 3. บล็อกแสดงกราฟย่อยแต่ละตัว: ปรับให้แบ่งเค้กความกว้างเท่าๆ กัน */
+.gica-attempt-chart-block {
+  flex: 1;            /* แบ่งพื้นที่ 3 กล่องให้กว้างเท่ากันเป๊ะ (กล่องละประมาณ 33%) */
+  min-width: 0;       /* ป้องกันเนื้อหากราฟดันกล่องจนเบี้ยว */
+  margin-bottom: 0;   /* ย้าย margin ไปคุมที่แผงแม่แทน */
+  background: var(--surface2);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+}
+.gica-attempt-chart-block .gica-trend-canvas-wrap { height: 160px; }
+
+/* 4. ป้ายกำกับหัวกราฟ */
+.gica-attempt-chart-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* 5. แผงสรุปสถิติด้านล่าง (Stat Cards) */
+.gica-attempt-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* 6. กล่องการ์ดสถิติตัวเลข — surface2 ให้ contrast กับพื้น panel (surface) เหมือนกล่องกราฟ */
+.gica-attempt-stats__col {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border-light);
+  padding: 14px 18px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gica-attempt-stats__col:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+/* Previous/Last/Diff comparison — div+grid, not <table> (see comment in app.js
+   on why: a global unscoped table/th selector elsewhere would blow this out). */
+.gica-compare-table { display: flex; flex-direction: column; font-size: 0.7rem; }
+.gica-compare-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 4px; padding: 2px 0; align-items: center; }
+.gica-compare-row--head { color: var(--text-muted); font-weight: 600; padding-bottom: 4px; }
+.gica-compare-row--bold { font-weight: 600; border-top: none; }
+.gica-compare-cell { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gica-compare-cell--label { text-align: left; color: var(--text-muted); }
+.gica-compare-row--bold .gica-compare-cell--label { color: var(--text); }
+.gica-compare-divider { border-top: 1px solid var(--border-light); margin: 4px 0; }
 /* — KPI Setup modal panel — */
 .gica-kpi-modal__panel { width:380px; max-width:92vw; }
 .gica-kpi-modal__body { padding:0 0 4px; }
