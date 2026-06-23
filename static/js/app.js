@@ -7212,7 +7212,7 @@ function _gicaPopulateCreateDropdowns() {
   buSel.innerHTML = BU_ORDER.map(bu => `<option value="${escapeHtml(bu)}">${escapeHtml(bu)}</option>`).join('');
 
   const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
-  const placeholder = `<option value="">— เลือก —</option>`;
+  const placeholder = `<option value="">— Select —</option>`;
 
   const depts = [...new Set(freq.map(r => r.department).filter(Boolean))].sort();
   deptSel.innerHTML = placeholder + depts.map(opt).join('');
