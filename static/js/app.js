@@ -666,7 +666,10 @@ function initLang() {
       $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
     }
     // Role badge text is fixed per door/mode (see _roleBadgeText) — not re-set
-    // here since it doesn't change with language.
+    // here since it doesn't change with language. The brand title/subtitle ARE
+    // [data-i18n] elements though, so applyTranslations() above just reset them
+    // back to the generic dictionary text — re-apply the role-specific override.
+    _applyRoleBrandTitle(currentRole);
     if (lastCalc) {
       $('dueDateText').textContent = `${t('dueDate')}: ${lastCalc.due_date || '-'}`;
     }
@@ -2244,6 +2247,26 @@ function _roleBadgeText(role) {
   }
 }
 
+// Topbar brand title/subtitle — fixed per door (not translated, same as the
+// role badge), so this overrides the generic appTitle/appSubtitle i18n text
+// once role is known. Must be re-applied after applyTranslations() runs again
+// (language switch), since that resets every [data-i18n] element including these.
+function _applyRoleBrandTitle(role) {
+  const titleEl = document.querySelector('.topbar-brand h1');
+  const subEl   = document.querySelector('.topbar-brand p');
+  if (!titleEl || !subEl) return;
+  if (['csa_view', 'csa_user', 'manager'].includes(role)) {
+    titleEl.textContent = 'CSA Dashboard';
+    subEl.textContent   = 'Center of Skill Acquisition';
+  } else if (['qe_view', 'qe_user'].includes(role)) {
+    titleEl.textContent = 'GICA Dashboard';
+    subEl.textContent   = 'Garment Inspection Competency Assessment';
+  } else if (role === 'admin') {
+    titleEl.textContent = 'CSA & GICA Dashboard';
+    subEl.textContent   = 'Center of Skill Acquisition · Garment Inspection Competency Assessment';
+  }
+}
+
 function initTabBar() {
   const TAB_IDS = ['newOperator', 'jumper', 'trainer', 'sewingOperator', 'gica'];
   const btnGroup = document.getElementById('mainTabBar');
@@ -2646,6 +2669,7 @@ async function init() {
     badge.textContent = badgeText;
     badge.classList.remove('hidden');
   }
+  _applyRoleBrandTitle(currentRole);
 
   $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
   show($('mainTabBar'));
@@ -4387,7 +4411,12 @@ async function initGicaTab() {
       if (dotsEl) _gicaShowAttemptDotsModal(dotsEl.dataset.empid);
     });
     const attemptDotsModal = $('gica-attempt-dots-modal');
-    const closeAttemptDotsModal = () => attemptDotsModal && attemptDotsModal.classList.add('hidden');
+    const closeAttemptDotsModal = () => {
+      if (!attemptDotsModal) return;
+      attemptDotsModal.classList.add('hidden');
+      attemptDotsModal.classList.remove('gica-modal--paired-left');
+      $('gica-result-modal')?.classList.remove('gica-modal--paired-right');
+    };
     $('gica-attempt-dots-close')?.addEventListener('click', closeAttemptDotsModal);
     $('gica-attempt-dots-backdrop')?.addEventListener('click', closeAttemptDotsModal);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAttemptDotsModal(); });
@@ -7000,7 +7029,7 @@ function _gicaAttemptStatsHtml(s) {
   return `
     <div class="gica-attempt-stats">
       <div class="gica-attempt-stats__col">
-        ${row('Total Attempts', s.total)}
+        ${row('Total Assessments', s.total)}
         ${row('Pass', s.passN, '#16a34a')}
         ${row('Fail', s.failN, '#dc2626')}
         ${row('Pass Rate', s.passPct + '%')}
@@ -7082,9 +7111,9 @@ function _gicaShowAttemptDotsModal(empid) {
       annotations: {
         passLine: {
           type: 'line', yMin: passPct, yMax: passPct,
-          borderColor: '#dc2626', borderWidth: 1.5, borderDash: [6, 4],
-          label: { display: true, content: `Pass ${passPct}%`, position: 'end',
-            font: { size: 8 }, color: '#dc2626', backgroundColor: 'transparent' },
+          borderColor: '#72e059', borderWidth: 1.5, borderDash: [6, 4],
+          label: { display: true, content: `Passt ${passPct}%`, position: 'end',
+            font: { size: 8 }, color: '#696767', backgroundColor: 'transparent',yAdjust: -10, xAdjust: 5, },
         },
       },
     } : undefined;
@@ -7263,15 +7292,34 @@ function _gicaOpenResultModal(bu, empid) {
   _gicaResultCtx = { bu, empid };
   const emp = (_gicaData.employees || []).find(e => e.bu === bu && String(e.empid) === String(empid));
   const title = $('gica-result-title');
-  if (title) title.textContent = `${emp ? emp.name : empid} — Add Assessment Result`;
+  if (title) {
+    const empNameOrId = emp ? emp.name : empid;
+    
+    title.innerHTML = `
+      <small style="padding: 0; background: transparent; cursor: default; display: block; margin-bottom: 4px; font-size: 0.75rem; color: var(--text-muted, #64748b); font-weight: 500;">
+        Add Assessment Result
+      </small>
+      <strong style="font-size: 0.95rem; color: var(--text, #1e293b); display: block; font-weight: 900;">
+        ${escapeHtml(empNameOrId || '')}
+      </strong>
+    `;
+  }
   $('gica-result-meas').value = '';
   $('gica-result-insp').value = '';
   $('gica-result-date').value = '';
   $('gica-result-error').classList.add('hidden');
   $('gica-result-modal').classList.remove('hidden');
+
+  // Show Assessment History side-by-side so QE can see past results while
+  // entering a new one — History on the left, the entry form on the right.
+  _gicaShowAttemptDotsModal(empid);
+  $('gica-attempt-dots-modal')?.classList.add('gica-modal--paired-left');
+  $('gica-result-modal').classList.add('gica-modal--paired-right');
 }
 function _gicaCloseResultModal() {
   $('gica-result-modal').classList.add('hidden');
+  $('gica-result-modal').classList.remove('gica-modal--paired-right');
+  $('gica-attempt-dots-modal')?.classList.remove('gica-modal--paired-left');
 }
 
 function _gicaValidateResultForm() {
@@ -7280,7 +7328,7 @@ function _gicaValidateResultForm() {
   const insp = $('gica-result-insp').value;
   const date = $('gica-result-date').value;
   if (meas === '' || insp === '' || !date) {
-    errEl.textContent = 'กรุณากรอกข้อมูลให้ครบทุกช่อง';
+    errEl.textContent = 'Please complete all required fields';
     errEl.classList.remove('hidden');
     return null;
   }
@@ -7343,6 +7391,17 @@ function _wireGicaResultModal() {
     const fields = _gicaValidateResultForm();
     if (!fields) return; // empty field — don't even show the confirm dialog
     _gicaConfirm('Save this record?', () => _gicaSaveResult(fields));
+  });
+
+  // Esc closes the modal — but not while the Save/Cancel confirm dialog is open
+  // on top of it, otherwise Esc would close this modal and leave that orphaned.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modal = $('gica-result-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const confirmOverlay = $('gica-confirm-overlay');
+    if (confirmOverlay && !confirmOverlay.classList.contains('hidden')) return;
+    _gicaCloseResultModal();
   });
 }
 
