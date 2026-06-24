@@ -4566,7 +4566,7 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
     return best;
   };
   const expMatrix = GICA_LEVEL_ORDER
-    .filter(lv => emps.some(e => e.level === lv))
+    .filter(lv => lv !== 'Department Head')
     .map(lv => {
       const atLevel = emps.filter(e => e.level === lv);
       const expM = _mode(atLevel.map(e => e.exp1));
@@ -5009,19 +5009,26 @@ function _gicaSummaryHtml(vm) {
     return t ? (t[bu] ?? t.all ?? null) : null;
   };
 
-  const matrixRows = vm.expMatrix.map(row => {
+  const GICA_LEVEL_TOOLTIPS = { 'Supervisor*': 'Technic Department Head' };
+  const _gicaLevelLabel = level => {
+    const tip = GICA_LEVEL_TOOLTIPS[level];
+    return `<div class="exp-row__level"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${escapeHtml(level)}</div>`;
+  };
+
+  const expMatrixColspan = 3 + vm.expMatrixBus.length;
+  const matrixRows = vm.expMatrix.length ? vm.expMatrix.map(row => {
     const cells = vm.expMatrixBus.map(bu =>
       _mkExpCell(row.cells[bu], `data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`, kpiPctFor(row.level, bu))
     ).join('');
     return `<tr>
-      <td class="exp-row__head"><div class="exp-row__level">${escapeHtml(row.level)}</div></td>
+      <td class="exp-row__head">${_gicaLevelLabel(row.level)}</td>
       <td class="exp-td--expect">${expBadge(row.expM)}</td>
       <td class="exp-td--expect exp-td--expect-last">${expBadge(row.expI)}</td>
       ${cells}
     </tr>`;
-  }).join('');
+  }).join('') : `<tr><td colspan="${expMatrixColspan}" style="text-align:center;color:var(--text-muted);padding:20px;">ไม่มีข้อมูล</td></tr>`;
 
-  const matrixDeptRows = vm.expMatrixDept.map(({ dept, deptAgg, levelRows }, idx) => {
+  const matrixDeptRows = vm.expMatrixDept.length ? vm.expMatrixDept.map(({ dept, deptAgg, levelRows }, idx) => {
     const aggCells = vm.expMatrixBus.map(bu => {
       const c = deptAgg[bu];
       if (!c || c.empty) return `<td class="exp-cell exp-cell--empty exp-cell--dept-agg">—</td>`;
@@ -5042,7 +5049,7 @@ function _gicaSummaryHtml(vm) {
         _mkExpCell(row.cells[bu], `data-dept="${escapeHtml(dept)}" data-level="${escapeHtml(row.level)}" data-bu="${escapeHtml(bu)}"`, kpiPctFor(row.level, bu))
       ).join('');
       return `<tr class="exp-level-sub-row">
-        <td class="exp-row__head exp-row__sub"><div class="exp-row__level">${escapeHtml(row.level)}</div></td>
+        <td class="exp-row__head exp-row__sub">${_gicaLevelLabel(row.level)}</td>
         <td class="exp-td--expect">${expBadge(row.expM)}</td>
         <td class="exp-td--expect exp-td--expect-last">${expBadge(row.expI)}</td>
         ${cells}
@@ -5053,7 +5060,7 @@ function _gicaSummaryHtml(vm) {
         <td class="exp-row__dept-head" colspan="3">${escapeHtml(dept)}</td>
         ${aggCells}
       </tr>${subRows}`;
-  }).join('');
+  }).join('') : `<tr><td colspan="${expMatrixColspan}" style="text-align:center;color:var(--text-muted);padding:20px;">ไม่มีข้อมูล</td></tr>`;
 
   // Table_freq reference modal: per (department, level, role) — how often someone is
   // tested and the minimum grade each sub-test must reach. Grouped by department for
@@ -5105,7 +5112,7 @@ function _gicaSummaryHtml(vm) {
     </div>`;
   })();
 
-  const matrix = vm.expMatrix.length ? `
+  const matrix = `
     <div class="card card--section gica-expect-section">
       <div class="chart-header">
         <div style="display:flex;align-items:center;gap:10px;margin-top:-16px;">
@@ -5194,7 +5201,7 @@ function _gicaSummaryHtml(vm) {
         </div>
         <div class="gica-modal__body">${freqModalBody}</div>
       </div>
-    </div>` : '';
+    </div>`;
 
   const quadSection = `
     <div class="card card--section" id="gica-quad-section">

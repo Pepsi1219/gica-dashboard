@@ -2018,14 +2018,14 @@ tbody tr:hover { filter: brightness(.97); }
   background: var(--surface2);
   border-radius: 4px;
 }
-.exp-th--level { 
-  text-align: left; 
-  padding-left: 8px; 
-  color: var(--text); 
-  width: 50px; 
-  min-width: 50px; 
-  max-width: 50px;
-  text-align: center; 
+.exp-th--level {
+  text-align: left;
+  padding-left: 8px;
+  color: var(--text);
+  width: 84px;
+  min-width: 84px;
+  max-width: 84px;
+  text-align: center;
  }
 .exp-th--expect { 
   width: 40px; 
@@ -2036,7 +2036,7 @@ tbody tr:hover { filter: brightness(.97); }
   text-align: center; 
 }
 .exp-th--expect-last { border-right: 1px solid var(--border); margin-right: 2px; }
-.exp-row__head { padding: 6px 8px; background: var(--surface2); border-radius: 4px; width: 100px; min-width: 100px; max-width: 100px; }
+.exp-row__head { padding: 6px 8px; background: var(--surface2); border-radius: 4px; width: 134px; min-width: 134px; max-width: 134px; }
 .exp-td--expect { text-align: center; width: 40px; min-width: 40px; max-width: 40px; padding: 4px 2px; }
 
 .exp-row__level { font-weight: 300; color: var(--text); font-size: 0.75rem;text-align: center; }
