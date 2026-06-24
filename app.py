@@ -1004,7 +1004,7 @@ def _fetch_gica_excel_data(token: str) -> tuple:
         if str(t.get('name', '')).startswith(GICA_TABLE_PREFIX)
     ]
 
-    def _read_one(tname):
+    def _read_emp(tname):
         bu_tag = tname[len(GICA_TABLE_PREFIX):]
         for attempt in range(3):
             try:
@@ -1012,32 +1012,28 @@ def _fetch_gica_excel_data(token: str) -> tuple:
                 for r in rows:
                     r['_bu'] = bu_tag
                 print(f'[GICA] {tname}: {len(rows)} rows', flush=True)
-                return rows
+                return ('emp', None, rows)
             except Exception as exc:
                 if attempt < 2:
                     time.sleep(1.5 * (attempt + 1))  # 1.5s, 3s backoff
                 else:
                     print(f'[GICA] {tname} skipped after 3 attempts: {exc}', flush=True)
-        return []
+        return ('emp', None, [])
 
-    all_rows = []
-    with _ThreadPoolExecutor(max_workers=3) as ex:  # cap at 3 to avoid Graph API throttling
-        for rows in ex.map(_read_one, table_names):
-            all_rows.extend(rows)
-
-    try:
-        freq_rows = _read_excel_table(token, drive_id, item_id,
+    def _read_freq():
+        try:
+            rows = _read_excel_table(token, drive_id, item_id,
                                       GICA_FREQ_TABLE, GICA_FREQ_COLS)
-        print(f'[GICA] {GICA_FREQ_TABLE}: {len(freq_rows)} rows', flush=True)
-    except Exception as exc:
-        print(f'[GICA] {GICA_FREQ_TABLE} skipped: {exc}', flush=True)
-        freq_rows = []
+            print(f'[GICA] {GICA_FREQ_TABLE}: {len(rows)} rows', flush=True)
+        except Exception as exc:
+            print(f'[GICA] {GICA_FREQ_TABLE} skipped: {exc}', flush=True)
+            rows = []
+        return ('freq', None, rows)
 
-    kpi_by_bu = {}
-    for bu, tname in GICA_KPI_TABLES.items():
+    def _read_kpi(bu, tname):
+        targets = {}
         try:
             rows = _read_excel_table(token, drive_id, item_id, tname, GICA_KPI_COLS)
-            targets = {}
             for r in rows:
                 level = str(r.get('level', '') or '').strip()
                 if not level:
@@ -1046,10 +1042,26 @@ def _fetch_gica_excel_data(token: str) -> tuple:
                     targets[level] = float(r.get('target'))
                 except (ValueError, TypeError):
                     pass
-            kpi_by_bu[bu] = targets
             print(f'[GICA] {tname}: {len(targets)} levels', flush=True)
         except Exception as exc:
             print(f'[GICA] {tname} skipped: {exc}', flush=True)
+        return ('kpi', bu, targets)
+
+    jobs = [(lambda t=t: _read_emp(t)) for t in table_names]
+    jobs.append(_read_freq)
+    jobs += [(lambda b=b, t=t: _read_kpi(b, t)) for b, t in GICA_KPI_TABLES.items()]
+
+    all_rows = []
+    freq_rows = []
+    kpi_by_bu = {}
+    with _ThreadPoolExecutor(max_workers=3) as ex:  # cap at 3 to avoid Graph API throttling
+        for kind, key, payload in ex.map(lambda job: job(), jobs):
+            if kind == 'emp':
+                all_rows.extend(payload)
+            elif kind == 'freq':
+                freq_rows = payload
+            else:  # 'kpi'
+                kpi_by_bu[key] = payload
 
     return all_rows, freq_rows, kpi_by_bu
 
