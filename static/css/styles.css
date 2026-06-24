@@ -603,6 +603,14 @@ button, .primary-link {
   transition: filter .15s, transform .1s;
 }
 button:hover, .primary-link:hover { filter: brightness(.93); }
+button:disabled, button:disabled:hover {
+  opacity: .5;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+.inline-feedback--ok    { color: var(--ok); font-weight: 600; }
+.inline-feedback--error { color: var(--danger); font-weight: 600; }
 button:active { transform: scale(.97); }
 .primary, .primary-link {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);

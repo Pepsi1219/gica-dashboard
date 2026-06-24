@@ -9,19 +9,20 @@
 
 ```
 New Operator Monitoring/
-├── app.py                  # Flask app หลัก — routes ทั้งหมด + auth logic (~1467 บรรทัด)
+├── app.py                  # Flask app หลัก — routes ทั้งหมด + auth logic (~1600 บรรทัด)
 ├── config.py               # ค่าคงที่: CLIENT_ID, DEPARTMENTS, GICA_*, ONEDRIVE_FOLDER, ฯลฯ
 ├── business_rules.py       # Logic คำนวณ training status (due date, remaining days, etc.)
 ├── graph_excel.py          # Wrappers สำหรับ Microsoft Graph API (CRUD Excel table)
+├── kv_store.py             # L2 shared cache — REST wrapper สำหรับ Vercel KV / Upstash Redis
 ├── requirements.txt        # Flask, Flask-Session, msal, python-dotenv, requests
 ├── vercel.json             # Vercel deployment config
 ├── .env                    # Secrets (ห้าม commit — อยู่ใน .gitignore แล้ว)
 ├── .env.example            # Template สำหรับ .env
 ├── templates/
-│   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab, ~813 บรรทัด)
+│   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab, ~823 บรรทัด)
 ├── static/
-│   ├── css/styles.css      # Styles ทั้งหมด (~2639 บรรทัด)
-│   └── js/app.js           # Frontend logic ทั้งหมด (~7603 บรรทัด)
+│   ├── css/styles.css      # Styles ทั้งหมด (~2645 บรรทัด)
+│   └── js/app.js           # Frontend logic ทั้งหมด (~7698 บรรทัด)
 └── docs/                   # เอกสาร guide สำหรับ CSA Manager
 ```
 
@@ -37,10 +38,22 @@ New Operator Monitoring/
   - Vercel: signed cookie (ตรวจจาก `VERCEL=1` env var อัตโนมัติ)
   - Cookie เก็บแค่ **refresh token** (~0.8 KB) เพื่อไม่ให้ cookie overflow
   - Access token เก็บใน process memory `_AT_CACHE` (dict `oid → {at, exp}`)
-- **In-process caches** (TTL 5 นาที — หายเมื่อ cold start บน Vercel):
-  - `_JUMPER_CACHE` — Jumper/Trainer JSON data
-  - `_GICA_CACHE` — GICA assessment Excel data
-  - `_JUMPER_EXCEL_CACHE`, `_TRAINER_EXCEL_CACHE` — Excel workbook caches
+- **Caching: L1 (in-process) → L2 (shared KV) → live Graph API fetch** — ทุก read endpoint (New Operator, Jumper, Trainer, GICA) เดินตาม pattern เดียวกัน TTL 300 วินาทีทั้ง 2 ชั้น:
+  1. L1 = in-process dict ต่อ instance — เร็วสุด, ฟรี, หายเมื่อ cold start บน Vercel
+  2. L2 = Vercel KV / Upstash Redis ผ่าน [`kv_store.py`](kv_store.py) (`kv_get`/`kv_set`/`kv_delete`, REST API ผ่าน `requests` — ไม่เพิ่ม dependency ใหม่) — shared ข้าม serverless instance กัน Graph API ถูกยิงซ้ำซ้อนตอนหลาย instance cold start พร้อมกัน
+  3. ถ้า KV ไม่พร้อม (env var ไม่ครบ/network error) `kv_store.py` คืน `None`/`False` เงียบๆ ทุกฟังก์ชัน — caller fallback ไป Graph API ตรงเสมอ **ไม่มีทางที่ KV ล่มแล้วทำให้แอปพัง**
+
+  | Module | L1 dict | L2 KV key | Write invalidation |
+  |---|---|---|---|
+  | New Operator | `_NEWOP_CACHE[dept_key]` (raw rows ก่อนคำนวณ `calculated`) | `newop_employees_{dept_key}` | ✓ หลัง POST/PATCH `/api/<dept>/employees` |
+  | Jumper Skill | `_JUMPER_EXCEL_CACHE` | `jumper_excel` | — (read-only) |
+  | Trainer Skill | `_TRAINER_EXCEL_CACHE` | `trainer_excel` | — (read-only) |
+  | GICA | `_GICA_CACHE` | `gica_excel` | ✓ หลัง POST `/api/gica/<bu>/employees`, PATCH `.../result` |
+  | ~~`_JUMPER_CACHE`~~ | — | — | ⚠️ **legacy/dead** — รองรับ `/api/jumper-data` (JSON flow เดิม) ที่ frontend ไม่เรียกใช้แล้ว ไม่มี L2 ไม่ต้อง migrate |
+
+  ⚠️ **แก้ไฟล์ Excel ตรงบน OneDrive (ไม่ผ่านแอป) ระบบไม่มีทางรู้** เพราะไม่มี webhook/polling ติดไฟล์ — ต้องรอ TTL หมดอายุทั้ง L1+L2 (สูงสุด 5 นาที) นี่คือ behavior เดิมตั้งแต่ก่อนมี KV ไม่ใช่สิ่งที่ KV ทำให้แย่ลง
+
+- **Force Refresh** (ปุ่มฉุกเฉิน, แสดงเฉพาะ Admin Sign In ใน Admin Settings modal ใต้ "Configure Special Holidays"): ล้าง L1+L2 ของทุก module พร้อมกันในคลิกเดียว สำหรับกรณีแก้ Excel ตรงแล้วไม่อยากรอ TTL — cooldown 300 วินาทีต่อครั้ง เก็บ timestamp ไว้ใน **KV** (`force_refresh_last_at`, ไม่ใช่ in-process) เพื่อให้ cooldown ถูกต้องข้าม serverless instance ด้วย ดู `/api/admin/force-refresh` (POST), `/api/admin/force-refresh-status` (GET) ใน `app.py`
 
 ### Frontend (Vanilla JS)
 - ไม่ใช้ framework — `static/js/app.js` เป็น plain JS ~7603 บรรทัด
@@ -49,13 +62,17 @@ New Operator Monitoring/
 - แบ่งเป็น tab หลัก 5 แท็บ: `newOperator`, `jumper`, `trainer`, `sewingOperator`, `gica`
 
 ### Data Source
-| Tab | แหล่งข้อมูล | วิธีอ่าน |
-|---|---|---|
-| New Operator | Excel บน OneDrive (6 workbooks) | Graph API `/workbook/tables/{table}/rows` |
-| Jumper Skill | JSON files บน OneDrive | Graph API `/children` → download แต่ละไฟล์ |
-| Trainer Skill | รวมมาจาก Jumper data | แยกจาก `deptname === 'CSA พัฒนาทักษะ'` |
-| Sewing Operator | รวมมาจาก Jumper data | ส่วนที่เหลือหลังแยก Trainer ออก |
-| GICA | Excel เดียว (GICA.xlsx) บน OneDrive | Graph API `/workbook/tables` — auto-discover GICA_* tables ทีละ BU |
+| Tab | แหล่งข้อมูล | Endpoint | วิธีอ่าน |
+|---|---|---|---|
+| New Operator | Excel บน OneDrive (6 workbooks) | `/api/<dept>/employees` | Graph API `/workbook/tables/{table}/rows` |
+| Jumper Skill | `Jumper_Monitoring.xlsx` (tables `Jumper_G1...Jumper_TRM` + `SewingOperatorCount`) | `/api/jumper-excel` | Graph API `/workbook/tables` — อ่านแยก table ต่อ BU แบบ parallel |
+| Trainer Skill | `Trainer_Monitoring.xlsx` (tables `TrainerListAll`, `BUSetup`, `top_3`) | `/api/trainer-excel` | Graph API `/workbook/tables` |
+| Sewing Operator | มาจาก table `SewingOperatorCount` ใน `Jumper_Monitoring.xlsx` (ส่วนหนึ่งของ payload `/api/jumper-excel`) | `/api/jumper-excel` | อ่านพร้อมกับ Jumper Skill |
+| GICA | Excel เดียว (GICA.xlsx) บน OneDrive | `/api/gica-excel` | Graph API `/workbook/tables` — auto-discover GICA_* tables ทีละ BU |
+
+> ทุก endpoint ในตารางนี้ผ่าน **L1 (in-process) → L2 (KV) → Graph API** ก่อนถึงจะ "วิธีอ่าน" ที่ระบุ — ดู [Caching](#backend-flask) ด้านบนสำหรับ cache key ของแต่ละ module
+
+> ⚠️ **`/api/jumper-data`** (JSON-files-based flow เดิม จากยุค CSA co NiSE push JSON ขึ้น OneDrive) ยังอยู่ในโค้ดแต่ **frontend ไม่เรียกใช้แล้ว** — Jumper/Trainer/Sewing Operator ทั้งหมดอ่านจาก Excel โดยตรงผ่าน `/api/jumper-excel` และ `/api/trainer-excel` ตามตารางด้านบน ดู `config.py` (`JUMPER_EXCEL_SHARE_URL`, `TRAINER_EXCEL_SHARE_URL`) สำหรับ config จริง
 
 ---
 
@@ -408,31 +425,28 @@ const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
 
 ## Jumper Skill Tab
 
-### Data Flow
+### Data Flow (ปัจจุบัน)
 ```
-CSA co NiSE project
-  → npm run fetch       (ดึงจาก NiSE ระบบ HR)
-  → npm run push        (อัปโหลด data_*.json ขึ้น OneDrive)
-  → /api/jumper-data    (Flask อ่านจาก OneDrive ผ่าน MANAGER_REFRESH_TOKEN)
-  → JavaScript render   (Summary cards, Charts, Table)
+Jumper_Monitoring.xlsx (OneDrive — SharePoint, JUMPER_EXCEL_SHARE_URL ใน config.py)
+  → /api/jumper-excel    (Flask อ่านผ่าน MANAGER_REFRESH_TOKEN, parallel ทีละ BU table)
+  → JavaScript render    (Summary cards, Charts, Table)
 ```
-
-### OneDrive path ของ Jumper files
-```
-1. Project/CSA (Center of Skill Acquisition)/New Operator Monitoring/jumper-data/
-  data_jumper_G1.json          ← Jumper employees per BU
-  data_allEmployees_G1.json    ← All employees (แยก trainer/employee ใน Python)
-  data_sewingOperatorSkill_G1.json ← Sewing operator count (ใช้คำนวณ target)
-  ... (ซ้ำสำหรับ G2, G3, G4, NYV/EA, TRM)
-```
+Tables ที่อ่าน: `Jumper_G1...Jumper_TRM` (per BU, ดู `JUMPER_BU_TABLES`) + `SewingOperatorCount`
 
 ### Cache
-- `_JUMPER_CACHE` — in-process dict TTL 5 นาที
+- `_JUMPER_EXCEL_CACHE` — in-process dict TTL 5 นาที
+
+> ⚠️ **Data Flow เดิม (legacy, ยังไม่ลบโค้ด แต่ frontend ไม่เรียกแล้ว):**
+> ```
+> CSA co NiSE project → npm run fetch/push → data_*.json บน OneDrive (jumper-data/ folder)
+>   → /api/jumper-data (cache: _JUMPER_CACHE) → ไม่มี frontend code เรียกใช้แล้ว
+> ```
+> เปลี่ยนมาอ่าน Excel ตรง (`/api/jumper-excel`) แทน — ดู [Data Source](#data-source) ด้านบน
 
 ### Frontend components
 | ฟังก์ชัน | หน้าที่ |
 |---|---|
-| `initJumperTab()` | Lazy-load ครั้งเดียว ต่อ session, fetch `/api/jumper-data` |
+| `initJumperTab()` | Lazy-load ครั้งเดียว ต่อ session, fetch `/api/jumper-excel` |
 | `normalizeJumperRows(byBu)` | Flatten `{bu: rows[]}` → flat array |
 | `renderJumperSummaryCards()` | 3-row summary: KPI cards, BU mini-cards, Training donuts |
 | `_makeJumperBarChart()` | Chart.js bar chart (จำนวนคน, avg skill) |
@@ -458,6 +472,7 @@ CSA co NiSE project
 | `ADMIN_DOOR_PASSWORD` | รหัสผ่านประตู Admin Sign In | ✓ |
 | `ADMIN_EMAIL` | Email ที่อนุญาตให้เข้า Admin (case-insensitive) | ✓ |
 | `SESSION_TYPE` | `filesystem` (local เท่านั้น) — ไม่ใส่บน Vercel | local only |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | L2 shared cache (Vercel KV / Upstash Redis) — ดู [`kv_store.py`](kv_store.py) | optional — ไม่มีก็ทำงานได้ fallback ไป Graph API ตรง |
 
 **ข้อสำคัญ**:
 - `REDIRECT_URI` ต้องตรงกับที่ลงทะเบียนไว้ใน Azure App Registration
@@ -558,7 +573,8 @@ python app.py
 
 ## ความสัมพันธ์กับโปรเจ็คอื่น
 
-โปรเจ็คนี้เป็น **consumer** ของข้อมูลจาก `CSA co NiSE` (โปรเจ็คแยก):
+โปรเจ็คนี้เคยเป็น **consumer** ของข้อมูลจาก `CSA co NiSE` (โปรเจ็คแยก) ผ่าน `/api/jumper-data`:
 - `CSA co NiSE` ดึงข้อมูลจากระบบ NiSE แล้วอัปโหลดขึ้น OneDrive (`npm run fetch && npm run push`)
-- โปรเจ็คนี้อ่านไฟล์เหล่านั้นผ่าน `/api/jumper-data` เพื่อแสดงแท็บ Jumper Skill
 - ทั้งสองโปรเจ็คใช้ `MANAGER_REFRESH_TOKEN` ตัวเดียวกัน (ควร copy ค่าเดียวกัน)
+
+> ⚠️ **`/api/jumper-data` ไม่มี frontend code เรียกใช้แล้ว** (Jumper tab เปลี่ยนไปอ่าน `Jumper_Monitoring.xlsx` ตรงผ่าน `/api/jumper-excel` แทน — ดู [Jumper Skill Tab](#jumper-skill-tab)) ความสัมพันธ์กับ `CSA co NiSE` ในแง่ของ tab นี้จึงไม่ active แล้วในโค้ดปัจจุบัน — ถ้า `CSA co NiSE` ยังรันอยู่เพื่อจุดประสงค์อื่น ควรเช็คกับทีมที่ดูแลโปรเจ็คนั้นแยก

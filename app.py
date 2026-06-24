@@ -45,6 +45,7 @@ from config import (
     TRAINER_TOP3_TABLE,
 )
 from business_rules import calculate_status
+from kv_store import kv_delete, kv_get, kv_set
 from graph_excel import (
     GraphExcelError,
     TokenExpiredError,
@@ -454,6 +455,37 @@ def door_unlock():
 # Routes — API
 # ---------------------------------------------------------------------------
 
+# New Operator: cache raw Excel rows only (never the calculated status — that
+# depends on the per-request `holiday` query args + "today", so it must always
+# be recomputed). One cache slot per department/workbook. L1: in-process dict.
+# L2: shared KV. Falls back to a live Graph API fetch if both miss.
+_NEWOP_CACHE: dict = {}
+_NEWOP_CACHE_TTL = 300  # seconds
+
+
+def _get_newop_employees_cached(department_key, department):
+    now = time.time()
+    cached = _NEWOP_CACHE.get(department_key)
+    if cached and now < cached.get('exp', 0):
+        return cached['data']
+
+    kv_key = f'newop_employees_{department_key}'
+    kv_rows = kv_get(kv_key)
+    if kv_rows is not None:
+        _NEWOP_CACHE[department_key] = {'data': kv_rows, 'exp': now + _NEWOP_CACHE_TTL}
+        return kv_rows
+
+    _, employees = call_graph(get_table_rows, department)
+    _NEWOP_CACHE[department_key] = {'data': employees, 'exp': now + _NEWOP_CACHE_TTL}
+    kv_set(kv_key, employees, ttl_seconds=_NEWOP_CACHE_TTL)
+    return employees
+
+
+def _invalidate_newop_cache(department_key):
+    _NEWOP_CACHE.pop(department_key, None)
+    kv_delete(f'newop_employees_{department_key}')
+
+
 @app.route("/api/me")
 def api_me():
     print(f"[API/ME] Session keys: {list(session.keys())}")
@@ -489,7 +521,7 @@ def api_list_employees(department_key):
 
     holidays = request.args.getlist("holiday")
     try:
-        _, employees = call_graph(get_table_rows, department)
+        employees = _get_newop_employees_cached(department_key, department)
         enriched = []
         for employee in employees:
             calc = calculate_status(employee, holidays)
@@ -546,6 +578,7 @@ def api_create_employee(department_key):
             "CSA Start Date": payload.get("CSA Start Date", ""),
         }
         created = call_graph(create_employee, department, record)
+        _invalidate_newop_cache(department_key)
         return jsonify({"message": "Created", "employee": created})
     except AuthError as exc:
         return _auth_error_response(exc)
@@ -575,6 +608,7 @@ def api_update_employee(department_key, employee_id):
         calc = calculate_status(payload, holidays)
         updated = call_graph(update_employee, department, employee_id, payload)
         updated["calculated"] = calc
+        _invalidate_newop_cache(department_key)
         return jsonify({"message": "Updated", "employee": updated})
     except AuthError as exc:
         return _auth_error_response(exc)
@@ -788,7 +822,11 @@ def _build_jumper_excel_payload(jumper_rows: list, sew_rows: list) -> dict:
 @app.route('/api/jumper-excel')
 def api_jumper_excel():
     """Return Jumper data from Jumper_Monitoring.xlsx on OneDrive.
-    Cached in-process for 5 minutes to minimise Graph API round-trips."""
+    L1: in-process dict (fastest, per-instance, lost on cold start). L2: shared
+    KV (cross-instance — saves redundant Graph API hits when many serverless
+    instances are cold at once). Falls back to a live Graph API fetch if both
+    miss; KV itself degrades to a no-op if unavailable, so a KV outage never
+    breaks this endpoint."""
     _, error = require_token()
     if error:
         return error
@@ -796,11 +834,18 @@ def api_jumper_excel():
     now = time.time()
     if _JUMPER_EXCEL_CACHE.get('data') and now < _JUMPER_EXCEL_CACHE.get('exp', 0):
         return jsonify(_JUMPER_EXCEL_CACHE['data'])
+
+    kv_payload = kv_get('jumper_excel')
+    if kv_payload is not None:
+        _JUMPER_EXCEL_CACHE = {'data': kv_payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(kv_payload)
+
     try:
-        token                    = _get_manager_access_token()
-        jumper_rows, sew_rows    = _fetch_jumper_excel_data(token)
-        payload                  = _build_jumper_excel_payload(jumper_rows, sew_rows)
-        _JUMPER_EXCEL_CACHE      = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        token                 = _get_manager_access_token()
+        jumper_rows, sew_rows = _fetch_jumper_excel_data(token)
+        payload               = _build_jumper_excel_payload(jumper_rows, sew_rows)
+        _JUMPER_EXCEL_CACHE   = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        kv_set('jumper_excel', payload, ttl_seconds=_JUMPER_CACHE_TTL)
         return jsonify(payload)
     except Exception as exc:
         print(f'[JUMPER-EXCEL] /api/jumper-excel error: {exc}')
@@ -809,7 +854,9 @@ def api_jumper_excel():
 
 @app.route('/api/trainer-excel')
 def api_trainer_excel():
-    """Return Trainer data from Trainer_Monitoring.xlsx on OneDrive. Cached 5 min."""
+    """Return Trainer data from Trainer_Monitoring.xlsx on OneDrive.
+    L1 (in-process) -> L2 (shared KV) -> live Graph API fetch fallback. Read-only
+    tab, no write endpoints, so no invalidation needed — TTL alone keeps it fresh."""
     _, error = require_token()
     if error:
         return error
@@ -817,6 +864,12 @@ def api_trainer_excel():
     now = time.time()
     if _TRAINER_EXCEL_CACHE.get('data') and now < _TRAINER_EXCEL_CACHE.get('exp', 0):
         return jsonify(_TRAINER_EXCEL_CACHE['data'])
+
+    kv_payload = kv_get('trainer_excel')
+    if kv_payload is not None:
+        _TRAINER_EXCEL_CACHE = {'data': kv_payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(kv_payload)
+
     try:
         token = _get_manager_access_token()
         share_id = encode_sharing_url(TRAINER_EXCEL_SHARE_URL)
@@ -950,6 +1003,7 @@ def api_trainer_excel():
 
         payload = {'trainers': trainers, 'setup': setup, 'top3': top3, 'skills': skills}
         _TRAINER_EXCEL_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        kv_set('trainer_excel', payload, ttl_seconds=_JUMPER_CACHE_TTL)
         return jsonify(payload)
     except Exception as exc:
         print(f'[TRAINER-EXCEL] error: {exc}')
@@ -1313,7 +1367,10 @@ def _build_gica_payload(rows: list, freq_rows: list = None, kpi_by_bu: dict = No
 
 @app.route('/api/gica-excel')
 def api_gica_excel():
-    """Return GICA assessment data from GICA.xlsx on OneDrive. Cached 5 min."""
+    """Return GICA assessment data from GICA.xlsx on OneDrive.
+    L1 (in-process) -> L2 (shared KV) -> live Graph API fetch fallback.
+    Write endpoints below invalidate both L1 and L2 so edits show up immediately
+    instead of waiting out the TTL."""
     _, error = require_token()
     if error:
         return error
@@ -1321,11 +1378,18 @@ def api_gica_excel():
     now = time.time()
     if _GICA_CACHE.get('data') and now < _GICA_CACHE.get('exp', 0):
         return jsonify(_GICA_CACHE['data'])
+
+    kv_payload = kv_get('gica_excel')
+    if kv_payload is not None:
+        _GICA_CACHE = {'data': kv_payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(kv_payload)
+
     try:
         token   = _get_manager_access_token()
         rows, freq_rows, kpi_by_bu = _fetch_gica_excel_data(token)
         payload = _build_gica_payload(rows, freq_rows, kpi_by_bu)
         _GICA_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        kv_set('gica_excel', payload, ttl_seconds=_JUMPER_CACHE_TTL)
         return jsonify(payload)
     except Exception as exc:
         print(f'[GICA] /api/gica-excel error: {exc}')
@@ -1415,6 +1479,7 @@ def api_gica_create_employee(bu):
         created = call_graph(_gica_write_create, bu, record)
         global _GICA_CACHE
         _GICA_CACHE = {}
+        kv_delete('gica_excel')
         return jsonify({'message': 'Created', 'employee': created})
     except AuthError as exc:
         return _auth_error_response(exc)
@@ -1447,11 +1512,67 @@ def api_gica_add_result(bu, empid):
                               meas_pct / 100, insp_pct / 100, assess_date)
         global _GICA_CACHE
         _GICA_CACHE = {}
+        kv_delete('gica_excel')
         return jsonify({'message': 'Saved', 'employee': updated})
     except AuthError as exc:
         return _auth_error_response(exc)
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
+
+
+# ── Admin: Force Refresh (emergency cache bust for all 4 modules) ──────────────
+# Cooldown is tracked in KV (not just in-process) so it holds even across
+# Vercel serverless instances/cold starts — admin in instance A can't bypass
+# the cooldown just by hitting instance B a second later.
+_FORCE_REFRESH_COOLDOWN = _JUMPER_CACHE_TTL  # 300s — same window as the caches it clears
+
+
+def _force_refresh_remaining_seconds():
+    last_at = kv_get('force_refresh_last_at')
+    if not last_at:
+        return 0
+    remaining = _FORCE_REFRESH_COOLDOWN - (time.time() - last_at)
+    return max(0, round(remaining))
+
+
+@app.route('/api/admin/force-refresh-status')
+def api_force_refresh_status():
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('admin',))
+    if deny:
+        return deny
+    return jsonify({'remainingSeconds': _force_refresh_remaining_seconds()})
+
+
+@app.route('/api/admin/force-refresh', methods=['POST'])
+def api_force_refresh():
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('admin',))
+    if deny:
+        return deny
+
+    remaining = _force_refresh_remaining_seconds()
+    if remaining > 0:
+        return jsonify({'error': 'Force Refresh is on cooldown', 'remainingSeconds': remaining}), 429
+
+    global _GICA_CACHE, _JUMPER_EXCEL_CACHE, _TRAINER_EXCEL_CACHE, _NEWOP_CACHE
+    _GICA_CACHE = {}
+    _JUMPER_EXCEL_CACHE = {}
+    _TRAINER_EXCEL_CACHE = {}
+    _NEWOP_CACHE = {}
+    kv_delete('gica_excel')
+    kv_delete('jumper_excel')
+    kv_delete('trainer_excel')
+    for dept_key in DEPARTMENTS.keys():
+        kv_delete(f'newop_employees_{dept_key}')
+
+    kv_set('force_refresh_last_at', time.time(), ttl_seconds=_FORCE_REFRESH_COOLDOWN)
+    print('[ADMIN] Force Refresh triggered — all caches invalidated', flush=True)
+    return jsonify({'message': 'Refreshed', 'remainingSeconds': _FORCE_REFRESH_COOLDOWN})
 
 
 @app.route('/api/jumper-data')

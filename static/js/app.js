@@ -13,6 +13,11 @@ const TRANSLATIONS = {
     holidaySection:         'กำหนดวันหยุดพิเศษ',
     addHoliday:             'เพิ่มวันหยุด',
     holidayHint:            'ระบบจะไม่นับวันอาทิตย์และวันหยุดพิเศษในการคำนวณ Remaining Days',
+    forceRefreshSection:    'Force Refresh (ใช้กรณีฉุกเฉิน)',
+    forceRefreshBtn:        'Force Refresh',
+    forceRefreshHint:       'ใช้เมื่อมีการแก้ไขข้อมูลใน Excel โดยตรงและต้องการให้ระบบดึงข้อมูลใหม่ทันที ปกติระบบจะอัปเดตข้อมูลอัตโนมัติภายใน 5 นาทีอยู่แล้ว',
+    forceRefreshWaiting:    'รออีก',
+    forceRefreshSuccess:    '✓ ดำเนินการ Force Refresh เรียบร้อยแล้ว',
     backHome:               '← กลับหน้าแรก',
     refresh:                'โหลดใหม่',
     total:                  'ทั้งหมด',
@@ -149,6 +154,11 @@ const TRANSLATIONS = {
     holidaySection:         'Configure Special Holidays',
     addHoliday:             'Add Holiday',
     holidayHint:            'Sundays and special holidays are excluded from the Remaining Days calculation.',
+    forceRefreshSection:    'Force Refresh (Emergency Use)',
+    forceRefreshBtn:        'Force Refresh',
+    forceRefreshHint:       'Use this when data was edited directly in Excel and you need it reflected immediately. The system normally refreshes automatically within 5 minutes.',
+    forceRefreshWaiting:    'Wait',
+    forceRefreshSuccess:    '✓ Force Refresh completed successfully',
     backHome:               '← Back to Home',
     refresh:                'Refresh',
     total:                  'Total',
@@ -285,6 +295,11 @@ const TRANSLATIONS = {
     holidaySection:         'ກຳນົດວັນຫຍຸດພິເສດ',
     addHoliday:             'ເພີ່ມວັນຫຍຸດ',
     holidayHint:            'ລະບົບຈະບໍ່ນັບວັນອາທິດ ແລະ ວັນຫຍຸດພິເສດໃນການຄຳນວນ Remaining Days',
+    forceRefreshSection:    'ໂຫຼດໃໝ່ແບບບັງຄັບ (ໃຊ້ກໍລະນີສຸກເສີນ)',
+    forceRefreshBtn:        'Force Refresh',
+    forceRefreshHint:       'ໃຊ້ເມື່ອມີການແກ້ໄຂຂໍ້ມູນໃນ Excel ໂດຍກົງ ແລະ ຕ້ອງການໃຫ້ລະບົບດຶງຂໍ້ມູນໃໝ່ທັນທີ ປົກກະຕິລະບົບຈະອັບເດດອັດຕະໂນມັດພາຍໃນ 5 ນາທີ',
+    forceRefreshWaiting:    'ລໍຖ້າ',
+    forceRefreshSuccess:    '✓ Force Refresh ສຳເລັດແລ້ວ',
     backHome:               '← ກັບໄປໜ້າຫຼັກ',
     refresh:                'ໂຫຼດໃໝ່',
     total:                  'ທັງໝົດ',
@@ -421,6 +436,11 @@ const TRANSLATIONS = {
     holidaySection:         'Cấu hình ngày nghỉ đặc biệt',
     addHoliday:             'Thêm ngày nghỉ',
     holidayHint:            'Hệ thống sẽ không tính Chủ nhật và ngày nghỉ đặc biệt khi tính Remaining Days.',
+    forceRefreshSection:    'Force Refresh (Dùng khi khẩn cấp)',
+    forceRefreshBtn:        'Force Refresh',
+    forceRefreshHint:       'Dùng khi dữ liệu được sửa trực tiếp trong Excel và cần cập nhật ngay. Hệ thống thường tự động làm mới trong vòng 5 phút.',
+    forceRefreshWaiting:    'Chờ',
+    forceRefreshSuccess:    '✓ Force Refresh đã hoàn tất',
     backHome:               '← Về trang chủ',
     refresh:                'Làm mới',
     total:                  'Tổng',
@@ -686,11 +706,73 @@ function initLang() {
 
 // ===== ADMIN FAB / MODAL =====
 function initAdmin() {
-  $('adminBtn').onclick = () => $('adminModal').classList.remove('hidden');
+  $('adminBtn').onclick = () => {
+    $('adminModal').classList.remove('hidden');
+    if (currentRole === 'admin') _syncForceRefreshStatus();
+  };
   $('closeAdminBtn').onclick = closeAdmin;
   $('adminModal').onclick = (e) => { if (e.target === $('adminModal')) closeAdmin(); };
+  $('forceRefreshBtn').onclick = _triggerForceRefresh;
 }
 function closeAdmin() { $('adminModal').classList.add('hidden'); }
+
+// ===== FORCE REFRESH (Admin Sign In only — emergency cache bust for all 4 modules) =====
+let _forceRefreshTimer = null;
+
+function _setForceRefreshCountdown(seconds) {
+  const btn = $('forceRefreshBtn');
+  const label = $('forceRefreshCountdown');
+  if (_forceRefreshTimer) { clearInterval(_forceRefreshTimer); _forceRefreshTimer = null; }
+  let remaining = Math.max(0, Math.round(seconds));
+  const tick = () => {
+    if (remaining <= 0) {
+      if (_forceRefreshTimer) { clearInterval(_forceRefreshTimer); _forceRefreshTimer = null; }
+      btn.disabled = false;
+      label.textContent = '';
+      return;
+    }
+    btn.disabled = true;
+    const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const ss = String(remaining % 60).padStart(2, '0');
+    label.textContent = `${t('forceRefreshWaiting')} ${mm}:${ss}`;
+    remaining--;
+  };
+  tick();
+  if (remaining > 0) _forceRefreshTimer = setInterval(tick, 1000);
+}
+
+let _forceRefreshMsgTimer = null;
+
+// showMessage() writes to #messageBox, which sits behind the modal overlay and
+// is invisible while Admin Settings is open — show feedback inline instead.
+function _showForceRefreshFeedback(text, isError = false) {
+  const el = $('forceRefreshMsg');
+  if (_forceRefreshMsgTimer) { clearTimeout(_forceRefreshMsgTimer); _forceRefreshMsgTimer = null; }
+  el.textContent = text;
+  el.classList.remove('hidden', 'inline-feedback--ok', 'inline-feedback--error');
+  el.classList.add(isError ? 'inline-feedback--error' : 'inline-feedback--ok');
+  _forceRefreshMsgTimer = setTimeout(() => el.classList.add('hidden'), 5000);
+}
+
+async function _syncForceRefreshStatus() {
+  try {
+    const data = await api('/api/admin/force-refresh-status');
+    _setForceRefreshCountdown(data.remainingSeconds || 0);
+  } catch (err) { /* non-critical — leave button as-is on failure */ }
+}
+
+async function _triggerForceRefresh() {
+  try {
+    const data = await api('/api/admin/force-refresh', { method: 'POST' });
+    _setForceRefreshCountdown(data.remainingSeconds || 0);
+    _showForceRefreshFeedback(t('forceRefreshSuccess'));
+  } catch (err) {
+    if (err.data && err.data.remainingSeconds != null) {
+      _setForceRefreshCountdown(err.data.remainingSeconds);
+    }
+    _showForceRefreshFeedback(err.message || 'Force Refresh failed', true);
+  }
+}
 
 // ===== REGISTER MODAL =====
 function initRegisterModal() {
@@ -735,6 +817,7 @@ async function api(path, options = {}) {
     const err = new Error(data.error || `Request failed: ${res.status}`);
     err.status = res.status;
     err.loginRequired = !!data.login_required || res.status === 401;
+    err.data = data;
     throw err;
   }
   return data;
@@ -2677,6 +2760,9 @@ async function init() {
   // and switchTab() additionally hides it while on the GICA tab (see initTabBar).
   _adminBtnAllowedByRole = !isViewOnly;
   if (_adminBtnAllowedByRole) show($('adminBtn'));
+  // Force Refresh is Admin Sign In only — csa_user/qe_user never see it, even
+  // though they can open the Admin Settings modal for holidays.
+  $('forceRefreshSection')?.classList.toggle('hidden', currentRole !== 'admin');
 
   // Role-based tab visibility: CSA roles never see GICA; QE roles see ONLY GICA;
   // admin sees everything (no filtering needed).

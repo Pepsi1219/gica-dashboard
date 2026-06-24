@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=138" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=139" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -142,6 +142,16 @@
       </div>
       <div id="holidayList" class="chips"></div>
       <p class="hint" data-i18n="holidayHint">ระบบจะไม่นับวันอาทิตย์และวันหยุดพิเศษในการคำนวณ Remaining Days</p>
+
+      <div id="forceRefreshSection" class="hidden">
+        <h3 data-i18n="forceRefreshSection">Force Refresh (ใช้กรณีฉุกเฉิน)</h3>
+        <div class="row">
+          <button id="forceRefreshBtn" type="button" data-i18n="forceRefreshBtn">Force Refresh</button>
+          <span id="forceRefreshCountdown" class="hint"></span>
+        </div>
+        <p id="forceRefreshMsg" class="hint hidden"></p>
+        <p class="hint" data-i18n="forceRefreshHint">ใช้เมื่อมีการแก้ไขข้อมูลใน Excel โดยตรงและต้องการให้ระบบดึงข้อมูลใหม่ทันที ปกติระบบจะอัปเดตข้อมูลอัตโนมัติภายใน 5 นาทีอยู่แล้ว</p>
+      </div>
     </div>
   </div>
 
@@ -808,6 +818,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=300"></script>
+  <script src="/static/js/app.js?v=302"></script>
 </body>
 </html>
