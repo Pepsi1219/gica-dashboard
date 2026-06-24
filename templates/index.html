@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=139" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=147" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -186,7 +186,7 @@
           <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">CSA Sign In</h3>
           <button id="csaViewBtn" class="login-btn">View Mode</button>
-          <button id="csaMsBtn" class="login-btn login-btn--disabled" disabled title="ยังไม่เปิดใช้งาน">CSA Edit Mode</button>
+          <button id="csaMsBtn" class="login-btn login-btn--disabled" disabled title="ยังไม่เปิดใช้งาน">Edit Mode</button>
           <p id="csaViewError" class="login-error hidden"></p>
         </div>
 
@@ -195,7 +195,7 @@
           <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">QE Sign In</h3>
           <button id="qeViewBtn" class="login-btn">View Mode</button>
-          <button id="qeEditBtn" class="login-btn" data-door="qe">QE Edit Mode</button>
+          <button id="qeEditBtn" class="login-btn" data-door="qe">Edit Mode</button>
           <p id="qeViewError" class="login-error hidden"></p>
         </div>
 
@@ -276,75 +276,7 @@
         <button id="refreshBtn" data-i18n="refresh">Refresh</button>
       </div>
 
-      <div id="messageBox" class="message hidden"></div>
-
-      <section class="stats">
-        <div class="stat"><strong id="totalCount">0</strong><span data-i18n="total">Total</span></div>
-        <div class="stat ok">
-          <strong id="onTrackCount">0</strong>
-          <span data-i18n="congratulations">สำเร็จการฝึก</span>
-          <div class="stat-sub">
-            <div class="stat-sub-row ok">
-              <strong id="completedOnTimeCount">0</strong>
-              <span data-i18n="statusOnTime">ตรงเวลา</span>
-            </div>
-            <div class="stat-sub-row ok">
-              <strong id="completedOverdueCount">0</strong>
-              <span data-i18n="statusOverdue">เกินกำหนด</span>
-            </div>
-          </div>
-        </div>
-        <div class="stat training">
-          <strong id="trainingCount">0</strong>
-          <span data-i18n="training">กำลังฝึก</span>
-          <div class="stat-sub">
-            <div class="stat-sub-row training">
-              <strong id="underOpCount">0</strong>
-              <span data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</span>
-            </div>
-            <div class="stat-sub-row training">
-              <strong id="underBasicCount">0</strong>
-              <span data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</span>
-            </div>
-          </div>
-        </div>
-        <div class="stat danger">
-          <strong id="overdueCount">0</strong>
-          <span data-i18n="resignation">การลาออก</span>
-          <div class="stat-sub">
-            <div class="stat-sub-row danger">
-              <strong id="resignOpCount">0</strong>
-              <span data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</span>
-            </div>
-            <div class="stat-sub-row danger">
-              <strong id="resignBasicCount">0</strong>
-              <span data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</span>
-            </div>
-            <div class="stat-sub-row danger">
-              <strong id="resignBeforeBasicCount">0</strong>
-              <span data-i18n="statusResignBeforeBasic">ลาออกก่อนฝึกพื้นฐาน</span>
-            </div>
-          </div>
-        </div>
-        <div class="stat transfer">
-          <strong id="transferCount">0</strong>
-          <span data-i18n="transferred">การโอนย้าย</span>
-          <div class="stat-sub">
-            <div class="stat-sub-row transfer">
-              <strong id="transferOpCount">0</strong>
-              <span data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</span>
-            </div>
-            <div class="stat-sub-row transfer">
-              <strong id="transferBasicCount">0</strong>
-              <span data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</span>
-            </div>
-            <div class="stat-sub-row transfer">
-              <strong id="transferBeforeBasicCount">0</strong>
-              <span data-i18n="statusTransferBeforeBasic">โอนย้ายก่อนฝึกพื้นฐาน</span>
-            </div>
-          </div>
-        </div>
-      </section>
+      <section id="newop-stats"></section>
 
       <!-- Employee Data Card -->
       <section class="card employee-data-card">
@@ -397,6 +329,22 @@
             </thead>
             <tbody id="employeeTableBody"></tbody>
           </table>
+        </div>
+        <div class="jtp-pagination">
+          <span id="newop-rangeLabel" class="jtp-range-label"></span>
+          <div class="jtp-page-size-group">
+            <label class="jtp-page-size-label" for="newop-pageSize">Show per page</label>
+            <select id="newop-pageSize" class="jtp-page-size-select">
+              <option value="10" selected>10</option>
+              <option value="25" >25</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+          <div class="jtp-page-nav">
+            <button id="newop-prevPage" class="jtp-nav-btn">‹</button>
+            <span id="newop-pageLabel" class="jtp-page-label"></span>
+            <button id="newop-nextPage" class="jtp-nav-btn">›</button>
+          </div>
         </div>
       </section>
     </section>
@@ -818,6 +766,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=302"></script>
+  <script src="/static/js/app.js?v=315"></script>
 </body>
 </html>

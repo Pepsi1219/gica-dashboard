@@ -572,6 +572,10 @@ let currentDepartment = null;
 let currentEmployeeId = null;
 let currentFilter     = '';
 let currentYearFilter = '';
+const _newOpTableState = { page: 1, pageSize: 10 };
+const _trendCharts = {}; // Chart.js instances for Monthly Trend cards, keyed by scope ('home', or a dept key)
+const _deptAnalyticsState = {}; // per-department analytics state: { [deptKey]: { cardExpanded, trendVisibility } }
+const DEPT_DAY_MODE = { EA: '5d' }; // EA runs a 5-day work week; every other BU runs 6-day
 let departments       = [];
 let holidays          = JSON.parse(localStorage.getItem('specialHolidays') || '[]');
 let lastEmployees     = [];
@@ -659,6 +663,7 @@ function applyTheme(theme) {
     ['gica-scheduleChart', 'gica-scheduleChartRight'].forEach(id => {
       if (_gicaCharts[id]) _gicaCharts[id].update();
     });
+    Object.values(_trendCharts).forEach(ch => { try { ch.update(); } catch (_) {} });
   }
 }
 
@@ -743,8 +748,24 @@ function _setForceRefreshCountdown(seconds) {
 
 let _forceRefreshMsgTimer = null;
 
-// showMessage() writes to #messageBox, which sits behind the modal overlay and
-// is invisible while Admin Settings is open — show feedback inline instead.
+// showToast() pops a small fixed-position banner (bottom-center, single
+// green style — same as GICA's "saving..." notification) instead of writing
+// into a persistent inline box, so it doesn't eat layout space.
+function showToast(text) {
+  let toast = document.getElementById('app-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'app-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = text;
+  toast.classList.add('toast--show');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove('toast--show'), 2500);
+}
+
+// Admin Settings keeps its own inline feedback line (rather than the global
+// toast) so the result is anchored right next to the button that was clicked.
 function _showForceRefreshFeedback(text, isError = false) {
   const el = $('forceRefreshMsg');
   if (_forceRefreshMsgTimer) { clearTimeout(_forceRefreshMsgTimer); _forceRefreshMsgTimer = null; }
@@ -796,11 +817,8 @@ function closeEditModal() { $('editModal').classList.add('hidden'); }
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 
-function showMessage(text, isError = false) {
-  const box = $('messageBox');
-  box.textContent = text;
-  box.style.borderLeftColor = isError ? '#b42318' : '#e5b300';
-  show(box);
+function showMessage(text) {
+  showToast(text);
 }
 
 function getHolidayQuery() {
@@ -1095,7 +1113,7 @@ function renderEmployeeTable(employees) {
   const body = $('employeeTableBody');
   body.innerHTML = '';
 
-  // #1 stats follow the year filter
+  // analytics block follows the year filter; table rows additionally follow the status filter
   const yearScoped = currentYearFilter
     ? employees.filter(emp => {
         const d = normalizeDateForInput(emp['CSA Start Date']);
@@ -1103,29 +1121,23 @@ function renderEmployeeTable(employees) {
       })
     : employees;
 
-  let total = yearScoped.length;
-  let completedOnTime = 0, completedOverdue = 0;
-  let underOp = 0, underBasic = 0;
-  let resignOp = 0, resignBasic = 0, resignBeforeBasic = 0;
-  let transferOp = 0, transferBasic = 0, transferBeforeBasic = 0;
+  renderDeptAnalytics(currentDepartment, employees, currentYearFilter);
 
-  yearScoped.forEach(emp => {
-    const calc = emp.calculated || {};
-    const actualKey = computeActualStatus(emp, calc);
+  const filtered = yearScoped
+    .map(emp => {
+      const calc = emp.calculated || {};
+      return { emp, calc, actualKey: computeActualStatus(emp, calc) };
+    })
+    .filter(({ actualKey }) => !currentFilter || actualKey === currentFilter);
 
-    if      (actualKey === 'completed')             completedOnTime++;
-    else if (actualKey === 'completed-overdue')     completedOverdue++;
-    else if (actualKey === 'under-operation')       underOp++;
-    else if (actualKey === 'under-basic')           underBasic++;
-    else if (actualKey === 'resign-operation')      resignOp++;
-    else if (actualKey === 'resign-basic')          resignBasic++;
-    else if (actualKey === 'resign-before-basic')   resignBeforeBasic++;
-    else if (actualKey === 'transfer-operation')    transferOp++;
-    else if (actualKey === 'transfer-basic')        transferBasic++;
-    else if (actualKey === 'transfer-before-basic') transferBeforeBasic++;
+  const st     = _newOpTableState;
+  const total  = filtered.length;
+  const pages  = Math.max(1, Math.ceil(total / st.pageSize));
+  if (st.page > pages) st.page = pages;
+  const start    = (st.page - 1) * st.pageSize;
+  const pageRows = filtered.slice(start, start + st.pageSize);
 
-    if (currentFilter && actualKey !== currentFilter) return;
-
+  pageRows.forEach(({ emp, calc, actualKey }) => {
     const tr = document.createElement('tr');
     tr.className = `actual-${actualKey}`;
     tr.dataset.employeeId = emp['Employee ID'] || '';
@@ -1133,21 +1145,14 @@ function renderEmployeeTable(employees) {
     body.appendChild(tr);
   });
 
-  $('totalCount').textContent               = total;
-  $('onTrackCount').textContent             = completedOnTime + completedOverdue;
-  $('completedOnTimeCount').textContent     = completedOnTime;
-  $('completedOverdueCount').textContent    = completedOverdue;
-  $('trainingCount').textContent            = underOp + underBasic;
-  $('underOpCount').textContent             = underOp;
-  $('underBasicCount').textContent          = underBasic;
-  $('overdueCount').textContent             = resignOp + resignBasic + resignBeforeBasic;
-  $('resignOpCount').textContent            = resignOp;
-  $('resignBasicCount').textContent         = resignBasic;
-  $('resignBeforeBasicCount').textContent   = resignBeforeBasic;
-  $('transferCount').textContent            = transferOp + transferBasic + transferBeforeBasic;
-  $('transferOpCount').textContent          = transferOp;
-  $('transferBasicCount').textContent       = transferBasic;
-  $('transferBeforeBasicCount').textContent = transferBeforeBasic;
+  const rangeEl = $('newop-rangeLabel');
+  if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} จาก ${total}` : '0 รายการ';
+  const pageEl = $('newop-pageLabel');
+  if (pageEl) pageEl.textContent = `${st.page} / ${pages}`;
+  const prevEl = $('newop-prevPage');
+  if (prevEl) prevEl.disabled = st.page <= 1;
+  const nextEl = $('newop-nextPage');
+  if (nextEl) nextEl.disabled = st.page >= pages;
 }
 
 // ===== DASHBOARD PAGE =====
@@ -1159,6 +1164,7 @@ async function loadDashboard() {
     const data = await api(`/api/${currentDepartment}/employees${query ? '?' + query : ''}`);
     lastEmployees = data.employees || [];
     populateEmpYearFilter(lastEmployees);
+    _newOpTableState.page = 1;
     renderEmployeeTable(lastEmployees);
     showMessage(t('loadedCount', { n: lastEmployees.length }));
   } catch (err) {
@@ -1265,35 +1271,113 @@ function dateDiffDays(rawA, rawB, mode) {
   return count;
 }
 
-// SVG donut chart. segments = [{value, color, label}]
-function donutSVG(segments, size) {
-  size = size || 130;
+// Truncates `text` to at most `maxChars`, appending an ellipsis — keeps the
+// callout label on a single line instead of wrapping past the card edge.
+function _truncateLabelText(text, maxChars) {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 1).trim() + '…';
+}
+
+// SVG donut chart with callout leader lines — same visual language as
+// GICA's grade-distribution donuts (label + count + pct labeled outside the
+// ring via a bent leader line, instead of a separate legend list).
+// segments = [{value, color, label}]. Center keeps the original
+// total-count + "employees" caption, unchanged.
+function donutSVG(segments) {
   const total = segments.reduce((s, seg) => s + (seg.value || 0), 0);
-  const cx = size / 2, cy = size / 2;
-  const r  = size / 2 - 12;
-  const sw = 22;
-  const C  = 2 * Math.PI * r;
 
   if (total === 0) {
-    return `<svg viewBox="0 0 ${size} ${size}" class="donut-svg">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"/>
-      <text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" fill="var(--text-muted)">${escapeHtml(t('analyticsNoData'))}</text>
+    return `<svg viewBox="0 0 255 172" class="donut-svg">
+      <circle cx="125" cy="88" r="38" fill="none" stroke="var(--border-light)" stroke-width="18"/>
+      <text x="125" y="92" text-anchor="middle" font-size="11" fill="var(--text-muted)">${escapeHtml(t('analyticsNoData'))}</text>
     </svg>`;
   }
 
-  let offset = 0;
-  const paths = segments.filter(s => s.value > 0).map(seg => {
-    const len = (seg.value / total) * C;
-    const dash = `${len} ${C - len}`;
-    const html = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${sw}" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
-    offset += len;
-    return html;
-  }).join('');
+  const CX = 125, CY = 88, R = 38, sw = 18;
+  const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
+  const gap = 1.2;
+  const FONT_LABEL = 7, FONT_PCT = 6;
+  const MAX_LABEL_CHARS = 10;
+  let acc = 0;
+  
+  const segs = [], lines = [];
+  const rightLabels = [], leftLabels = [];
 
-  return `<svg viewBox="0 0 ${size} ${size}" class="donut-svg">
-    ${paths}
-    <text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="22" font-weight="800" fill="currentColor">${total}</text>
-    <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${escapeHtml(t('analyticsEmployees'))}</text>
+  // ขั้นตอนที่ 1: คำนวณพิกัดดั้งเดิมตามธรรมชาติ และแบ่งฝั่งซ้าย-ขวาให้ชัดเจนตามมุมองศา
+  segments.filter(seg => seg.value > 0).forEach(seg => {
+    const len  = seg.value / total * CIRC;
+    const dash = Math.max(len - gap, 0.5);
+    segs.push(`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${seg.color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"/>`);
+
+    const mid = -Math.PI / 2 + (acc + len / 2) / CIRC * 2 * Math.PI;
+    const mx = CX + outerR * Math.cos(mid),         my = CY + outerR * Math.sin(mid);
+    const ex = CX + (outerR + 12) * Math.cos(mid), ey = CY + (outerR + 12) * Math.sin(mid);
+    
+    // แบ่งฝั่งจากตำแหน่งมุมจริง: ค่า x ของ ex มากกว่าหรือเท่ากับจุดศูนย์กลางคือฝั่งขวา น้อยกว่าคือฝั่งซ้าย
+    const isRight = ex >= CX;
+    const pct = Math.round(seg.value / total * 100);
+    const labelText = _truncateLabelText(seg.label, MAX_LABEL_CHARS);
+
+    const labelObj = { seg, mx, my, ex, ey, originalEy: ey, labelText, pct, value: seg.value };
+    if (isRight) {
+      rightLabels.push(labelObj);
+    } else {
+      leftLabels.push(labelObj);
+    }
+
+    acc += len;
+  });
+
+  const MIN_Y_GAP = 14; // ระยะห่างขั้นต่ำเพื่อไม่ให้ข้อความทับกัน
+
+  // ขั้นตอนที่ 2: จัดการฝั่งขวา (เรียงจากบนลงล่างตามธรรมชาติของวงกลม)
+  // ถ้าตัวถัดไปอยู่ใกล้ตัวก่อนหน้ามากเกินไป ให้ดันตัวถัดไปลงด้านล่าง
+  for (let i = 1; i < rightLabels.length; i++) {
+    if (rightLabels[i].ey - rightLabels[i-1].ey < MIN_Y_GAP) {
+      rightLabels[i].ey = rightLabels[i-1].ey + MIN_Y_GAP;
+    }
+  }
+
+  // ขั้นตอนที่ 3: จัดการฝั่งซ้าย (สำคัญมาก! กลุ่มที่ทับกันในรูปของคุณอยู่ฝั่งนี้)
+  // เนื่องจากเรียงมุมตามเข็มนาฬิกา ฝั่งซ้ายจะวิ่งจาก "ล่างขึ้นบน" 
+  // หากตัวถัดมาชิดตัวก่อนหน้า ให้ดันตัวถัดไปหลบ "ขึ้นด้านบน" หรือจัดระเบียบไม่ให้สวนทางกัน
+  for (let i = 1; i < leftLabels.length; i++) {
+    // ตรวจสอบว่าพิกัด Y ชิดกันเกินไปหรือไม่ (คิดแบบสัมบูรณ์เพื่อความแม่นยำ)
+    if (Math.abs(leftLabels[i].ey - leftLabels[i-1].ey) < MIN_Y_GAP) {
+      // ดันตำแหน่งแกน Y ของตัวที่มีปัญหาหลบออกไปตามทิศทางองศาเพื่อกระจายตัวอักษรเป็นปีกนก
+      if (leftLabels[i].originalEy < leftLabels[i-1].originalEy) {
+        leftLabels[i].ey = leftLabels[i-1].ey - MIN_Y_GAP;
+      } else {
+        leftLabels[i].ey = leftLabels[i-1].ey + MIN_Y_GAP;
+      }
+    }
+  }
+
+  // ขั้นตอนที่ 4: รวมร่างวาดเส้น Leader Line แบบกางออกข้างนอก (หันหัวไปคนละข้างอย่างแท้จริง)
+  const allLabels = [...rightLabels, ...leftLabels];
+  allLabels.forEach(d => {
+    const isRight = d.ex >= CX;
+    const hy = d.ey; // ใช้ค่า ey ที่ถูกจัดระเบียบกระจายตัวแล้ว
+    
+    // กำหนด hx ให้หันไปคนละข้างเด็ดขาด: ฝั่งขวากางออกไปขวา (+18) ฝั่งซ้ายกางออกไปซ้าย (-18)
+    const hx = d.ex + (isRight ? 18 : -18);
+    const tx = hx + (isRight ? 2 : -2);
+    const anchor = isRight ? 'start' : 'end';
+
+    lines.push(`
+      <line x1="${d.mx.toFixed(1)}" y1="${d.my.toFixed(1)}" x2="${d.ex.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${d.seg.color}" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="${d.ex.toFixed(1)}" y1="${hy.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${d.seg.color}" stroke-width="1.2" stroke-linecap="round"/>
+      <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${d.seg.color}"/>
+      <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="${FONT_LABEL}" font-weight="600" fill="var(--text)">${escapeHtml(d.labelText)}</text>
+      <text x="${tx.toFixed(1)}" y="${(hy + 10.5).toFixed(1)}" text-anchor="${anchor}" font-size="${FONT_PCT}"><tspan font-weight="700" fill="var(--text)">${d.value}</tspan><tspan fill="var(--text-muted)"> (${d.pct}%)</tspan></text>`);
+  });
+
+  return `<svg viewBox="0 0 255 172" class="donut-svg">
+    <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"/>
+    ${segs.join('')}
+    ${lines.join('')}
+    <text x="${CX}" y="${CY+3}" text-anchor="middle" font-size="18" font-weight="800" fill="currentColor">${total}</text>
+    <text x="${CX}" y="${CY+10}" text-anchor="middle" font-size="6" fill="var(--text-muted)">${escapeHtml(t('analyticsEmployees'))}</text>
   </svg>`;
 }
 
@@ -1303,11 +1387,7 @@ function donutSVG(segments, size) {
 //
 // "inTraining" event date follows user rule: prefer Operation Start if present,
 // otherwise fall back to Basic Start. Each employee contributes to at most one month.
-function computeTrendData(yearFilter, deptFilter) {
-  const employees = deptFilter
-    ? (allDeptData[deptFilter] || [])
-    : Object.values(allDeptData).flat();
-
+function computeTrendData(employees, yearFilter) {
   const joined     = new Array(12).fill(0);
   const inTraining = new Array(12).fill(0);
   const completed  = new Array(12).fill(0);
@@ -1338,98 +1418,145 @@ function computeTrendData(yearFilter, deptFilter) {
   return { joined, inTraining, completed, resigned };
 }
 
-// SVG line chart with area fill + dots. Series toggled by `visibility`.
-function trendChartSVG(data, visibility) {
-  // Wider viewBox so the chart naturally fills full desktop card width
-  // (CSS clamps height to ~380px via max-height for taste).
-  const W = 1400, H = 360;
-  const padL = 50, padR = 20, padT = 20, padB = 42;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
+// Chart.js line chart with gradient area fill. Series toggled by `visibility`.
+// Mounted (not rendered to a string) because Chart.js needs a live <canvas>;
+// call this once the card's HTML is already in the DOM. `scope` keys the
+// _trendCharts instance store ('home', or a department key) so multiple
+// Monthly Trend cards (home dashboard + each department page) can coexist.
+function mountTrendChart(scope, canvasId, data, visibility) {
+  const canvas = $(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  if (_trendCharts[scope]) { try { _trendCharts[scope].destroy(); } catch (_) {} delete _trendCharts[scope]; }
 
   const series = [
     { key: 'joined',     color: '#f59e0b', label: t('trendJoined'),    values: data.joined     },
     { key: 'inTraining', color: '#3b82f6', label: t('training'),       values: data.inTraining },
     { key: 'completed',  color: '#10b981', label: t('trendCompleted'), values: data.completed  },
     { key: 'resigned',   color: '#ef4444', label: t('trendResigned'),  values: data.resigned   },
-  ];
+  ].filter(s => visibility[s.key]);
 
-  // Y-axis scale from visible series only
-  let maxY = 0;
-  series.forEach(s => {
-    if (!visibility[s.key]) return;
-    s.values.forEach(v => { if (v > maxY) maxY = v; });
+  const ctx = canvas.getContext('2d');
+  const labels = [...Array(12)].map((_, i) => monthAbbr(i));
+
+  const datasets = series.map(s => ({
+    label: s.label,
+    data: s.values,
+    borderColor: s.color,
+    backgroundColor: (chartCtx) => {
+      const { chartArea } = chartCtx.chart;
+      if (!chartArea) return s.color + '22';
+      const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+      g.addColorStop(0, s.color + '3d');
+      g.addColorStop(1, s.color + '00');
+      return g;
+    },
+    fill: true,
+    borderWidth: 2.5,
+    tension: 0.38,
+    pointRadius: 3,
+    pointHoverRadius: 6,
+    pointBackgroundColor: s.color,
+    pointBorderColor: 'var(--surface2)',
+    pointBorderWidth: 2,
+    pointHoverBorderWidth: 2,
+  }));
+
+  _trendCharts[scope] = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0, font: { size: 12 } },
+          grid: { color: 'rgba(128,128,128,.12)' },
+          border: { display: false },
+        },
+        x: {
+          ticks: { font: { size: 13, weight: '600' } },
+          grid: { display: false },
+          border: { display: false },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(17,24,39,.92)',
+          padding: 10,
+          cornerRadius: 8,
+          titleFont: { size: 12, weight: '700' },
+          bodyFont: { size: 12 },
+          boxPadding: 4,
+          usePointStyle: true,
+        },
+      },
+    },
   });
-  let niceMax = maxY <= 5 ? 5 : Math.ceil(maxY / 5) * 5;
-
-  const xAt = (i) => padL + (i / 11) * chartW;
-  const yAt = (v) => padT + chartH - (v / niceMax) * chartH;
-
-  // Horizontal gridlines at 0%, 25%, 50%, 75%, 100%
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map(p => {
-    const val = Math.round(niceMax * p);
-    const y = yAt(val);
-    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}"
-              stroke="var(--border-light)" stroke-width="0.8"
-              stroke-dasharray="${p === 0 ? '0' : '3 4'}"/>
-            <text x="${padL - 8}" y="${y + 4}" text-anchor="end"
-              font-size="13" fill="var(--text-muted)">${val}</text>`;
-  }).join('');
-
-  // X-axis labels: all 12 months
-  const xLabels = [...Array(12)].map((_, i) => `
-    <text x="${xAt(i)}" y="${H - 16}" text-anchor="middle"
-      font-size="14" fill="var(--text-muted)" font-weight="600">${escapeHtml(monthAbbr(i))}</text>`
-  ).join('');
-
-  // For each visible series, draw area fill + line + data points
-  const seriesGfx = series.filter(s => visibility[s.key]).map(s => {
-    const pts = s.values.map((v, i) => `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`);
-    const baselineY = yAt(0).toFixed(1);
-    const areaPath  = `M ${xAt(0).toFixed(1)},${baselineY} `
-                    + `L ${pts.join(' L ')} `
-                    + `L ${xAt(11).toFixed(1)},${baselineY} Z`;
-
-    const dots = s.values.map((v, i) => `
-      <circle cx="${xAt(i).toFixed(1)}" cy="${yAt(v).toFixed(1)}"
-        r="5" fill="${s.color}" stroke="var(--surface2)" stroke-width="2">
-        <title>${escapeHtml(s.label)} · ${escapeHtml(monthAbbr(i))}: ${v}</title>
-      </circle>`).join('');
-
-    return `
-      <path d="${areaPath}" fill="${s.color}" opacity="0.13"/>
-      <polyline points="${pts.join(' ')}" fill="none"
-        stroke="${s.color}" stroke-width="3"
-        stroke-linejoin="round" stroke-linecap="round"/>
-      ${dots}`;
-  }).join('');
-
-  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg"
-            preserveAspectRatio="xMidYMid meet" role="img">
-    ${ticks}
-    ${xLabels}
-    ${seriesGfx}
-  </svg>`;
 }
 
-// Build a chart card (donut + legend)
-function chartCard(title, segments) {
-  const total = segments.reduce((s, seg) => s + (seg.value || 0), 0);
-  const legend = segments.map(seg => {
-    const pct = total > 0 ? (seg.value / total * 100).toFixed(1) : 0;
-    return `
-      <div class="legend-row">
-        <span class="legend-dot" style="background:${seg.color}"></span>
-        <span class="legend-label">${escapeHtml(seg.label)}</span>
-        <span class="legend-count">${seg.value} <span class="pct-sm">(${pct}%)</span></span>
-      </div>`;
-  }).join('');
+// Converts a 6-digit hex color to an rgba() string. Used instead of CSS
+// color-mix() for the trend-dot glow — html2canvas (Overall Dashboard PNG/PDF
+// export) can't parse color-mix() and throws "unsupported color function".
+function _hexToRgba(hex, alpha) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
 
+// Builds the Monthly Trend card markup. `idSuffix` scopes every internal id
+// (year/dept selects, toggle group, canvas) so the home-dashboard instance
+// and each department-page instance can coexist in the DOM without
+// getElementById collisions. Pass deptOptionsHtml = null to omit the dept
+// select entirely (department dashboards are already scoped to one BU).
+function trendCardHtml({ trendData, trendVisibility, yearOptionsHtml, deptOptionsHtml, idSuffix }) {
+  const trendSeries = [
+    { key: 'joined',     color: '#f59e0b', label: t('trendJoined')    },
+    { key: 'inTraining', color: '#3b82f6', label: t('training')       },
+    { key: 'completed',  color: '#10b981', label: t('trendCompleted') },
+    { key: 'resigned',   color: '#ef4444', label: t('trendResigned')  },
+  ];
+  const trendToggles = trendSeries.map(ts => `
+    <button type="button"
+      class="trend-toggle${trendVisibility[ts.key] ? ' active' : ''}"
+      data-series="${ts.key}"
+      style="--tt-color:${ts.color}; --tt-shadow:${_hexToRgba(ts.color, 0.18)}">
+      <span class="trend-dot" style="background:${ts.color}"></span>
+      <span>${escapeHtml(ts.label)}</span>
+    </button>`).join('');
+
+  return `
+    <div class="trend-chart-card">
+      <div class="trend-header">
+        <div class="trend-header-left">
+          <h4><i class="ti ti-chart-line trend-header-icon" aria-hidden="true"></i>${escapeHtml(t('trendTitle'))}</h4>
+          <select id="trendYearFilter-${idSuffix}" class="year-select trend-filter-sel">
+            ${yearOptionsHtml}
+          </select>
+          ${deptOptionsHtml != null ? `
+          <select id="trendDeptFilter-${idSuffix}" class="year-select trend-filter-sel">
+            ${deptOptionsHtml}
+          </select>` : ''}
+        </div>
+        <div class="trend-toggle-group" id="trendToggleGroup-${idSuffix}">
+          ${trendToggles}
+        </div>
+      </div>
+      <div class="trend-chart-canvas-wrap">
+        <canvas id="trendMonthlyChart-${idSuffix}"></canvas>
+      </div>
+    </div>`;
+}
+
+// Build a chart card (donut with leader-line callouts — no separate legend,
+// the callouts on the ring itself carry label + count + pct)
+function chartCard(title, segments) {
   return `
     <div class="chart-card">
       <div class="chart-title">${escapeHtml(title)}</div>
       <div class="chart-svg-wrap">${donutSVG(segments)}</div>
-      <div class="chart-legend">${legend}</div>
     </div>`;
 }
 
@@ -1444,17 +1571,13 @@ function statSummary(values) {
   };
 }
 
-function computeAnalytics(yearFilter, deptFilter, dayMode) {
-  // 1.3 if deptFilter is set, only use that department's data; else aggregate all
-  const all = deptFilter
-    ? (allDeptData[deptFilter] || [])
-    : Object.values(allDeptData).flat();
+function computeAnalytics(employees, yearFilter, dayMode) {
   const filtered = yearFilter
-    ? all.filter(emp => {
+    ? employees.filter(emp => {
         const d = normalizeDateForInput(emp['CSA Start Date']);
         return d && d.slice(0, 4) === yearFilter;
       })
-    : all;
+    : employees;
 
   const totalDays = [], basicDays = [], opDays = [], resignDays = [];
   // Dynamic per-grade collectors — accept whatever grade values the Excel actually contains
@@ -1589,15 +1712,181 @@ function computeAnalytics(yearFilter, deptFilter, dayMode) {
   return result;
 }
 
-function renderAnalytics(yearFilter) {
-  const el = $('homeDashAnalytics');
-  if (!el) return;
-  if (!Object.keys(allDeptData).length) { hide(el); return; }
+// ===== ANALYTICS CARD BUILDERS (pure — shared by home dashboard + per-department dashboard) =====
 
-  const s = computeAnalytics(yearFilter, currentAnalyticsDept, currentDayMode);
+const fmtNum = (v) => (v % 1 === 0 ? v : v.toFixed(1));
+
+function fmtStatCard(stat) {
+  if (!stat) return `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
+  const avgFmt = stat.avg % 1 === 0 ? stat.avg : stat.avg.toFixed(1);
+  return `
+    <div class="ac-avg-label">${t('analyticsAvg')}</div>
+    <div class="ac-avg-value">${avgFmt} <span class="ac-unit">${t('analyticsDays')}</span></div>
+    <div class="ac-minmax">
+      <div class="ac-minmax-item">
+        <span class="ac-minmax-label">${t('analyticsMin')}</span>
+        <span class="ac-minmax-value">${stat.min} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+      </div>
+      <div class="ac-minmax-item">
+        <span class="ac-minmax-label">${t('analyticsMax')}</span>
+        <span class="ac-minmax-value">${stat.max} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+      </div>
+    </div>`;
+}
+
+// Per-grade table rows (used in Total + Op Training expand). Iterates over
+// whatever grades the data actually contains (sorted) — no hard-coded grade
+// list, so it's resilient to varied Excel input.
+function buildGradeTable(byGrade, accent) {
+  const grades = Object.keys(byGrade || {}).filter(g => byGrade[g]).sort();
+  if (!grades.length) {
+    return `<div class="ac-xt-no-data">${t('analyticsNoData')}</div>`;
+  }
+  const rows = grades.map(g => {
+    const stat = byGrade[g];
+    return `
+      <div class="ac-list-row">
+        <div><span class="ac-xt-tag" style="background:${accent}">${escapeHtml(g)}</span></div>
+        <div class="ac-xt-avg text-right" style="color:${accent}">
+          ${fmtNum(stat.avg)}
+        </div>
+        <div class="ac-xt-range text-right">${stat.min}–${stat.max}</div>
+        <div class="ac-xt-n text-right">${stat.n}</div>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="ac-data-list">
+      <div class="ac-list-header">
+        <div>${t('grade')}</div>
+        <div class="text-right">${t('analyticsAvg')}</div>
+        <div class="text-right">${t('analyticsMin')}–${t('analyticsMax')}</div>
+        <div class="text-right">n</div>
+      </div>
+      <div class="ac-list-body">
+        ${rows}
+      </div>
+    </div>
+  `;
+}
+
+// Basic → Op proceed rate panel (Basic Training card expand)
+function buildBasicProceed(bp) {
+  if (!bp || bp.pct === null) {
+    return `<div class="ac-xt-no-data">${t('analyticsNoData')}</div>`;
+  }
+  const pct      = fmtNum(bp.pct);
+  const barPct   = Math.min(bp.pct, 100); // clamp bar width ≤ 100% (ตัวเลขยังแสดงค่าจริง)
+  const barColor = 'rgba(59,130,246,.85)';
+  return `<div class="ac-proceed">
+    <div class="ac-proceed-label">${t('analyticsProceedLabel')}</div>
+    <div class="ac-proceed-value">${pct}<span class="ac-proceed-unit">%</span></div>
+    <div class="ac-proceed-bar"><div class="ac-proceed-fill" style="width:${barPct}%;background:${barColor}"></div></div>
+    <div class="ac-proceed-hint">${bp.proceeded} / ${bp.finished} ${t('analyticsProceedHint')}</div>
+  </div>`;
+}
+
+// Resign-duration breakdown by type (Resign Duration card expand)
+function buildResignDurTable(s) {
+  // 3-step red shades (darkest → lightest): resign-op, resign-basic, resign-before-basic
+  const COLOR_OP     = 'rgba(220,38,38,.92)';
+  const COLOR_BASIC  = 'rgba(248,113,113,.95)';
+  const COLOR_BEFORE = 'rgba(254,202,202,.95)';
+
+  const rows = [
+    { color: COLOR_OP,     label: t('analyticsResignOp'),         stat: s.resignByType.operation   },
+    { color: COLOR_BASIC,  label: t('analyticsResignBasic'),      stat: s.resignByType.basic       },
+    { color: COLOR_BEFORE, label: t('analyticsResignBeforeBasic'),stat: s.resignByType.beforeBasic },
+  ].map(r => {
+    // กรณีไม่มีข้อมูล (Empty State)
+    if (!r.stat) {
+      return `
+        <div class="ac-list-row ac-list-row-resign ac-xt-empty">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="ac-xt-dot" style="background:${r.color}"></span>
+            <span class="ac-xt-lbl">${escapeHtml(r.label)}</span>
+          </div>
+          <div class="ac-xt-empty-cell text-right" style="grid-column: span 3;">—</div>
+        </div>`;
+    }
+    // กรณีมีข้อมูลปกติ
+    return `
+      <div class="ac-list-row ac-list-row-resign">
+        <div style="display:flex; align-items:center; gap:6px; min-width: 0;">
+          <span class="ac-xt-dot" style="background:${r.color}"></span>
+          <span class="ac-xt-lbl">${escapeHtml(r.label)}</span>
+        </div>
+        <div class="ac-xt-avg text-right" style="color:var(--danger)">
+          ${fmtNum(r.stat.avg)}
+        </div>
+        <div class="ac-xt-range text-right">${r.stat.min}–${r.stat.max}</div>
+        <div class="ac-xt-n text-right">${r.stat.n}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="ac-data-list ac-xt-table-resign">
+      <div class="ac-list-header ac-list-row-resign">
+        <div></div> <div class="text-right">${t('analyticsAvg')}</div>
+        <div class="text-right">${t('analyticsMin')}–${t('analyticsMax')}</div>
+        <div class="text-right">N</div>
+      </div>
+      <div class="ac-list-body">${rows}</div>
+    </div>`;
+}
+
+// Resign Breakdown card: avg + min/max per grade (mini stat-card per grade)
+function buildResignAvgCard(s) {
+  const avgByGrade = s.resignAvgByGrade || {};
+  const grades = Object.keys(avgByGrade).filter(g => avgByGrade[g]).sort();
+  if (!grades.length) return `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
+  return `<div class="ac-rga-list">${grades.map(g => {
+    const stat   = avgByGrade[g];
+    const avgFmt = stat.avg % 1 === 0 ? stat.avg : stat.avg.toFixed(1);
+    return `<div class="ac-rga-grade">
+      <div class="ac-rga-grade-head">
+        <span class="ac-xt-tag" style="background:var(--danger)">${escapeHtml(g)}</span>
+        <div class="ac-avg-value ac-rga-avg-value">${avgFmt} <span class="ac-unit">${t('analyticsDays')}</span></div>
+      </div>
+      <div class="ac-minmax">
+        <div class="ac-minmax-item">
+          <span class="ac-minmax-label">${t('analyticsMin')}</span>
+          <span class="ac-minmax-value">${stat.min} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+        </div>
+        <div class="ac-minmax-item">
+          <span class="ac-minmax-label">${t('analyticsMax')}</span>
+          <span class="ac-minmax-value">${stat.max} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
+        </div>
+        <div class="ac-minmax-item">
+          <span class="ac-minmax-label">N</span>
+          <span class="ac-minmax-value">${stat.n}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// Expandable card wrapper. cardExpanded: the state object owning this card's
+// open/closed flags (module-global `cardExpanded` for the home dashboard, or
+// a per-department state object for department pages — kept separate so
+// expanding a card on one page doesn't affect the other).
+function expandShell(cardKey, toggleLabel, content, cardExpanded, btnClass = '') {
+  const open = !!cardExpanded[cardKey];
+  const extraClass = btnClass ? ` ${btnClass}` : '';
+  return `<button type="button" class="ac-expand-btn${open ? ' open' : ''}${extraClass}" data-card="${cardKey}" aria-expanded="${open}">
+    <span class="ac-expand-label">${escapeHtml(toggleLabel)}</span>
+    <span class="ac-expand-chev">▾</span>
+  </button>
+  <div class="ac-expand-content${open ? ' open' : ''}">
+    <div class="ac-expand-inner">${content}</div>
+  </div>`;
+}
+
+// charts-grid (4 donut cards) + analytics-grid (5 stat cards) — the shared
+// body of the Data Analytics block, used by both the home dashboard and each
+// department's own dashboard page.
+function _analyticsRowsHtml(s, cardExpanded) {
   const sc = s.statusCounts;
-
-  // ── Chart palette ──────────────────────────────────────────────────────
   const C = {
     grad:        'rgba(34,197,94,.88)',     // green (graduation)
     gradLight:   'rgba(167,243,208,.95)',   // light green (overdue grad)
@@ -1609,7 +1898,6 @@ function renderAnalytics(yearFilter) {
     transfer:    'rgba(168,85,247,.85)',    // purple (transfer)
   };
 
-  // Build the 4 chart datasets
   const gradTotal     = sc.completed + sc.completedOverdue;
   const trainingTotal = sc.underOp + sc.underBasic;
   const resignTotalC  = sc.resignOp + sc.resignBasic + sc.resignBeforeBasic;
@@ -1635,260 +1923,72 @@ function renderAnalytics(yearFilter) {
     { value: sc.resignBeforeBasic, color: C.resignLight, label: t('statusResignBeforeBasic') },
   ]);
 
-  const fmtStatCard = (stat) => {
-    if (!stat) return `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
-    const avgFmt = stat.avg % 1 === 0 ? stat.avg : stat.avg.toFixed(1);
-    return `
-      <div class="ac-avg-label">${t('analyticsAvg')}</div>
-      <div class="ac-avg-value">${avgFmt} <span class="ac-unit">${t('analyticsDays')}</span></div>
-      <div class="ac-minmax">
-        <div class="ac-minmax-item">
-          <span class="ac-minmax-label">${t('analyticsMin')}</span>
-          <span class="ac-minmax-value">${stat.min} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
-        </div>
-        <div class="ac-minmax-item">
-          <span class="ac-minmax-label">${t('analyticsMax')}</span>
-          <span class="ac-minmax-value">${stat.max} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
-        </div>
-      </div>`;
-  };
+  return `
+    <div class="charts-grid">
+      ${chartOverall}
+      ${chartGrad}
+      ${chartTraining}
+      ${chartResign}
+    </div>
 
-  // ── Resign Breakdown card: avg + min/max per grade (mini stat-card per grade) ─
-  const buildResignAvgCard = () => {
-    const avgByGrade = s.resignAvgByGrade || {};
-    const grades = Object.keys(avgByGrade).filter(g => avgByGrade[g]).sort();
-    if (!grades.length) return `<div class="ac-no-data">${t('analyticsNoData')}</div>`;
-    return `<div class="ac-rga-list">${grades.map(g => {
-      const stat   = avgByGrade[g];
-      const avgFmt = stat.avg % 1 === 0 ? stat.avg : stat.avg.toFixed(1);
-      return `<div class="ac-rga-grade">
-        <div class="ac-rga-grade-head">
-          <span class="ac-xt-tag" style="background:var(--danger)">${escapeHtml(g)}</span>
-          <div class="ac-avg-value ac-rga-avg-value">${avgFmt} <span class="ac-unit">${t('analyticsDays')}</span></div>
-        </div>
-        <div class="ac-minmax">
-          <div class="ac-minmax-item">
-            <span class="ac-minmax-label">${t('analyticsMin')}</span>
-            <span class="ac-minmax-value">${stat.min} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
-          </div>
-          <div class="ac-minmax-item">
-            <span class="ac-minmax-label">${t('analyticsMax')}</span>
-            <span class="ac-minmax-value">${stat.max} <span class="ac-minmax-unit">${t('analyticsDays')}</span></span>
-          </div>
-          <div class="ac-minmax-item">
-            <span class="ac-minmax-label">N</span>
-            <span class="ac-minmax-value">${stat.n}</span>
-          </div>
-        </div>
-      </div>`;
-    }).join('')}</div>`;
-  };
+    <div class="analytics-grid">
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsTotalTraining')}</span></div>
+        ${fmtStatCard(s.total)}
+        ${expandShell('total', t('analyticsExpandGrade'), buildGradeTable(s.totalByGrade, 'rgba(59,130,246,.92)'), cardExpanded)}
+      </div>
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsBasicTraining')}</span></div>
+        ${fmtStatCard(s.basic)}
+        ${expandShell('basic', t('analyticsExpandProceed'), buildBasicProceed(s.basicProceed), cardExpanded)}
+      </div>
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsOpTraining')}</span></div>
+        ${fmtStatCard(s.operation)}
+        ${expandShell('op', t('analyticsExpandGrade'), buildGradeTable(s.opByGrade, 'rgba(59,130,246,.92)'), cardExpanded)}
+      </div>
+      <div class="analytic-card ac-danger">
+        <div class="ac-header"><span class="ac-title">${t('analyticsResignDur')}</span></div>
+        ${fmtStatCard(s.resign)}
+        ${expandShell('resign', t('analyticsExpandResignType'), buildResignDurTable(s), cardExpanded)}
+      </div>
+      <div class="analytic-card">
+        <div class="ac-header"><span class="ac-title">${t('analyticsResignRatio')}</span></div>
+        <div class="ac-avg-label">${t('analyticsAvg')}</div>
+        ${buildResignAvgCard(s)}
+      </div>
+    </div>`;
+}
 
-  // 1.3 Department filter dropdown
+function renderAnalytics(yearFilter) {
+  const el = $('homeDashAnalytics');
+  if (!el) return;
+  if (!Object.keys(allDeptData).length) { hide(el); return; }
+
+  const employees = currentAnalyticsDept
+    ? (allDeptData[currentAnalyticsDept] || [])
+    : Object.values(allDeptData).flat();
+  const s = computeAnalytics(employees, yearFilter, currentDayMode);
+  const trendData = computeTrendData(employees, yearFilter);
+
   const deptOptions = [`<option value="">${escapeHtml(t('analyticsAllDept'))}</option>`]
     .concat(departments.map(d =>
       `<option value="${escapeHtml(d.key)}"${d.key === currentAnalyticsDept ? ' selected' : ''}>${escapeHtml(d.label)}</option>`
     )).join('');
 
-  // Day-mode button group
   const dayBtn = (mode, label) =>
     `<button type="button" class="day-mode-btn${currentDayMode === mode ? ' active' : ''}" data-mode="${mode}">${escapeHtml(label)}</button>`;
 
-  // ── Monthly trend card ────────────────────────────────────────────────
   const yearOptions = [...($('homeDashYearFilter').options || [])]
     .map(o => `<option value="${escapeHtml(o.value)}"${o.value === yearFilter ? ' selected' : ''}>${escapeHtml(o.textContent)}</option>`)
     .join('');
 
-  const trendData = computeTrendData(yearFilter, currentAnalyticsDept);
-  const trendSeries = [
-    { key: 'joined',     color: '#f59e0b', label: t('trendJoined')    },
-    { key: 'inTraining', color: '#3b82f6', label: t('training')       },
-    { key: 'completed',  color: '#10b981', label: t('trendCompleted') },
-    { key: 'resigned',   color: '#ef4444', label: t('trendResigned')  },
-  ];
-  const trendToggles = trendSeries.map(ts => `
-    <button type="button"
-      class="trend-toggle${trendVisibility[ts.key] ? ' active' : ''}"
-      data-series="${ts.key}">
-      <span class="trend-dot" style="background:${ts.color}"></span>
-      <span>${escapeHtml(ts.label)}</span>
-    </button>`).join('');
-
-  const trendCardHTML = `
-    <div class="trend-chart-card">
-      <div class="trend-header">
-        <div class="trend-header-left">
-          <h4>${escapeHtml(t('trendTitle'))}</h4>
-          <select id="trendYearFilter" class="year-select trend-filter-sel">
-            ${yearOptions}
-          </select>
-          <select id="trendDeptFilter" class="year-select trend-filter-sel">
-            ${deptOptions}
-          </select>
-        </div>
-        <div class="trend-toggle-group" id="trendToggleGroup">
-          ${trendToggles}
-        </div>
-      </div>
-      <div class="trend-chart-wrap">
-        ${trendChartSVG(trendData, trendVisibility)}
-      </div>
-    </div>`;
-
-  // ── Number formatter (drop .0 for integers) ───────────────────────────
-  const fmtNum = (v) => (v % 1 === 0 ? v : v.toFixed(1));
-
-  // ── Per-grade table rows (used in Total + Op Training expand) ─────────
-  // Iterates over whatever grades the data actually contains (sorted) — no
-  // hard-coded grade list, so it's resilient to varied Excel input.
-  const buildGradeTable = (byGrade, accent) => {
-    const grades = Object.keys(byGrade || {}).filter(g => byGrade[g]).sort();
-    if (!grades.length) {
-      return `<div class="ac-xt-no-data">${t('analyticsNoData')}</div>`;
-    }
-
-    // สร้างข้อมูลแต่ละแถว
-    const rows = grades.map(g => {
-      const stat = byGrade[g];
-      return `
-        <div class="ac-list-row">
-          <div><span class="ac-xt-tag" style="background:${accent}">${escapeHtml(g)}</span></div>
-          <div class="ac-xt-avg text-right" style="color:${accent}">
-            ${fmtNum(stat.avg)}
-          </div>
-          <div class="ac-xt-range text-right">${stat.min}–${stat.max}</div>
-          <div class="ac-xt-n text-right">${stat.n}</div>
-        </div>
-      `;
-    }).join('');
-
-    // ประกอบโครงสร้าง Header และ Rows
-    return `
-      <div class="ac-data-list">
-        <div class="ac-list-header">
-          <div>${t('grade')}</div>
-          <div class="text-right">${t('analyticsAvg')}</div>
-          <div class="text-right">${t('analyticsMin')}–${t('analyticsMax')}</div>
-          <div class="text-right">n</div>
-        </div>
-        <div class="ac-list-body">
-          ${rows}
-        </div>
-      </div>
-    `;
-  };
-
-  // 3-step red shades (darkest → lightest): resign-op, resign-basic, resign-before-basic
-  const COLOR_OP     = 'rgba(220,38,38,.92)';
-  const COLOR_BASIC  = 'rgba(248,113,113,.95)';
-  const COLOR_BEFORE = 'rgba(254,202,202,.95)';
-
-  // ── Resign-duration breakdown by type (Resign Duration card expand) ───
-  const buildResignDurTable = () => {
-    const rows = [
-      { color: COLOR_OP,     label: t('analyticsResignOp'),        stat: s.resignByType.operation   },
-      { color: COLOR_BASIC,  label: t('analyticsResignBasic'),     stat: s.resignByType.basic       },
-      { color: COLOR_BEFORE, label: t('analyticsResignBeforeBasic'),stat: s.resignByType.beforeBasic },
-    ].map(r => {
-      // กรณีไม่มีข้อมูล (Empty State)
-      if (!r.stat) {
-        return `
-          <div class="ac-list-row ac-list-row-resign ac-xt-empty">
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span class="ac-xt-dot" style="background:${r.color}"></span>
-              <span class="ac-xt-lbl">${escapeHtml(r.label)}</span>
-            </div>
-            <div class="ac-xt-empty-cell text-right" style="grid-column: span 3;">—</div>
-          </div>`;
-      }
-      // กรณีมีข้อมูลปกติ
-      return `
-        <div class="ac-list-row ac-list-row-resign">
-          <div style="display:flex; align-items:center; gap:6px; min-width: 0;">
-            <span class="ac-xt-dot" style="background:${r.color}"></span>
-            <span class="ac-xt-lbl">${escapeHtml(r.label)}</span>
-          </div>
-          <div class="ac-xt-avg text-right" style="color:var(--danger)">
-            ${fmtNum(r.stat.avg)}
-          </div>
-          <div class="ac-xt-range text-right">${r.stat.min}–${r.stat.max}</div>
-          <div class="ac-xt-n text-right">${r.stat.n}</div>
-        </div>`;
-    }).join('');
-
-    return `
-      <div class="ac-data-list ac-xt-table-resign">
-        <div class="ac-list-header ac-list-row-resign">
-          <div></div> <div class="text-right">${t('analyticsAvg')}</div>
-          <div class="text-right">${t('analyticsMin')}–${t('analyticsMax')}</div>
-          <div class="text-right">N</div>
-        </div>
-        <div class="ac-list-body">${rows}</div>
-      </div>`;
-  };
-
-  // ── Basic → Op proceed rate panel (Basic Training card expand) ────────
-  const buildBasicProceed = () => {
-    const bp = s.basicProceed;
-    if (!bp || bp.pct === null) {
-      return `<div class="ac-xt-no-data">${t('analyticsNoData')}</div>`;
-    }
-    const pct    = fmtNum(bp.pct);
-    const barPct = Math.min(bp.pct, 100); // clamp bar width ≤ 100% (ตัวเลขยังแสดงค่าจริง)
-    const barColor = 'rgba(59,130,246,.85)';
-    return `<div class="ac-proceed">
-      <div class="ac-proceed-label">${t('analyticsProceedLabel')}</div>
-      <div class="ac-proceed-value">${pct}<span class="ac-proceed-unit">%</span></div>
-      <div class="ac-proceed-bar"><div class="ac-proceed-fill" style="width:${barPct}%;background:${barColor}"></div></div>
-      <div class="ac-proceed-hint">${bp.proceeded} / ${bp.finished} ${t('analyticsProceedHint')}</div>
-    </div>`;
-  };
-
-  // ── Resign Breakdown → by Grade: resign rate % per grade (resign/total) ─
-  const buildResignGradeTable = () => {
-    const counts = s.resignCountByGrade || {};
-    const totals = s.totalCountByGrade  || {};
-    const grades = Object.keys(counts).filter(g => counts[g] > 0).sort();
-    if (!grades.length) {
-      return `<div class="ac-xt-no-data">${t('analyticsNoData')}</div>`;
-    }
-    const rows = grades.map(g => {
-      const resign = counts[g];
-      const total  = totals[g] || 0;
-      const rate   = total > 0 ? (resign / total * 100).toFixed(1) : '-';
-      return `
-        <div class="ac-list-row">
-          <div><span class="ac-xt-tag" style="background:var(--danger)">${escapeHtml(g)}</span></div>
-          <div class="ac-xt-avg text-right" style="color:var(--danger)">${resign} / ${total}</div>
-          <div class="ac-xt-range text-right">${rate}%</div>
-          <div class="ac-xt-n text-right"></div>
-        </div>`;
-    }).join('');
-    return `
-      <div class="ac-data-list">
-        <div class="ac-list-header">
-          <div>${t('grade')}</div>
-          <div class="text-right">${t('total')}</div>
-          <div class="text-right">%</div>
-          <div></div>
-        </div>
-        <div class="ac-list-body">${rows}</div>
-      </div>`;
-  };
-
-  // ── Expandable card wrapper ───────────────────────────────────────────
-  // btnClass: optional extra CSS class on the button (e.g. 'ac-expand-danger' for red)
-  const expandShell = (cardKey, toggleLabel, content, btnClass = '') => {
-    const open = !!cardExpanded[cardKey];
-    const extraClass = btnClass ? ` ${btnClass}` : '';
-    return `<button type="button" class="ac-expand-btn${open ? ' open' : ''}${extraClass}" data-card="${cardKey}" aria-expanded="${open}">
-      <span class="ac-expand-label">${escapeHtml(toggleLabel)}</span>
-      <span class="ac-expand-chev">▾</span>
-    </button>
-    <div class="ac-expand-content${open ? ' open' : ''}">
-      <div class="ac-expand-inner">${content}</div>
-    </div>`;
-  };
+  const trendHtml = trendCardHtml({
+    trendData, trendVisibility,
+    yearOptionsHtml: yearOptions,
+    deptOptionsHtml: deptOptions,
+    idSuffix: 'home',
+  });
 
   el.innerHTML = `
     <div class="analytics-section-hdr">
@@ -1903,56 +2003,23 @@ function renderAnalytics(yearFilter) {
       </select>
     </div>
 
-    <div class="charts-grid">
-      ${chartOverall}
-      ${chartGrad}
-      ${chartTraining}
-      ${chartResign}
-    </div>
+    ${_analyticsRowsHtml(s, cardExpanded)}
 
-    <div class="analytics-grid">
-      <div class="analytic-card">
-        <div class="ac-header"><span class="ac-title">${t('analyticsTotalTraining')}</span></div>
-        ${fmtStatCard(s.total)}
-        ${expandShell('total', t('analyticsExpandGrade'), buildGradeTable(s.totalByGrade, 'rgba(59,130,246,.92)'))}
-      </div>
-      <div class="analytic-card">
-        <div class="ac-header"><span class="ac-title">${t('analyticsBasicTraining')}</span></div>
-        ${fmtStatCard(s.basic)}
-        ${expandShell('basic', t('analyticsExpandProceed'), buildBasicProceed())}
-      </div>
-      <div class="analytic-card">
-        <div class="ac-header"><span class="ac-title">${t('analyticsOpTraining')}</span></div>
-        ${fmtStatCard(s.operation)}
-        ${expandShell('op', t('analyticsExpandGrade'), buildGradeTable(s.opByGrade, 'rgba(59,130,246,.92)'))}
-      </div>
-      <div class="analytic-card ac-danger">
-        <div class="ac-header"><span class="ac-title">${t('analyticsResignDur')}</span></div>
-        ${fmtStatCard(s.resign)}
-        ${expandShell('resign', t('analyticsExpandResignType'), buildResignDurTable())}
-      </div>
-      <div class="analytic-card">
-        <div class="ac-header"><span class="ac-title">${t('analyticsResignRatio')}</span></div>
-        <div class="ac-avg-label">${t('analyticsAvg')}</div>
-        ${buildResignAvgCard()}
-      </div>
-    </div>
-
-    <div style="margin-top:24px">${trendCardHTML}</div>`;
+    <div style="margin-top:24px">${trendHtml}</div>`;
 
   // wire dept-filter change → re-render analytics (table stays as-is)
   const deptSel = $('analyticsDeptFilter');
   if (deptSel) {
     deptSel.onchange = () => {
       currentAnalyticsDept = deptSel.value;
-      const trendDept = $('trendDeptFilter');
+      const trendDept = $('trendDeptFilter-home');
       if (trendDept) trendDept.value = currentAnalyticsDept;
       renderAnalytics(yearFilter);
     };
   }
 
   // wire trend card year/dept filters — sync back to top-level controls
-  const trendYearSel = $('trendYearFilter');
+  const trendYearSel = $('trendYearFilter-home');
   if (trendYearSel) {
     trendYearSel.onchange = () => {
       const yr = trendYearSel.value;
@@ -1961,7 +2028,7 @@ function renderAnalytics(yearFilter) {
       renderHomeDashboard(yr);
     };
   }
-  const trendDeptSel = $('trendDeptFilter');
+  const trendDeptSel = $('trendDeptFilter-home');
   if (trendDeptSel) {
     trendDeptSel.onchange = () => {
       currentAnalyticsDept = trendDeptSel.value;
@@ -1992,7 +2059,7 @@ function renderAnalytics(yearFilter) {
   }
 
   // wire trend toggle buttons — each toggles its series independently
-  const trendGroup = $('trendToggleGroup');
+  const trendGroup = $('trendToggleGroup-home');
   if (trendGroup) {
     trendGroup.querySelectorAll('.trend-toggle').forEach(btn => {
       btn.onclick = () => {
@@ -2003,7 +2070,95 @@ function renderAnalytics(yearFilter) {
     });
   }
 
+  mountTrendChart('home', 'trendMonthlyChart-home', trendData, trendVisibility);
+
   show(el);
+}
+
+// ===== PER-DEPARTMENT DATA ANALYTICS (BU dashboard page, #newop-stats) =====
+// Same charts-grid + analytics-grid + Monthly Trend structure as the home
+// dashboard's Data Analytics block, scoped to a single department's
+// employees. No day-mode toggle or dept filter — both are implicit (each BU
+// has a fixed work-week length, and the page is already scoped to one BU).
+function _getDeptAnalyticsState(deptKey) {
+  if (!_deptAnalyticsState[deptKey]) {
+    _deptAnalyticsState[deptKey] = {
+      cardExpanded: { total: true, basic: true, op: true, resign: true },
+      trendVisibility: { joined: true, inTraining: true, completed: true, resigned: true },
+    };
+  }
+  return _deptAnalyticsState[deptKey];
+}
+
+function renderDeptAnalytics(deptKey, employees, yearFilter) {
+  const el = $('newop-stats');
+  if (!el || !deptKey) return;
+
+  const state   = _getDeptAnalyticsState(deptKey);
+  const dayMode = DEPT_DAY_MODE[deptKey] || '6d';
+  const s         = computeAnalytics(employees, yearFilter, dayMode);
+  const trendData = computeTrendData(employees, yearFilter);
+
+  const years = new Set();
+  employees.forEach(emp => {
+    const d = normalizeDateForInput(emp['CSA Start Date']);
+    if (d) years.add(d.slice(0, 4));
+  });
+  const yearOptions = `<option value="">${escapeHtml(t('allYears'))}</option>` +
+    [...years].sort().reverse().map(yr =>
+      `<option value="${escapeHtml(yr)}"${yr === yearFilter ? ' selected' : ''}>${escapeHtml(yr)}</option>`
+    ).join('');
+
+  const trendHtml = trendCardHtml({
+    trendData, trendVisibility: state.trendVisibility,
+    yearOptionsHtml: yearOptions,
+    deptOptionsHtml: null, // already scoped to one BU — no dept switcher here
+    idSuffix: deptKey,
+  });
+
+  el.innerHTML = `
+    <div class="analytics-section-hdr">
+      <h3>${t('analyticsTitle')}</h3>
+    </div>
+
+    ${_analyticsRowsHtml(s, state.cardExpanded)}
+
+    <div style="margin-top:24px">${trendHtml}</div>`;
+
+  // wire expand buttons for stat cards (per-department state, doesn't affect home)
+  el.querySelectorAll('.ac-expand-btn').forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.card;
+      state.cardExpanded[key] = !state.cardExpanded[key];
+      renderDeptAnalytics(deptKey, employees, yearFilter);
+    };
+  });
+
+  // wire trend year filter — sync back to this page's own year filter + table
+  const trendYearSel = $(`trendYearFilter-${deptKey}`);
+  if (trendYearSel) {
+    trendYearSel.onchange = () => {
+      currentYearFilter = trendYearSel.value;
+      const topYear = $('empYearFilter');
+      if (topYear) topYear.value = currentYearFilter;
+      _newOpTableState.page = 1;
+      renderEmployeeTable(lastEmployees);
+    };
+  }
+
+  // wire trend toggle buttons — each toggles its series independently
+  const trendGroup = $(`trendToggleGroup-${deptKey}`);
+  if (trendGroup) {
+    trendGroup.querySelectorAll('.trend-toggle').forEach(btn => {
+      btn.onclick = () => {
+        const key = btn.dataset.series;
+        state.trendVisibility[key] = !state.trendVisibility[key];
+        renderDeptAnalytics(deptKey, employees, yearFilter);
+      };
+    });
+  }
+
+  mountTrendChart(deptKey, `trendMonthlyChart-${deptKey}`, trendData, state.trendVisibility);
 }
 
 function buildDashRow(tr, label, total, completed, training, resign, transfer) {
@@ -2644,12 +2799,28 @@ async function init() {
   // Status filter
   $('statusFilter').onchange = () => {
     currentFilter = $('statusFilter').value;
+    _newOpTableState.page = 1;
     renderEmployeeTable(lastEmployees);
   };
 
   // Employee year filter
   $('empYearFilter').onchange = () => {
     currentYearFilter = $('empYearFilter').value;
+    _newOpTableState.page = 1;
+    renderEmployeeTable(lastEmployees);
+  };
+
+  // New Operator table pagination
+  $('newop-pageSize').onchange = () => {
+    _newOpTableState.pageSize = +$('newop-pageSize').value;
+    _newOpTableState.page = 1;
+    renderEmployeeTable(lastEmployees);
+  };
+  $('newop-prevPage').onclick = () => {
+    if (_newOpTableState.page > 1) { _newOpTableState.page--; renderEmployeeTable(lastEmployees); }
+  };
+  $('newop-nextPage').onclick = () => {
+    _newOpTableState.page++;
     renderEmployeeTable(lastEmployees);
   };
 
@@ -7437,7 +7608,7 @@ function _gicaValidateResultForm() {
 async function _gicaSaveResult(fields) {
   const { bu, empid } = _gicaResultCtx;
   _gicaCloseResultModal();
-  _gicaShowToast('กำลังบันทึกข้อมูล...');
+  showToast('กำลังบันทึกข้อมูล...');
   try {
     await api(`/api/gica/${bu}/employees/${empid}/result`, {
       method: 'PATCH',
@@ -7449,27 +7620,12 @@ async function _gicaSaveResult(fields) {
     });
     await _gicaRefreshData();
     renderGicaTable();
-    _gicaShowToast('บันทึกข้อมูลแล้ว');
+    showToast('บันทึกข้อมูลแล้ว');
   } catch (err) {
-    _gicaShowToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
+    showToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
   }
 }
 
-// GICA tab lives in its own container, separate from #messageBox (which only
-// exists inside the New Operator dashboard and is hidden while on this tab) —
-// so a small self-contained toast is used here instead of showMessage().
-function _gicaShowToast(text) {
-  let toast = document.getElementById('gica-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'gica-toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = text;
-  toast.classList.add('gica-toast--show');
-  clearTimeout(toast._hideTimer);
-  toast._hideTimer = setTimeout(() => toast.classList.remove('gica-toast--show'), 2500);
-}
 
 function _wireGicaResultModal() {
   $('gica-result-close')?.addEventListener('click', _gicaCloseResultModal);
@@ -7571,7 +7727,7 @@ function _gicaValidateCreateForm() {
 // for why (waiting for the response before any feedback caused double-submits).
 async function _gicaSaveCreate(fields) {
   _gicaCloseCreateModal();
-  _gicaShowToast('กำลังบันทึกข้อมูล...');
+  showToast('กำลังบันทึกข้อมูล...');
   try {
     await api(`/api/gica/${fields.bu}/employees`, {
       method: 'POST',
@@ -7582,9 +7738,9 @@ async function _gicaSaveCreate(fields) {
     });
     await _gicaRefreshData();
     renderGicaTable();
-    _gicaShowToast('บันทึกข้อมูลแล้ว');
+    showToast('บันทึกข้อมูลแล้ว');
   } catch (err) {
-    _gicaShowToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
+    showToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
   }
 }
 
