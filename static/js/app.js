@@ -4569,8 +4569,9 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
     .filter(lv => lv !== 'Department Head')
     .map(lv => {
       const atLevel = emps.filter(e => e.level === lv);
-      const expM = _mode(atLevel.map(e => e.exp1));
-      const expI = _mode(atLevel.map(e => e.exp2));
+      const freqAtLevel = freqTable.filter(r => r.level === lv);
+      const expM = _mode(freqAtLevel.map(r => r.expectation1));
+      const expI = _mode(freqAtLevel.map(r => r.expectation2));
       const cells = {};
       BU_ORDER.forEach(bu => {
         const cell = atLevel.filter(e => e.bu === bu);
@@ -4640,8 +4641,9 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
       .filter(lv => atDept.some(e => e.level === lv))
       .map(lv => {
         const atLevel = atDept.filter(e => e.level === lv);
-        const expM = _mode(atLevel.map(e => e.exp1));
-        const expI = _mode(atLevel.map(e => e.exp2));
+        const freqAtDeptLevel = freqTable.filter(r => r.level === lv && r.department === dept);
+        const expM = _mode(freqAtDeptLevel.map(r => r.expectation1));
+        const expI = _mode(freqAtDeptLevel.map(r => r.expectation2));
         return { level: lv, expM, expI, cells: _cellForGroup(atLevel, expM, expI) };
       });
     return { dept, deptAgg: _aggForGroup(atDept), levelRows };
@@ -5009,7 +5011,7 @@ function _gicaSummaryHtml(vm) {
     return t ? (t[bu] ?? t.all ?? null) : null;
   };
 
-  const GICA_LEVEL_TOOLTIPS = { 'Supervisor*': 'Technic Department Head' };
+  const GICA_LEVEL_TOOLTIPS = { 'Supervisor*': 'Sewing Department Head' };
   const _gicaLevelLabel = level => {
     const tip = GICA_LEVEL_TOOLTIPS[level];
     return `<div class="exp-row__level"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${escapeHtml(level)}</div>`;
