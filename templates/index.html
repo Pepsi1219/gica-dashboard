@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=147" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=149" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -256,10 +256,10 @@
         <div class="home-dash-header">
           <h2 data-i18n="overallDashboard">Overall Dashboard</h2>
           <div class="home-dash-controls">
-            <button id="exportPngBtn" class="small export-btn" title="Export PNG">PNG</button>
-            <button id="exportPdfBtn" class="small export-btn" title="Export PDF">PDF</button>
+            <button id="exportPngBtn" class="export-btn" title="Export PNG">PNG</button>
+            <button id="exportPdfBtn" class="export-btn" title="Export PDF">PDF</button>
             <select id="homeDashYearFilter" class="year-select"></select>
-            <button id="homeDashRefreshBtn" class="small" data-i18n="refresh">Refresh</button>
+            <button id="homeDashRefreshBtn" class="small refresh-btn" data-i18n="refresh">Refresh</button>
           </div>
         </div>
 
@@ -270,42 +270,58 @@
 
     <!-- Dashboard Page -->
     <section id="dashboardPage" class="page hidden">
-      <div class="dashboard-title">
-        <button id="backHomeBtn" data-i18n="backHome">← back</button>
-        <h2 id="dashboardTitle"></h2>
-        <button id="refreshBtn" data-i18n="refresh">Refresh</button>
-      </div>
+  
+  <div class="dashboard-action-row">
+    <button id="backHomeBtn" data-i18n="backHome">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      back
+    </button>
+    
+    <button id="refreshBtn" data-i18n="refresh">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+      Refresh
+    </button>
+  </div>
+
+  <div class="dashboard-title">
+    <h2 id="dashboardTitle"></h2>
+  </div>
 
       <section id="newop-stats"></section>
 
       <!-- Employee Data Card -->
       <section class="card employee-data-card">
-        <div class="table-toolbar">
-          <h2 data-i18n="riskList">ข้อมูลพนักงาน</h2>
-          <button id="registerBtn" class="primary small" data-i18n="register">ลงทะเบียน</button>
-        </div>
-        <div class="search-filter-bar">
-          <div class="search-row">
-            <input id="searchEmployeeId" data-i18n-placeholder="employeeIdPlaceholder" placeholder="Employee ID" />
-            <button id="searchBtn" data-i18n="search">Search</button>
-          </div>
-          <select id="empYearFilter">
-            <option value="" data-i18n="allYears">ทุกปี</option>
-          </select>
-          <select id="statusFilter">
-            <option value="" data-i18n="filterAll">ทั้งหมด</option>
-            <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
-            <option value="completed-overdue" data-i18n="statusCompletedOverdue">ฝึกเสร็จ (เกินกำหนด)</option>
-            <option value="under-operation" data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</option>
-            <option value="under-basic" data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</option>
-            <option value="resign-operation" data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</option>
-            <option value="resign-basic" data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</option>
-            <option value="resign-before-basic" data-i18n="statusResignBeforeBasic">ลาออกก่อนฝึกพื้นฐาน</option>
-            <option value="transfer-operation" data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</option>
-            <option value="transfer-basic" data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
-            <option value="transfer-before-basic" data-i18n="statusTransferBeforeBasic">โอนย้ายก่อนฝึกพื้นฐาน</option>
-          </select>
-        </div>
+  <div class="table-toolbar">
+    <h2 data-i18n="riskList">ข้อมูลพนักงาน</h2>
+    <button id="registerBtn" class="primary small" data-i18n="register">ลงทะเบียน</button>
+  </div>
+  
+  <div class="search-filter-bar">
+    <div class="search-row">
+      <input id="searchEmployeeId" data-i18n-placeholder="employeeIdPlaceholder" placeholder="Employee ID" />
+      <button id="searchBtn" class="small" data-i18n="search">Search</button> </div>
+    
+    <div class="filter-row">
+      
+      <select id="empYearFilter" class="year-select">
+        <option value="" data-i18n="allYears">ทุกปี</option>
+      </select>
+      
+      <select id="statusFilter">
+        <option value="" data-i18n="filterAll">ทั้งหมด</option>
+        <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
+        <option value="completed-overdue" data-i18n="statusCompletedOverdue">ฝึกเสร็จ (เกินกำหนด)</option>
+        <option value="under-operation" data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</option>
+        <option value="under-basic" data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</option>
+        <option value="resign-operation" data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</option>
+        <option value="resign-basic" data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</option>
+        <option value="resign-before-basic" data-i18n="statusResignBeforeBasic">ลาออกก่อนฝึกพื้นฐาน</option>
+        <option value="transfer-operation" data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</option>
+        <option value="transfer-basic" data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
+        <option value="transfer-before-basic" data-i18n="statusTransferBeforeBasic">โอนย้ายก่อนฝึกพื้นฐาน</option>
+      </select>
+    </div>
+  </div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -766,6 +782,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=315"></script>
+  <script src="/static/js/app.js?v=319"></script>
 </body>
 </html>

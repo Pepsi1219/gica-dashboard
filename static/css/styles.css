@@ -17,6 +17,7 @@
   --accent-border:   rgba(102, 126, 234, .25);
   --topbar-from:     #302b63;
   --topbar-to:       #24243e;
+  --table:           #cdcdd5a3;
 
   --bg:              #f0f0f8;
   --surface:         #ffffff;
@@ -74,6 +75,7 @@
   --purple-light:    #1f0a4f;
   --purple-pale:     #150634;
   --purple-badge:    #c4b5fd;
+  --table:           #231c49;
 
   --btn-bg:          #1e1a40;
   --btn-text:        #a5b4fc;
@@ -679,14 +681,14 @@ button:active { transform: scale(.97); }
 }
 .home-dash-header h2 { margin: 0; color: var(--blue2); }
 .year-select {
-  padding: 8px 12px;
+  padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
-  min-width: 110px;
+  font-size: 11px;
+  min-width: auto;
   cursor: pointer;
   transition: border-color .15s;
 }
@@ -710,8 +712,8 @@ button:active { transform: scale(.97); }
   font-size: 14px;
 }
 .home-dash-table th {
-  background: var(--blue);
-  color: white;
+  background: linear-gradient(135deg, var(--blue), var(--text-muted));
+  color: #ffffff;
   padding: 12px 16px;
   text-align: left;
   font-weight: 700;
@@ -719,8 +721,9 @@ button:active { transform: scale(.97); }
 }
 .home-dash-table td {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--text-muted);
   text-align: left;
+  background: var(--table);
 }
 .home-dash-table tbody tr { cursor: pointer; transition: background .12s; }
 .home-dash-table tbody tr:hover { background: var(--btn-bg); }
@@ -732,7 +735,8 @@ button:active { transform: scale(.97); }
 .home-dash-table .num-cell.danger   { color: var(--danger); }
 .home-dash-table .num-cell.transfer { color: var(--purple); } /* purple for transferred */
 .home-dash-table tfoot .dash-total-row td {
-  background: var(--surface2);
+  background: linear-gradient(135deg, var(--blue1), var(--blue2));
+  color: var(--text);
   font-weight: 800;
   border-top: 2px solid var(--border);
 }
@@ -744,9 +748,12 @@ button:active { transform: scale(.97); }
 }
 .export-btn {
   background: var(--surface);
-  color: var(--blue2);
+  color: var(--text-muted);
   border: 1px solid var(--border);
-  font-weight: 800;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 5px 10px;
   letter-spacing: .5px;
 }
 .export-btn:hover { background: var(--btn-bg); filter: none; }
@@ -764,6 +771,20 @@ button:active { transform: scale(.97); }
   font-weight: 700;
   letter-spacing: .3px;
   vertical-align: middle;
+}
+.refresh-btn {
+  background: linear-gradient(135deg, var(--blue1, #3860b6), #1b3270);
+  color:  #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+  transition: all 0.2s ease;
 }
 
 /* ===== RATIO BAR ===== */
@@ -814,24 +835,26 @@ button:active { transform: scale(.97); }
 }
 .analytics-section-hdr .analytics-icon { font-size: 18px; }
 .analytics-dept-select { min-width: 140px; }
+.analytics-export-controls { display: inline-flex; gap: 8px; }
 
 /* Day-mode button group */
 .day-mode-btn-group {
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 999px;
   overflow: hidden;
   background: var(--surface);
+  
 }
 .day-mode-btn {
   background: transparent;
   color: var(--text-muted);
   border: none;
-  padding: 7px 14px;
-  font-size: 12px;
+  padding: 5px 10px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  border-radius: 0;
+  border-radius: 999px;
   border-right: 1px solid var(--border);
   transition: background .15s, color .15s;
 }
@@ -854,7 +877,7 @@ button:active { transform: scale(.97); }
   margin-bottom: 18px;
 }
 .chart-card {
-  background: var(--surface);
+  background: linear-gradient(135deg, var(--bg, var(--surface2)), var(--text-muted));
   border: 1px solid var(--border-light);
   border-radius: 14px;
   padding: 14px 14px 16px;
@@ -867,7 +890,7 @@ button:active { transform: scale(.97); }
 .chart-title {
   font-size: 11px;
   font-weight: 800;
-  color: var(--text-muted);
+  color: var(--text);
   text-transform: uppercase;
   letter-spacing: .5px;
 }
@@ -887,7 +910,7 @@ button:active { transform: scale(.97); }
 
 /* ===== MONTHLY TREND CHART ===== */
 .trend-chart-card {
-  background: var(--surface);
+  background: linear-gradient(135deg, var(--bg2, var(--surface2)), var(--text-muted));
   border: 1px solid var(--border-light);
   border-radius: 18px;
   padding: 20px 22px 18px;
@@ -929,8 +952,8 @@ button:active { transform: scale(.97); }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 6px 13px;
-  font-size: 12px;
+  padding: 5px 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text);
   cursor: pointer;
@@ -992,7 +1015,7 @@ button:active { transform: scale(.97); }
   gap: 14px;
 }
 .analytic-card {
-  background: var(--surface);
+  background: linear-gradient(135deg, var(--bg, var(--surface2)), var(--text-muted));
   border: 1px solid var(--border-light);
   border-radius: 14px;
   padding: 16px 18px;
@@ -1018,74 +1041,18 @@ button:active { transform: scale(.97); }
   padding-bottom: 2px;
 }
 
-/* ─── Expandable stat-card system ─────────────────────────────────────── */
-.ac-expand-btn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+/* ─── Fixed (always-visible) stat-card detail section ─────────────────── */
+.ac-divider {
   width: 100%;
+  height: 1px;
   margin-top: 10px;
-  padding: 7px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
+  background: #000;
 }
-.ac-expand-btn:hover {
-  background: var(--btn-bg);
-  color: var(--text);
-  border-color: var(--border);
-  filter: none;
-}
-.ac-expand-btn.open {
-  background: var(--blue2);
-  border-color: var(--blue2);
-  color: #fff;
-}
-.ac-expand-btn.open:hover { background: var(--blue2); filter: brightness(.92); }
-.analytic-card.ac-danger .ac-expand-btn.open {
-  background: var(--danger);
-  border-color: var(--danger);
-}
-/* Red variant — used for Resign Breakdown "View by Grade" button */
-.ac-expand-btn.ac-expand-danger.open {
-  background: var(--danger);
-  border-color: var(--danger);
-  color: #fff;
-}
-.ac-expand-btn.ac-expand-danger.open:hover { background: var(--danger); filter: brightness(.92); }
-.ac-expand-chev {
-  font-size: 10px;
-  line-height: 1;
-  transition: transform .25s;
-}
-.ac-expand-btn.open .ac-expand-chev { transform: rotate(180deg); }
-
-.ac-expand-content {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows .25s ease;
-  min-width: 0; 
+.ac-fixed-content {
   width: 100%;
-}
-.ac-expand-content.open { grid-template-rows: 1fr; }
-.ac-expand-content > .ac-expand-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-.ac-expand-content.open > .ac-expand-inner { 
   padding-top: 10px;
-  overflow: hidden;
-  overflow-y: hidden;
-  width: 100%;
   box-sizing: border-box;
-  min-height: 0;
-  min-width: 0; }
+}
 
 /* ─── Per-grade / resign-type compact data table ───────────────────────── */
 /* ─── Modern Data List (Replacing Table) ───────────────────────── */
@@ -1134,6 +1101,7 @@ button:active { transform: scale(.97); }
 .text-right {
   text-align: center; /* intentional center — ไม่ใช่ bug */
   padding-right: 4px;
+  color: var(--text-muted);
 }
 
 /* ─── ยืม Class ตกแต่งเดิมมาใช้ (ไม่ต้องแก้) ───────────────────────── */
@@ -1169,7 +1137,7 @@ button:active { transform: scale(.97); }
 }
 .ac-xt-n {
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1183,6 +1151,7 @@ button:active { transform: scale(.97); }
 .ac-list-row-resign .ac-xt-empty-cell {
   text-align: right;
   padding-right: 4px;
+  color: var(--text);
 }
 
 /* Resign-type variant: dot + label + numbers, no header */
@@ -1274,7 +1243,7 @@ button:active { transform: scale(.97); }
   text-transform: uppercase;
   letter-spacing: .4px;
 }
-.ac-minmax-value { font-size: 14px; font-weight: 700; color: var(--text); }
+.ac-minmax-value { font-size: 10px; color: var(--text); }
 .ac-minmax-unit  { font-size: 11px; color: var(--text-muted); font-weight: 400; }
 
 .ac-no-data {
@@ -1384,14 +1353,84 @@ textarea { min-height: 92px; resize: vertical; }
 }
 .hint { color: var(--text-muted); font-size: 13px; margin: 10px 0 0; line-height: 1.5; }
 
-/* ===== DASHBOARD ===== */
+/* ===== MODERN DASHBOARD HEADER (CENTERED TITLE) ===== */
+.dashboard-action-row {
+  display: flex;
+  justify-content: space-between; 
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+/* สไตล์ปุ่ม Back ด้านบน */
+#backHomeBtn {
+  background: var(--border-light);
+  color: var(--text);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+#backHomeBtn:hover {
+  background: var(--text-muted);
+  color: #ffffff;
+  transform: translateX(-2px);
+}
+
+/* สไตล์ปุ่ม Refresh ด้านบน */
+#refreshBtn {
+  background: linear-gradient(135deg, var(--blue1, #3860b6), #1b3270);
+  color:  #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+  transition: all 0.2s ease;
+}
+
+#refreshBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+  filter: brightness(1.05);
+}
+
+
+/* ===== 🔽 แถวล่าง: กล่องหัวข้อใหญ่เดี่ยวๆ ตรงกลางหน้าจอ ===== */
 .dashboard-title {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 4px;
+  background: linear-gradient(135deg, var(--blue1, var(--surface2)), var(--text-muted));
+  backdrop-filter: blur(8px);
+  padding: 16px 24px;
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(160, 175, 195, 0.15);
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
 }
+
+#dashboardTitle {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+  letter-spacing: -0.5px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .ok       { color: var(--ok); }
 .warn     { color: var(--warn); }
 .danger   { color: var(--danger); }
@@ -1479,40 +1518,84 @@ textarea { min-height: 92px; resize: vertical; }
 .search-filter-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 2px;
+  padding: 5px 10px;
+
 }
+
 .search-row {
   display: flex;
   gap: 8px;
-  flex: 0 0 auto;             /* 3.2 don't stretch to fill all space */
+  flex: 0 0 auto;
 }
+
 .search-row input {
-  width: 160px;               /* 3.2 fixed reasonable width */
+  width: 160px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  transition: all 0.2s ease;
 }
-.leave-cell {
-  text-align: center;
-  font-weight: 700;
-  color: var(--text-muted);
+
+/* เอฟเฟกต์ตอนกดคลิกพิมพ์ช่องค้นหา */
+.search-row input:focus {
+  outline: none;
+  border-color: var(--blue1, #3860b6);
+  box-shadow: 0 0 0 3px rgba(56, 96, 182, 0.15);
 }
+
+
 .filter-row {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
 }
+
 #statusFilter, #yearFilter {
-  padding: 9px 10px;
+  padding: 8px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2364748b' stroke-width='2' class='bi bi-chevron-down' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
 }
-#statusFilter { min-width: 200px; }
+
+#statusFilter:hover, #yearFilter:hover {
+  border-color: var(--text-muted);
+}
+
+#statusFilter:focus, #yearFilter:focus {
+  outline: none;
+  border-color: var(--blue1, #3860b6);
+}
+
+#statusFilter { min-width: 180px; }
 #yearFilter   { min-width: 100px; }
-button.small { padding: 8px 16px; font-size: 13px; }
+
+/* ปุ่มขนาดเล็กภายในบาร์ */
+button.small {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px; /* มนกลม */
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
 
 /* ===== INLINE EDIT ===== */
 .th-actions { width: 72px; text-align: center !important; }

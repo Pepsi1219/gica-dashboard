@@ -100,10 +100,6 @@ const TRANSLATIONS = {
     analyticsResignBasic:   'ระหว่างฝึกพื้นฐาน',
     analyticsResignBeforeBasic: 'ก่อนฝึกพื้นฐาน',
     analyticsNoData:        'ไม่มีข้อมูล',
-    analyticsExpandGrade:       'ดูแยกตามเกรด',
-    analyticsExpandResignGrade: 'ดูแยกตามเกรด (ผู้ลาออก)',
-    analyticsExpandResignType:  'ดูแยกตามประเภทการลาออก',
-    analyticsExpandProceed:     'ดูอัตราการไปต่อ Op Training',
     analyticsProceedLabel:      '% ผู้ที่ไปต่อ Op Training',
     analyticsProceedHint:       'คน (จากผู้เริ่ม Basic Training)',
     analyticsAllDept:       'ทุกหน่วยงาน',
@@ -241,10 +237,6 @@ const TRANSLATIONS = {
     analyticsResignBasic:   'During Basic Training',
     analyticsResignBeforeBasic: 'Before Basic Training',
     analyticsNoData:        'No data',
-    analyticsExpandGrade:       'View by Grade',
-    analyticsExpandResignGrade: 'View by Grade (Resigned)',
-    analyticsExpandResignType:  'View by Resign Type',
-    analyticsExpandProceed:     'View Proceed-to-Op Rate',
     analyticsProceedLabel:      '% Proceed to Op Training',
     analyticsProceedHint:       'people (of Basic Training starters)',
     analyticsAllDept:       'All departments',
@@ -382,10 +374,6 @@ const TRANSLATIONS = {
     analyticsResignBasic:   'ລະຫວ່າງຝຶກພື້ນຖານ',
     analyticsResignBeforeBasic: 'ກ່ອນຝຶກພື້ນຖານ',
     analyticsNoData:        'ບໍ່ມີຂໍ້ມູນ',
-    analyticsExpandGrade:       'ເບິ່ງແຍກຕາມເກຣດ',
-    analyticsExpandResignGrade: 'ເບິ່ງແຍກຕາມເກຣດ (ລາອອກ)',
-    analyticsExpandResignType:  'ເບິ່ງແຍກຕາມປະເພດການລາອອກ',
-    analyticsExpandProceed:     'ເບິ່ງອັດຕາການໄປຕໍ່ Op Training',
     analyticsProceedLabel:      '% ຜູ້ທີ່ໄປຕໍ່ Op Training',
     analyticsProceedHint:       'ຄົນ (ຈາກຜູ້ເລີ່ມ Basic Training)',
     analyticsAllDept:       'ທຸກພະແນກ',
@@ -523,10 +511,6 @@ const TRANSLATIONS = {
     analyticsResignBasic:   'Trong khi đào tạo cơ bản',
     analyticsResignBeforeBasic: 'Trước đào tạo cơ bản',
     analyticsNoData:        'Không có dữ liệu',
-    analyticsExpandGrade:       'Xem theo Cấp bậc',
-    analyticsExpandResignGrade: 'Xem theo Cấp bậc (Nghỉ việc)',
-    analyticsExpandResignType:  'Xem theo Loại nghỉ việc',
-    analyticsExpandProceed:     'Xem tỷ lệ tiếp tục Op Training',
     analyticsProceedLabel:      '% Tiếp tục Op Training',
     analyticsProceedHint:       'người (trong số bắt đầu Basic)',
     analyticsAllDept:       'Tất cả bộ phận',
@@ -574,17 +558,16 @@ let currentFilter     = '';
 let currentYearFilter = '';
 const _newOpTableState = { page: 1, pageSize: 10 };
 const _trendCharts = {}; // Chart.js instances for Monthly Trend cards, keyed by scope ('home', or a dept key)
-const _deptAnalyticsState = {}; // per-department analytics state: { [deptKey]: { cardExpanded, trendVisibility } }
+const _deptAnalyticsState = {}; // per-department analytics state: { [deptKey]: { trendVisibility } }
 const DEPT_DAY_MODE = { EA: '5d' }; // EA runs a 5-day work week; every other BU runs 6-day
 let departments       = [];
 let holidays          = JSON.parse(localStorage.getItem('specialHolidays') || '[]');
 let lastEmployees     = [];
 let allDeptData       = {};   // home dashboard cache: { deptKey: [employees] }
 let currentAnalyticsDept = '';  // '' = all departments
+let _homeDashYearDefaulted = false; // ensures "default to latest year" only fires on first load, not on every Refresh
 let currentDayMode    = 'total'; // 'total' | '5d' | '6d'  (Data Analytics)
 let trendVisibility   = { joined: true, inTraining: true, completed: true, resigned: true };  // toggle state for trend lines
-// expand state for the 4 stat cards — default open (true = expanded on load)
-let cardExpanded      = { total: true, basic: true, op: true, resign: true };
 
 // Month abbreviations per language (used for trend chart x-axis)
 const MONTH_ABBR = {
@@ -901,7 +884,7 @@ function selectDepartmentKey(key, label) {
   $('dashboardTitle').textContent = `${label} ${t('dashboard')}`;
   if (activeMainTab !== 'newOperator' && _switchMainTab) _switchMainTab('newOperator');
   setPage('dashboard');
-  loadDashboard();
+  loadDashboard(true);
 }
 
 function renderDepartmentButtons() {
@@ -1087,7 +1070,10 @@ async function confirmInlineEdit(tr, employeeId) {
 }
 
 // ===== POPULATE EMPLOYEE YEAR FILTER =====
-function populateEmpYearFilter(employees) {
+// applyDefault: true on a fresh department entry — defaults the filter to
+// the latest year with data (instead of "All Years"). False on a plain
+// Refresh, so it doesn't silently override whatever the user already chose.
+function populateEmpYearFilter(employees, applyDefault = false) {
   const sel = $('empYearFilter');
   if (!sel) return;
   const prev = sel.value;
@@ -1105,7 +1091,13 @@ function populateEmpYearFilter(employees) {
     opt.textContent = yr;
     sel.appendChild(opt);
   });
-  if (years.includes(prev)) sel.value = prev;
+
+  if (years.includes(prev)) {
+    sel.value = prev;
+  } else if (applyDefault && years.length) {
+    sel.value = years[0];
+    currentYearFilter = years[0];
+  }
 }
 
 // ===== RENDER EMPLOYEE TABLE =====
@@ -1146,9 +1138,9 @@ function renderEmployeeTable(employees) {
   });
 
   const rangeEl = $('newop-rangeLabel');
-  if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} จาก ${total}` : '0 รายการ';
+  if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} of ${total}` : '0 items';
   const pageEl = $('newop-pageLabel');
-  if (pageEl) pageEl.textContent = `${st.page} / ${pages}`;
+  if (pageEl) pageEl.textContent = `${st.page} of ${pages}`;
   const prevEl = $('newop-prevPage');
   if (prevEl) prevEl.disabled = st.page <= 1;
   const nextEl = $('newop-nextPage');
@@ -1156,14 +1148,17 @@ function renderEmployeeTable(employees) {
 }
 
 // ===== DASHBOARD PAGE =====
-async function loadDashboard() {
+// applyYearDefault: true when entering a department fresh (defaults the year
+// filter to the latest year with data); false on a plain Refresh, to leave
+// whatever year the user already picked alone.
+async function loadDashboard(applyYearDefault = false) {
   if (!currentDepartment) return;
   showMessage(t('loading'));
   try {
     const query = getHolidayQuery();
     const data = await api(`/api/${currentDepartment}/employees${query ? '?' + query : ''}`);
     lastEmployees = data.employees || [];
-    populateEmpYearFilter(lastEmployees);
+    populateEmpYearFilter(lastEmployees, applyYearDefault);
     _newOpTableState.page = 1;
     renderEmployeeTable(lastEmployees);
     showMessage(t('loadedCount', { n: lastEmployees.length }));
@@ -1225,14 +1220,23 @@ async function loadHomeDashboard() {
 
     const sel = $('homeDashYearFilter');
     const prev = sel.value;
+    const sortedYears = [...years].sort().reverse();
     sel.innerHTML = `<option value="" data-i18n="allYears">${t('allYears')}</option>`;
-    [...years].sort().reverse().forEach(yr => {
+    sortedYears.forEach(yr => {
       const opt = document.createElement('option');
       opt.value = yr;
       opt.textContent = yr;
       if (yr === prev) opt.selected = true;
       sel.appendChild(opt);
     });
+
+    // First load only: default to the latest year with data instead of "All
+    // Years". Once set, leave later refreshes alone so an explicit "All
+    // Years" choice isn't silently overridden.
+    if (!_homeDashYearDefaulted) {
+      _homeDashYearDefaulted = true;
+      if (!prev && sortedYears.length) sel.value = sortedYears[0];
+    }
 
     hide(loadingEl);
     show(cardEl);
@@ -1369,7 +1373,7 @@ function donutSVG(segments) {
       <line x1="${d.ex.toFixed(1)}" y1="${hy.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${d.seg.color}" stroke-width="1.2" stroke-linecap="round"/>
       <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${d.seg.color}"/>
       <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="${FONT_LABEL}" font-weight="600" fill="var(--text)">${escapeHtml(d.labelText)}</text>
-      <text x="${tx.toFixed(1)}" y="${(hy + 10.5).toFixed(1)}" text-anchor="${anchor}" font-size="${FONT_PCT}"><tspan font-weight="700" fill="var(--text)">${d.value}</tspan><tspan fill="var(--text-muted)"> (${d.pct}%)</tspan></text>`);
+      <text x="${tx.toFixed(1)}" y="${(hy + 10.5).toFixed(1)}" text-anchor="${anchor}" font-size="${FONT_PCT}"><tspan font-weight="700" fill="var(--text)">${d.value}</tspan><tspan fill="var(--text)"> (${d.pct}%)</tspan></text>`);
   });
 
   return `<svg viewBox="0 0 255 172" class="donut-svg">
@@ -1866,26 +1870,16 @@ function buildResignAvgCard(s) {
   }).join('')}</div>`;
 }
 
-// Expandable card wrapper. cardExpanded: the state object owning this card's
-// open/closed flags (module-global `cardExpanded` for the home dashboard, or
-// a per-department state object for department pages — kept separate so
-// expanding a card on one page doesn't affect the other).
-function expandShell(cardKey, toggleLabel, content, cardExpanded, btnClass = '') {
-  const open = !!cardExpanded[cardKey];
-  const extraClass = btnClass ? ` ${btnClass}` : '';
-  return `<button type="button" class="ac-expand-btn${open ? ' open' : ''}${extraClass}" data-card="${cardKey}" aria-expanded="${open}">
-    <span class="ac-expand-label">${escapeHtml(toggleLabel)}</span>
-    <span class="ac-expand-chev">▾</span>
-  </button>
-  <div class="ac-expand-content${open ? ' open' : ''}">
-    <div class="ac-expand-inner">${content}</div>
-  </div>`;
+// Fixed (always-visible) detail section within a stat-card — just a divider
+// line separating the summary stat from the breakdown below, no click-to-expand.
+function fixedSection(content) {
+  return `<div class="ac-divider"></div><div class="ac-fixed-content">${content}</div>`;
 }
 
 // charts-grid (4 donut cards) + analytics-grid (5 stat cards) — the shared
 // body of the Data Analytics block, used by both the home dashboard and each
 // department's own dashboard page.
-function _analyticsRowsHtml(s, cardExpanded) {
+function _analyticsRowsHtml(s) {
   const sc = s.statusCounts;
   const C = {
     grad:        'rgba(34,197,94,.88)',     // green (graduation)
@@ -1935,22 +1929,22 @@ function _analyticsRowsHtml(s, cardExpanded) {
       <div class="analytic-card">
         <div class="ac-header"><span class="ac-title">${t('analyticsTotalTraining')}</span></div>
         ${fmtStatCard(s.total)}
-        ${expandShell('total', t('analyticsExpandGrade'), buildGradeTable(s.totalByGrade, 'rgba(59,130,246,.92)'), cardExpanded)}
+        ${fixedSection(buildGradeTable(s.totalByGrade, 'rgba(59,130,246,.92)'))}
       </div>
       <div class="analytic-card">
         <div class="ac-header"><span class="ac-title">${t('analyticsBasicTraining')}</span></div>
         ${fmtStatCard(s.basic)}
-        ${expandShell('basic', t('analyticsExpandProceed'), buildBasicProceed(s.basicProceed), cardExpanded)}
+        ${fixedSection(buildBasicProceed(s.basicProceed))}
       </div>
       <div class="analytic-card">
         <div class="ac-header"><span class="ac-title">${t('analyticsOpTraining')}</span></div>
         ${fmtStatCard(s.operation)}
-        ${expandShell('op', t('analyticsExpandGrade'), buildGradeTable(s.opByGrade, 'rgba(59,130,246,.92)'), cardExpanded)}
+        ${fixedSection(buildGradeTable(s.opByGrade, 'rgba(59,130,246,.92)'))}
       </div>
       <div class="analytic-card ac-danger">
         <div class="ac-header"><span class="ac-title">${t('analyticsResignDur')}</span></div>
         ${fmtStatCard(s.resign)}
-        ${expandShell('resign', t('analyticsExpandResignType'), buildResignDurTable(s), cardExpanded)}
+        ${fixedSection(buildResignDurTable(s))}
       </div>
       <div class="analytic-card">
         <div class="ac-header"><span class="ac-title">${t('analyticsResignRatio')}</span></div>
@@ -2003,7 +1997,7 @@ function renderAnalytics(yearFilter) {
       </select>
     </div>
 
-    ${_analyticsRowsHtml(s, cardExpanded)}
+    ${_analyticsRowsHtml(s)}
 
     <div style="margin-top:24px">${trendHtml}</div>`;
 
@@ -2037,15 +2031,6 @@ function renderAnalytics(yearFilter) {
       renderAnalytics(yearFilter);
     };
   }
-
-  // wire expand buttons for stat cards
-  el.querySelectorAll('.ac-expand-btn').forEach(btn => {
-    btn.onclick = () => {
-      const key = btn.dataset.card;
-      cardExpanded[key] = !cardExpanded[key];
-      renderAnalytics(yearFilter);
-    };
-  });
 
   // wire day-mode buttons
   const btnGroup = $('dayModeBtnGroup');
@@ -2083,7 +2068,6 @@ function renderAnalytics(yearFilter) {
 function _getDeptAnalyticsState(deptKey) {
   if (!_deptAnalyticsState[deptKey]) {
     _deptAnalyticsState[deptKey] = {
-      cardExpanded: { total: true, basic: true, op: true, resign: true },
       trendVisibility: { joined: true, inTraining: true, completed: true, resigned: true },
     };
   }
@@ -2119,20 +2103,21 @@ function renderDeptAnalytics(deptKey, employees, yearFilter) {
   el.innerHTML = `
     <div class="analytics-section-hdr">
       <h3>${t('analyticsTitle')}</h3>
+      <div class="analytics-export-controls">
+        <button type="button" id="newopExportPngBtn" class="small export-btn" title="Export PNG">PNG</button>
+        <button type="button" id="newopExportPdfBtn" class="small export-btn" title="Export PDF">PDF</button>
+      </div>
     </div>
 
-    ${_analyticsRowsHtml(s, state.cardExpanded)}
+    ${_analyticsRowsHtml(s)}
 
     <div style="margin-top:24px">${trendHtml}</div>`;
 
-  // wire expand buttons for stat cards (per-department state, doesn't affect home)
-  el.querySelectorAll('.ac-expand-btn').forEach(btn => {
-    btn.onclick = () => {
-      const key = btn.dataset.card;
-      state.cardExpanded[key] = !state.cardExpanded[key];
-      renderDeptAnalytics(deptKey, employees, yearFilter);
-    };
-  });
+  // wire PNG/PDF export buttons — capture just this department's analytics block
+  const exportPngBtn = $('newopExportPngBtn');
+  if (exportPngBtn) exportPngBtn.onclick = () => exportNewOpAnalyticsPng(deptKey);
+  const exportPdfBtn = $('newopExportPdfBtn');
+  if (exportPdfBtn) exportPdfBtn.onclick = () => exportNewOpAnalyticsPdf(deptKey);
 
   // wire trend year filter — sync back to this page's own year filter + table
   const trendYearSel = $(`trendYearFilter-${deptKey}`);
@@ -2254,7 +2239,7 @@ function renderHomeDashboard(yearFilter) {
       if ($('empYearFilter')) $('empYearFilter').value = '';
       $('dashboardTitle').textContent = `${dep.label} ${t('dashboard')}`;
       setPage('dashboard');
-      loadDashboard();
+      loadDashboard(true);
     };
 
     buildDashRow(tr, dep.label, total, completed, training, resign, transfer);
@@ -2366,6 +2351,96 @@ async function exportDashboardPdf() {
     pdf.save(`overall-dashboard_${exportTimestamp()}.pdf`);
   } catch (err) {
     console.error('[ExportPDF]', err);
+    showMessage(err.message || 'Export PDF failed', true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ===== BU DASHBOARD ANALYTICS EXPORT (PNG / PDF) =====
+// Same approach as the Overall Dashboard export above, but scoped to just
+// `#newop-stats` so each BU can save its own Data Analytics block — table
+// rows below it are not included.
+async function captureNewOpAnalyticsCanvas(deptKey) {
+  if (typeof html2canvas !== 'function') {
+    throw new Error('html2canvas library not loaded');
+  }
+  const el = $('newop-stats');
+  if (!el) throw new Error('Analytics section not found');
+
+  const bg = getComputedStyle(document.body).backgroundColor || '#ffffff';
+
+  // Inject a temporary BU + year badge next to the title, same pattern as
+  // the Overall Dashboard export. Removed in `finally`.
+  const titleEl   = el.querySelector('.analytics-section-hdr h3');
+  const deptLabel = (departments.find(d => d.key === deptKey) || {}).label || deptKey;
+  const yearText  = currentYearFilter || t('allYears');
+  const tag = document.createElement('span');
+  tag.className = 'export-year-tag';
+  tag.textContent = `${deptLabel} · ${t('yearLabel')}: ${yearText}`;
+  if (titleEl) titleEl.appendChild(tag);
+
+  try {
+    return await html2canvas(el, {
+      backgroundColor: bg,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      windowWidth: document.documentElement.scrollWidth,
+      // Skip the PNG/PDF buttons themselves so the export looks clean
+      ignoreElements: (node) =>
+        !!(node.classList && node.classList.contains('analytics-export-controls')),
+    });
+  } finally {
+    if (tag.parentNode) tag.remove();
+  }
+}
+
+async function exportNewOpAnalyticsPng(deptKey) {
+  const btn = $('newopExportPngBtn');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const canvas = await captureNewOpAnalyticsCanvas(deptKey);
+    const link = document.createElement('a');
+    link.download = `newop-analytics_${deptKey}_${exportTimestamp()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error('[ExportNewOpPNG]', err);
+    showMessage(err.message || 'Export PNG failed', true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function exportNewOpAnalyticsPdf(deptKey) {
+  const btn = $('newopExportPdfBtn');
+  if (!btn || btn.disabled) return;
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showMessage('jsPDF library not loaded', true);
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const canvas = await captureNewOpAnalyticsCanvas(deptKey);
+    const { jsPDF } = window.jspdf;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const pdf = new jsPDF({
+      orientation: w > h ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [w, h],
+      hotfixes: ['px_scaling'],
+      compress: true,
+    });
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
+    pdf.save(`newop-analytics_${deptKey}_${exportTimestamp()}.pdf`);
+  } catch (err) {
+    console.error('[ExportNewOpPDF]', err);
     showMessage(err.message || 'Export PDF failed', true);
   } finally {
     btn.disabled = false;
@@ -3470,8 +3545,8 @@ function renderJumperTable() {
   const pl = document.getElementById('jtp-pageLabel');
   const pp = document.getElementById('jtp-prevPage');
   const np = document.getElementById('jtp-nextPage');
-  if (rl) rl.textContent = `แสดง ${rs}-${re} จาก ${total} รายการ`;
-  if (pl) pl.textContent = `หน้า ${_jumperTableState.page} / ${pageCount}`;
+  if (rl) rl.textContent = `show ${rs}-${re} from ${total} items`;
+  if (pl) pl.textContent = `Page ${_jumperTableState.page} of ${pageCount}`;
   if (pp) pp.disabled    = _jumperTableState.page <= 1;
   if (np) np.disabled    = _jumperTableState.page >= pageCount;
 }
@@ -4243,7 +4318,7 @@ function renderTrainerTable(data) {
     const pl = document.getElementById('trainer-pageLabel');
     const pv = document.getElementById('trainer-prevPage');
     const nv = document.getElementById('trainer-nextPage');
-    if (rl) rl.textContent = total > 0 ? `${start+1}–${Math.min(start+pageSize,total)} จาก ${total}` : '0 รายการ';
+    if (rl) rl.textContent = total > 0 ? `${start+1}–${Math.min(start+pageSize,total)} of ${total}` : '0 items';
     if (pl) pl.textContent = `${page} / ${pageCount}`;
     if (pv) pv.disabled = page <= 1;
     if (nv) nv.disabled = page >= pageCount;
@@ -4303,8 +4378,8 @@ function renderTrainerTable(data) {
     const pl = document.getElementById('trainer-pageLabel');
     const pv = document.getElementById('trainer-prevPage');
     const nv = document.getElementById('trainer-nextPage');
-    if (rl) rl.textContent = total > 0 ? `${start+1}–${Math.min(start+pageSize,total)} จาก ${total}` : '0 รายการ';
-    if (pl) pl.textContent = `${page} / ${pageCount}`;
+    if (rl) rl.textContent = total > 0 ? `${start+1}–${Math.min(start+pageSize,total)} of ${total}` : '0 items';
+    if (pl) pl.textContent = `${page} of ${pageCount}`;
     if (pv) pv.disabled = page <= 1;
     if (nv) nv.disabled = page >= pageCount;
   }
@@ -7508,9 +7583,9 @@ function renderGicaTable() {
   if (editable) _wireGicaEmpNameClicks(wrap);
 
   const rangeEl = $('gica-rangeLabel');
-  if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} จาก ${total}` : '0 รายการ';
+  if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} of ${total}` : '0 items';
   const pageEl = $('gica-pageLabel');
-  if (pageEl) pageEl.textContent = `${st.page} / ${pages}`;
+  if (pageEl) pageEl.textContent = `${st.page} of ${pages}`;
 }
 
 function _wireGicaEmpNameClicks(wrap) {
