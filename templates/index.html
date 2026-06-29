@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=149" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=150" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -45,13 +45,7 @@
 
   <!-- Tab Bar -->
   <nav class="tab-bar hidden" id="mainTabBar">
-    <!-- New Operator — has BU hover sub-menu -->
-    <div class="tab-item has-submenu" id="tabItem-newOperator">
-      <button class="tab-btn active" data-tab="newOperator" data-i18n="tabNewOperator">New Operator</button>
-      <div class="tab-submenu" id="tabSubMenu-newOperator">
-        <!-- populated by renderTabSubMenu() after departments are loaded -->
-      </div>
-    </div>
+    <button class="tab-btn active" id="tabItem-newOperator" data-tab="newOperator" data-i18n="tabNewOperator">New Operator</button>
     <button class="tab-btn" data-tab="jumper" data-i18n="tabJumper">Jumper</button>
     <button class="tab-btn" data-tab="trainer" data-i18n="tabTrainer">Trainer</button>
     <button class="tab-btn" data-tab="sewingOperator" data-i18n="tabSewingOperator">Sewing Operator</button>
@@ -229,43 +223,57 @@
 
     <!-- Home Page -->
     <section id="homePage" class="page hidden">
-      <!-- BU selection moved to hover sub-menu on New Operator tab — hidden here -->
-      <section class="card home-card" style="display:none">
-        <h2 data-i18n="selectDept">Select BU</h2>
-        <div id="departmentGrid" class="department-grid"></div>
-      </section>
-
-      <!-- Overall Dashboard -->
-      <div id="homeDashLoading" class="sk-screen">
-        <div class="jtp-row2">
-          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-        </div>
-        <div class="sk-row">
-          <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
-          <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
-        </div>
+      <div class="newop-subtab-bar">
+        <button type="button" class="newop-subtab-btn newop-subtab-btn--active" data-subtab="sewing">Sewing</button>
+        <button type="button" class="newop-subtab-btn" data-subtab="qcqa">QC-QA</button>
       </div>
 
+      <div id="newop-sewing-panel">
+        <!-- BU selection moved to hover sub-menu on New Operator tab — hidden here -->
+        <section class="card home-card" style="display:none">
+          <h2 data-i18n="selectDept">Select BU</h2>
+          <div id="departmentGrid" class="department-grid"></div>
+        </section>
 
-      <section id="homeDashCard" class="card home-dash-card hidden">
-        <div class="home-dash-header">
-          <h2 data-i18n="overallDashboard">Overall Dashboard</h2>
-          <div class="home-dash-controls">
-            <button id="exportPngBtn" class="export-btn" title="Export PNG">PNG</button>
-            <button id="exportPdfBtn" class="export-btn" title="Export PDF">PDF</button>
-            <select id="homeDashYearFilter" class="year-select"></select>
-            <button id="homeDashRefreshBtn" class="small refresh-btn" data-i18n="refresh">Refresh</button>
+        <!-- Overall Dashboard -->
+        <div id="homeDashLoading" class="sk-screen">
+          <div class="jtp-row2">
+            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          </div>
+          <div class="sk-row">
+            <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+            <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
           </div>
         </div>
 
-        <div id="homeDashGrid" class="hidden"></div>
-        <div id="homeDashAnalytics" class="hidden"></div>
-      </section>
+
+        <section id="homeDashCard" class="card home-dash-card hidden">
+          <div class="home-dash-header">
+            <h2 data-i18n="overallDashboard">Overall Dashboard</h2>
+            <div class="home-dash-controls">
+              <button id="exportPngBtn" class="export-btn" title="Export PNG">PNG</button>
+              <button id="exportPdfBtn" class="export-btn" title="Export PDF">PDF</button>
+              <select id="homeDashYearFilter" class="year-select"></select>
+              <button id="homeDashRefreshBtn" class="small refresh-btn" data-i18n="refresh">Refresh</button>
+            </div>
+          </div>
+
+          <div id="homeDashGrid" class="hidden"></div>
+          <div id="homeDashAnalytics" class="hidden"></div>
+        </section>
+      </div>
+
+      <div id="newop-qcqa-panel" class="hidden">
+        <div class="tab-placeholder">
+          <div class="tab-placeholder-icon">🚧</div>
+          <p data-i18n="tabComingSoon">อยู่ระหว่างพัฒนา กรุณารอสักครู่...</p>
+        </div>
+      </div>
     </section>
 
     <!-- Dashboard Page -->
@@ -291,35 +299,38 @@
 
       <!-- Employee Data Card -->
       <section class="card employee-data-card">
+  
   <div class="table-toolbar">
     <h2 data-i18n="riskList">ข้อมูลพนักงาน</h2>
-    <button id="registerBtn" class="primary small" data-i18n="register">ลงทะเบียน</button>
-  </div>
-  
-  <div class="search-filter-bar">
-    <div class="search-row">
-      <input id="searchEmployeeId" data-i18n-placeholder="employeeIdPlaceholder" placeholder="Employee ID" />
-      <button id="searchBtn" class="small" data-i18n="search">Search</button> </div>
     
-    <div class="filter-row">
+    <div class="search-filter-bar">
       
-      <select id="empYearFilter" class="year-select">
-        <option value="" data-i18n="allYears">ทุกปี</option>
-      </select>
+      <div class="search-row">
+  <input id="searchEmployeeId" data-i18n-placeholder="employeeIdPlaceholder" placeholder="Employee ID" />
+  </div>
       
-      <select id="statusFilter">
-        <option value="" data-i18n="filterAll">ทั้งหมด</option>
-        <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
-        <option value="completed-overdue" data-i18n="statusCompletedOverdue">ฝึกเสร็จ (เกินกำหนด)</option>
-        <option value="under-operation" data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</option>
-        <option value="under-basic" data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</option>
-        <option value="resign-operation" data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</option>
-        <option value="resign-basic" data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</option>
-        <option value="resign-before-basic" data-i18n="statusResignBeforeBasic">ลาออกก่อนฝึกพื้นฐาน</option>
-        <option value="transfer-operation" data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</option>
-        <option value="transfer-basic" data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
-        <option value="transfer-before-basic" data-i18n="statusTransferBeforeBasic">โอนย้ายก่อนฝึกพื้นฐาน</option>
-      </select>
+      <div class="filter-row">
+        <select id="empYearFilter" class="year-select">
+          <option value="" data-i18n="allYears">ทุกปี</option>
+        </select>
+        
+        <select id="statusFilter">
+          <option value="" data-i18n="filterAll">ทั้งหมด</option>
+          <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
+          <option value="completed-overdue" data-i18n="statusCompletedOverdue">ฝึกเสร็จ (เกินกำหนด)</option>
+          <option value="under-operation" data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</option>
+          <option value="under-basic" data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</option>
+          <option value="resign-operation" data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</option>
+          <option value="resign-basic" data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</option>
+          <option value="resign-before-basic" data-i18n="statusResignBeforeBasic">ลาออกก่อนฝึกพื้นฐาน</option>
+          <option value="transfer-operation" data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</option>
+          <option value="transfer-basic" data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
+          <option value="transfer-before-basic" data-i18n="statusTransferBeforeBasic">โอนย้ายก่อนฝึกพื้นฐาน</option>
+        </select>
+      </div>
+
+      <button id="registerBtn" class="primary small" data-i18n="register">ลงทะเบียน</button>
+      
     </div>
   </div>
         <div class="table-wrap">
@@ -364,7 +375,7 @@
         </div>
       </section>
     </section>
-    <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Update Real time</p>
+    <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Version 1.0.0</p>
   </main>
 
   <!-- Jumper Skill Tab -->
@@ -404,7 +415,7 @@
         <!-- Charts row -->
         <div class="charts">
           <div class="card" style="padding:16px;margin-top:-12px;">
-            <h3 style="margin:0 0 12px;font-size:1rem;">จำนวนคนต่อ BU</h3>
+            <h3 style="margin:0 0 12px;font-size:1rem;">Headcount by BU</h3>
             <div class="chart-canvas-wrap">
               <canvas id="jtp-empPerBuChart"></canvas>
             </div>
@@ -428,17 +439,28 @@
         </div>
 
         <!-- Data table -->
-        <section class="card" style="padding:16px;margin-top:-12px;">
-          <h3 style="margin:0 0 12px;font-size:1rem;">รายชื่อ Jumper</h3>
-          <div class="filters">
-            <select id="jtp-filterBu"><option value="">ทุก BU</option></select>
-            <select id="jtp-filterExpired">
-              <option value="">ทุกสถานะ</option>
-              <option value="expired">มี Skill หมดอายุ</option>
-              <option value="ok">ไม่มี Skill หมดอายุ</option>
-            </select>
-            <input type="text" id="jtp-filterSearch" placeholder="Search Employee Name / ID" />
-          </div>
+        <section class="card jumper-data-card">
+  
+  <div class="table-toolbar">
+    <h3 data-i18n="Jumper Name list">Jumper Name list</h3>
+    
+    <div class="search-filter-bar">
+      <div class="search-row">
+        <input type="text" id="jtp-filterSearch" placeholder="Employee ID" />
+      </div>
+      
+      <div class="filter-row">
+        <select id="jtp-filterBu" class="year-select">
+          <option value="">All BU</option>
+        </select>
+        <select id="jtp-filterExpired" class="year-select">
+          <option value="">All Status</option>
+          <option value="expired">Has Expired Skills</option>
+          <option value="ok">No Expired Skills</option>
+        </select>
+      </div>
+    </div>
+      </div>
           <div id="jtp-tableWrap"></div>
           <div class="jtp-pagination">
             <span id="jtp-rangeLabel" class="jtp-range-label"></span>
@@ -458,7 +480,7 @@
           </div>
         </section>
 
-        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Last update 11 June 2026</p>
+        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Last update 26 June 2026</p>
       </div><!-- /#jumper-dashboard -->
     </main>
   </div>
@@ -499,7 +521,7 @@
           <!-- Left: จำนวนคนต่อ BU -->
           <div class="card" style="padding:16px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-              <h3 style="margin:0;font-size:1rem;">จำนวนคนต่อ BU</h3>
+              <h3 style="margin:0;font-size:1rem;">Headcount by BU</h3>
               <div id="trainer-buChartToggle" class="toggle-group">
                 <button class="toggle-btn" data-mode="headcount" type="button">Sort by Headcount</button>
                 <button class="toggle-btn active" data-mode="status" type="button">Sort by Status</button>
@@ -545,28 +567,29 @@
         <!-- Person list -->
         <div class="card" style="padding:16px;margin-top:-15px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-            <h3 style="margin:0;font-size:1rem;font-weight:700;">รายชื่อครูฝึก</h3>
+            <h3 style="margin:0;font-size:1rem;font-weight:700;">CSA Trainer Name list</h3>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               <div id="trainer-tableToggle" class="toggle-group">
                 <button class="toggle-btn active" data-mode="person" type="button">By Person</button>
                 <button class="toggle-btn" data-mode="skilltype" type="button">By Skill Type</button>
               </div>
-              <button id="trainer-tableHideBtn" class="toggle-btn" type="button">ซ่อน ▲</button>
+              <button id="trainer-tableHideBtn" class="toggle-btn" type="button">Hide ▲</button>
             </div>
           </div>
           <div id="trainer-tableBody">
             <div class="filters">
-              <select id="trainer-filterBu"><option value="">ทุก BU</option></select>
-              <select id="trainer-filterProductType"><option value="">ทุก Product Type</option></select>
-              <select id="trainer-filterStyle"><option value="">ทุก Style</option></select>
-              <select id="trainer-filterStatus"><option value="">ทุกสถานะ</option></select>
-              <input type="text" id="trainer-filterSearch" placeholder="ค้นหาชื่อ / รหัสพนักงาน" />
+              <select id="trainer-filterBu"><option value="">All BU</option></select>
+              <select id="trainer-filterProductType"><option value="">All Product Types</option></select>
+              <select id="trainer-filterStyle"><option value="">All Styles</option></select>
+              <select id="trainer-filterStatus"><option value="">All Statuses</option></select>
+              <input type="text" id="trainer-filterSearch" placeholder="Search by name or employee ID" />
             </div>
+            
             <div id="trainer-table"></div>
             <div class="jtp-pagination">
               <span id="trainer-rangeLabel" class="jtp-range-label"></span>
               <div class="jtp-page-size-group">
-                <label class="jtp-page-size-label" for="trainer-pageSize">แสดงต่อหน้า</label>
+                <label class="jtp-page-size-label" for="trainer-pageSize">Show per page</label>
                 <select id="trainer-pageSize" class="jtp-page-size-select">
                   <option value="10" selected>10</option>
                   <option value="25">25</option>
@@ -582,7 +605,7 @@
           </div>
         </div>
 
-        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Last update 11 June 2026</p>
+        <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Last update 26 June 2026</p>
       </div><!-- /#trainer-dashboard -->
     </main>
   </div>
@@ -592,7 +615,7 @@
     <main class="container">
       <div class="tab-placeholder">
         <div class="tab-placeholder-icon">🚧</div>
-        <p id="tabPlaceholder-sewingOperator" data-i18n="tabComingSoon">อยู่ระหว่างพัฒนา กรุณารอสักครู่...</p>
+        <p id="tabPlaceholder-sewingOperator" data-i18n="tabComingSoon"> This feature is currently under development. Please wait....</p>
       </div>
     </main>
   </div>
@@ -634,7 +657,7 @@
         <div id="gica-perf-panel">
           <!-- KPI + BU breakdown (filled by JS) -->
           <div id="gica-summary"></div>
-          <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Update Real time</p>
+          <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Version 1.0.0</p>
         </div><!-- /#gica-perf-panel -->
 
         <div id="gica-sched-panel" class="hidden">
@@ -782,6 +805,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=319"></script>
+  <script src="/static/js/app.js?v=320"></script>
 </body>
 </html>

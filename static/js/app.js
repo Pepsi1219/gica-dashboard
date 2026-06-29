@@ -551,7 +551,7 @@ const TRANSLATIONS = {
 };
 
 // ===== STATE =====
-let _switchMainTab    = null;   // set by initTabBar — used by renderTabSubMenu
+let _switchMainTab    = null;   // set by initTabBar — used by selectDepartmentKey to jump to the New Operator tab
 let currentDepartment = null;
 let currentEmployeeId = null;
 let currentFilter     = '';
@@ -2487,10 +2487,27 @@ async function createNewEmployee() {
 }
 
 // ===== SEARCH EMPLOYEE =====
-async function searchEmployee() {
-  const empId = $('searchEmployeeId').value.trim();
-  if (!empId) return showMessage(t('pleaseEnterEmployeeId'), true);
-  await openEditModal(empId);
+function searchEmployee() {
+  const keyword = $('searchEmployeeId').value.trim().toLowerCase();
+  
+  // ✨ เปลี่ยนมาใช้ตัวแปร 'lastEmployees' ซึ่งเป็นตัวแปร Master Data จริงของหน้านี้
+  const sourceData = lastEmployees || []; 
+  
+  const filtered = sourceData.filter(emp => {
+    // ✨ จับคู่ให้ตรงกับชื่อฟิลด์จริง 'Employee ID' และ 'Employee Name' ของระบบคุณ
+    const empId = (emp['Employee ID'] || '').toString().toLowerCase();
+    const empName = (emp['Employee Name'] || '').toLowerCase();
+    
+    return empId.includes(keyword) || empName.includes(keyword);
+  });
+  
+  // ✨ เพิ่มลอจิกรีเซ็ตหน้ากลับไปหน้า 1 ป้องกันบั๊กตารางว่าง (ถ้ามีตัวแปรคุม State ในระบบ)
+  if (typeof _newOpTableState !== 'undefined') {
+    _newOpTableState.page = 1;
+  }
+  
+  // ✨ เรียกใช้ฟังก์ชันวาดตารางตัวจริงของหน้า New Operator
+  renderEmployeeTable(filtered); 
 }
 
 // ===== EDIT FORM (modal) =====
@@ -2599,7 +2616,8 @@ function initTabBar() {
     // Admin Settings (Special Holidays) is a New Operator feature — never show
     // it while on the GICA tab, even for admin/csa_user sessions that can write.
     $('adminBtn')?.classList.toggle('hidden', tabKey === 'gica' || !_adminBtnAllowedByRole);
-    if (tabKey === 'gica') requestAnimationFrame(syncGicaSubtabTop);
+    if (tabKey === 'gica')       requestAnimationFrame(syncGicaSubtabTop);
+    if (tabKey === 'newOperator') requestAnimationFrame(syncNewOpSubtabTop);
     // update placeholder text if i18n already loaded
     TAB_IDS.forEach(id => {
       const ph = document.getElementById('tabPlaceholder-' + id);
@@ -2607,7 +2625,7 @@ function initTabBar() {
     });
   };
 
-  // expose for use by selectDepartmentKey / renderTabSubMenu
+  // expose for use by selectDepartmentKey
   _switchMainTab = switchTab;
 
   btnGroup.querySelectorAll('.tab-btn').forEach(btn => {
@@ -2622,24 +2640,6 @@ function initTabBar() {
   // sync button labels with current language
   btnGroup.querySelectorAll('.tab-btn[data-i18n]').forEach(btn => {
     btn.textContent = t(btn.dataset.i18n);
-  });
-}
-
-// Populate BU hover sub-menu under the New Operator tab button
-function renderTabSubMenu() {
-  const container = document.getElementById('tabSubMenu-newOperator');
-  if (!container) return;
-  container.innerHTML = '';
-  departments.forEach(dep => {
-    const btn = document.createElement('button');
-    btn.type        = 'button';
-    btn.className   = 'tab-submenu-btn';
-    btn.textContent = dep.label;
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      selectDepartmentKey(dep.key, dep.label);
-    };
-    container.appendChild(btn);
   });
 }
 
@@ -2660,6 +2660,35 @@ function syncGicaSubtabTop() {
   if (topbarEl && tabBarEl && subtabEl) {
     subtabEl.style.top = (topbarEl.offsetHeight + tabBarEl.offsetHeight) + 'px';
   }
+}
+
+// Same stacking reason as syncGicaSubtabTop above, for the New Operator
+// page's own Sewing/QC-QA subtab bar. Kept as a separate class/function
+// (not reusing .gica-subtab-bar) because both bars can be present in the DOM
+// at once (different tabs, just hidden) — sharing a class would make
+// querySelector only ever sync whichever one comes first in the DOM.
+function syncNewOpSubtabTop() {
+  const topbarEl = document.querySelector('.topbar');
+  const tabBarEl = document.getElementById('mainTabBar');
+  const subtabEl = document.querySelector('.newop-subtab-bar');
+  if (topbarEl && tabBarEl && subtabEl) {
+    subtabEl.style.top = (topbarEl.offsetHeight + tabBarEl.offsetHeight) + 'px';
+  }
+}
+
+// Wires the Sewing/QC-QA subtab bar on the New Operator landing page.
+// QC-QA has no backend data yet — it's a placeholder, same pattern as the
+// Jumper/Trainer/Sewing Operator "coming soon" tabs.
+function initNewOpSubtabs() {
+  document.querySelectorAll('.newop-subtab-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.newop-subtab-btn').forEach(b =>
+        b.classList.toggle('newop-subtab-btn--active', b === btn));
+      const subtab = btn.dataset.subtab;
+      $('newop-sewing-panel')?.classList.toggle('hidden', subtab !== 'sewing');
+      $('newop-qcqa-panel')?.classList.toggle('hidden', subtab !== 'qcqa');
+    };
+  });
 }
 
 // ===== LOGIN PARTICLE ANIMATION =====
@@ -2865,8 +2894,11 @@ async function init() {
   initTabBar();
   syncTabBarTop();
   syncGicaSubtabTop();
+  syncNewOpSubtabTop();
+  initNewOpSubtabs();
   window.addEventListener('resize', syncTabBarTop);
   window.addEventListener('resize', syncGicaSubtabTop);
+  window.addEventListener('resize', syncNewOpSubtabTop);
   initAdmin();
   initRegisterModal();
   initEditModal();
@@ -2928,7 +2960,9 @@ async function init() {
   // Navigation buttons
   $('backHomeBtn').onclick = () => setPage('home');
   $('refreshBtn').onclick  = loadDashboard;
-  $('searchBtn').onclick   = searchEmployee;
+  $('searchEmployeeId').oninput = () => {
+  searchEmployee();
+};
 
   // Table event delegation: edit, confirm, cancel
   $('employeeTableBody').addEventListener('click', async (e) => {
@@ -3029,7 +3063,6 @@ async function init() {
   departments = await api('/api/departments');
   if (!Array.isArray(departments)) departments = [];
   renderDepartmentButtons();
-  renderTabSubMenu();
   renderHolidays();
   setPage('home');
 
@@ -3503,16 +3536,16 @@ function renderJumperTable() {
 
   const cols = [
     { key: 'bu',        label: 'BU' },
-    { key: 'empid',     label: 'รหัสพนักงาน' },
-    { key: 'firstname', label: 'ชื่อ-สกุล' },
-    { key: 'deptname',  label: 'แผนก' },
-    { key: 'position',  label: 'ตำแหน่ง' },
+    { key: 'empid',     label: 'Employee ID' },
+    { key: 'firstname', label: 'Full Name' },
+    { key: 'deptname',  label: 'Department' },
+    { key: 'position',  label: 'Position' },
     { key: 'skill',     label: 'Skill' },
-    { key: 'expired',   label: 'หมดอายุ' },
+    { key: 'expired',   label: 'Expired' },
   ];
 
   if (!pageRows.length) {
-    wrap.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center;">ไม่พบข้อมูล</div>';
+    wrap.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center;">No data found</div>';
   } else {
     const head = cols.map(c => {
       const arrow = sortKey === c.key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
@@ -3521,7 +3554,7 @@ function renderJumperTable() {
     const body = pageRows.map(r => `<tr>${cols.map(c => {
       if (c.key === 'expired') {
         const cls = r.expired > 0 ? 'warn' : 'ok';
-        const lbl = r.expired > 0 ? `${r.expired} หมดอายุ` : 'ปกติ';
+        const lbl = r.expired > 0 ? `${r.expired} Expired` : 'Active';
         return `<td><span class="badge ${cls}">${lbl}</span></td>`;
       }
       return `<td>${escapeHtml(String(r[c.key] ?? ''))}</td>`;
@@ -3585,7 +3618,7 @@ function _wireJumperControls() {
 
   if (buSel) {
     const bus = sortBus([...new Set(_jumperRows.map(r => r.bu))]);
-    buSel.innerHTML = '<option value="">ทุก BU</option>' +
+    buSel.innerHTML = '<option value="">All BU</option>' +
       bus.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
     buSel.onchange = () => {
       _jumperTableState.filters.bu = buSel.value;
@@ -4490,7 +4523,7 @@ function _wireTrainerControls(data) {
 
   if (buSel) {
     const bus = [...new Set(data.trainers.map(t => t.bu))].sort();
-    buSel.innerHTML = '<option value="">ทุก BU</option>' +
+    buSel.innerHTML = '<option value="">All BU</option>' +
       bus.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
     buSel.onchange = () => { _trainerTableState.filters.bu = buSel.value; _trainerTableState.page = 1; renderTrainerTable(data); };
   }
@@ -4502,13 +4535,13 @@ function _wireTrainerControls(data) {
         .map(s => s.style)
         .filter(Boolean)
     )].sort();
-    styleSel.innerHTML = '<option value="">ทุก Style</option>' +
+    styleSel.innerHTML = '<option value="">All Styles</option>' +
       styles.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   };
 
   if (ptSel) {
     const pts = [...new Set(Object.values(data.skills).flat().map(s => s.productType).filter(Boolean))].sort();
-    ptSel.innerHTML = '<option value="">ทุก Product Type</option>' +
+    ptSel.innerHTML = '<option value="">All Product Types</option>' +
       pts.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
     ptSel.onchange = () => {
       _trainerTableState.filters.productType = ptSel.value;

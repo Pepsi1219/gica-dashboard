@@ -282,49 +282,6 @@ body {
   position: sticky;
   top: 57px;   /* approximate topbar height — tabs stay visible when scrolling */
   z-index: 90;
-  overflow: visible;  /* allow BU dropdown to extend below the bar */
-}
-
-/* ── Tab Item wrapper (used for tabs that have a hover sub-menu) ── */
-.tab-item {
-  position: relative;
-  display: flex;
-  align-items: stretch;
-}
-
-/* BU sub-menu dropdown — shown on hover */
-.tab-submenu {
-  display: none;
-  position: absolute;
-  top: calc(100% + 2px);   /* just below the tab bar border */
-  left: 0;
-  min-width: 130px;
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0,0,0,.13);
-  padding: 5px;
-  z-index: 200;
-}
-.tab-item.has-submenu:hover .tab-submenu { display: block; }
-
-.tab-submenu-btn {
-  display: block;
-  width: 100%;
-  padding: 9px 14px;
-  text-align: left;
-  background: none;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font: 600 13px 'Inter', "Segoe UI", sans-serif;
-  color: var(--text);
-  white-space: nowrap;
-  transition: background .12s, color .12s;
-}
-.tab-submenu-btn:hover {
-  background: var(--accent-bg);
-  color: var(--accent);
 }
 
 .tab-btn {
@@ -703,14 +660,20 @@ button:active { transform: scale(.97); }
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   border-radius: 10px;
+  padding-bottom: 8px;
 }
 .home-dash-table {
   width: 100%;
-  min-width: 720px;           /* keeps columns readable; wrap scrolls if narrower */
-  table-layout: fixed;        /* 2.3 equal column widths */
-  border-collapse: collapse;
+  min-width: 720px;
+  table-layout: fixed;
+  border-collapse: separate; 
+  border-spacing: 0; 
   font-size: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--text-muted);
+  overflow: hidden;
 }
+
 .home-dash-table th {
   background: linear-gradient(135deg, var(--blue), var(--text-muted));
   color: #ffffff;
@@ -1485,26 +1448,10 @@ textarea { min-height: 92px; resize: vertical; }
 
 /* ===== TABLE ===== */
 .table-wrap {
-  position: relative; /* anchor for the horizontal-scroll-hint shadows below */
-  overflow-x: auto;    /* horizontal scroll only (15 columns) — vertical grows
-                          with the page, same as GICA's employee table, so the
-                          page itself scrolls instead of nesting a second
-                          scrollbar inside a fixed-height box */
+  position: relative;
+  overflow-x: auto;
 }
-/* Persistent edge shadows hinting the table scrolls horizontally — pure CSS,
-   no scroll-position JS. z-index above sticky <th> (z-index:2) so it shows
-   through the header row too. */
-.table-wrap::before, .table-wrap::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 16px;
-  pointer-events: none;
-  z-index: 3;
-}
-.table-wrap::before { left: 0;  background: linear-gradient(to right, rgba(0,0,0,.14), rgba(0,0,0,0)); }
-.table-wrap::after   { right: 0; background: linear-gradient(to left,  rgba(0,0,0,.14), rgba(0,0,0,0)); }
+
 /* ===== TABLE TOOLBAR & SEARCH BAR ===== */
 .table-toolbar {
   display: flex;
@@ -1520,9 +1467,6 @@ textarea { min-height: 92px; resize: vertical; }
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 2px;
-  padding: 5px 10px;
-
 }
 
 .search-row {
@@ -1558,7 +1502,7 @@ textarea { min-height: 92px; resize: vertical; }
 }
 
 #statusFilter, #yearFilter {
-  padding: 8px 14px;
+  padding: 8px 0px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
@@ -2327,6 +2271,12 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-subtab-btn:hover { color:var(--text); background:var(--bg-hover, rgba(99,102,241,0.06)); }
 .gica-subtab-btn--active { color:var(--primary, #6366f1); border-bottom-color:var(--primary, #6366f1); }
 
+/* — New Operator Sub-tab bar (Sewing / QC-QA) — same pattern as GICA's above — */
+.newop-subtab-bar { display:flex; gap:2px; margin-bottom:16px; border-bottom:2px solid var(--border); position:sticky; top:107px; /* approximate topbar + main tab-bar height — overridden by syncNewOpSubtabTop() */ z-index:20; background:var(--bg); }
+.newop-subtab-btn { padding:8px 20px; font-size:0.85rem; font-weight:600; color:var(--text-muted); background:transparent; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; border-radius:6px 6px 0 0; transition:color .15s, border-color .15s, background .15s; }
+.newop-subtab-btn:hover { color:var(--text); background:var(--bg-hover, rgba(99,102,241,0.06)); }
+.newop-subtab-btn--active { color:var(--primary, #6366f1); border-bottom-color:var(--primary, #6366f1); }
+
 .gica-bu-cohort-card { transition: box-shadow .15s, transform .15s; }
 .gica-bu-cohort-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.12); transform: translateY(-1px); }
 
@@ -2560,12 +2510,53 @@ tbody tr:hover { filter: brightness(.97); }
 .individual-menu-item.active { background: var(--blue2); color: #fff; }
 
 /* ── Filter bar spacing ──────────────────────────────────────────────────── */
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-  font-size: 0.75rem;
+#statusFilter, 
+#yearFilter, 
+#empYearFilter,
+#jtp-filterBu,       /* ✨ เพิ่มไอดีตัวกรอง BU ของ Jumper */
+#jtp-filterExpired { /* ✨ เพิ่มไอดีตัวกรองสถานะของ Jumper */
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px; /* ดีดเป็นทรงแคปซูลมนระบบเดียวกัน */
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2364748b' stroke-width='2' class='bi bi-chevron-down' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+#jtp-filterBu { min-width: 110px; }
+#jtp-filterExpired { min-width: 160px; }
+
+/* จุดกำหนดสไตล์ช่อง Input ค้นหาของ Jumper */
+.search-row input,
+#jtp-filterSearch { /* ✨ ผูกไอดีช่องค้นหา Jumper */
+  width: 180px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px; /* ดีดช่องเสิร์ชเป็นทรงแคปซูลสวยเฉียบ */
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  transition: all 0.2s ease;
+}
+
+#jtp-filterSearch:focus {
+  outline: none;
+  border-color: var(--blue1, #3860b6);
+  box-shadow: 0 0 0 3px rgba(56, 96, 182, 0.15); /* เรืองแสงเวลาพิมพ์ */
+}
+
+/* 🧼 เก็บกวาดล้างสไตล์การ์ด Jumper ภายนอกให้พรีเมียม */
+.jumper-data-card {
+  padding: 2px 20px;
+  white-space: nowrap;
 }
 
 /* ── Jumper table pagination ─────────────────────────────────────────────── */
@@ -2575,9 +2566,9 @@ tbody tr:hover { filter: brightness(.97); }
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 14px 4px 4px;
+  padding: 2px 2px;
   border-top: 1px solid var(--border-light);
-  margin-top: 12px;
+  
 }
 
 /* left: record range info */
@@ -2594,9 +2585,8 @@ tbody tr:hover { filter: brightness(.97); }
   gap: 8px;
 }
 .jtp-page-size-label {
-  font-size: 0.82rem;
+  font-size: 0.7em;
   color: var(--text-muted);
-  white-space: nowrap;
 }
 .jtp-page-size-select {
   padding: 5px 10px;
@@ -2640,7 +2630,7 @@ tbody tr:hover { filter: brightness(.97); }
   cursor: not-allowed;
 }
 .jtp-page-label {
-  font-size: 0.85rem;
+  font-size: 0.65rem;
   color: var(--text);
   font-weight: 600;
   min-width: 72px;
