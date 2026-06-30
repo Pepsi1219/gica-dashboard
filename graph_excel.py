@@ -330,3 +330,104 @@ def update_gica_employee(token, drive_id, item_id, table_name, cols, empid, patc
     row_index = employee["_row_index"]
     _write_row_patch(token, drive_id, item_id, table_name, row_index, object_to_row(merged, headers))
     return merged
+
+
+# ── Generic per-table CRUD (key column parameterized) ──────────────────────────
+# Same shape as the GICA helpers above, but the primary-key column name is passed
+# in instead of hard-coded to "empid" — used by modules with their own PK per
+# table (e.g. Audit: PlanID/ExecutionID/FindingID). GICA's own functions are
+# left untouched; this is purely additive. AuditTemplate has no such PK column
+# (see append_row/update_row_by_index below) — it doesn't use this CRUD set.
+
+def get_table_rows_by_key(token, drive_id, item_id, table_name, cols, key_col):
+    """Read a table's rows mapped by header name, keyed on key_col instead of
+    'empid'. Keeps _row_index (needed for writes) and the table's actual header
+    order (needed to write back in the right column positions)."""
+    base = f"/drives/{drive_id}/items/{item_id}/workbook/tables/{table_name}"
+    col_resp = graph_request(token, "GET", f"{base}/columns?$select=name")
+    headers  = [c.get("name", "") for c in col_resp.get("value", [])]
+
+    row_resp = graph_request(token, "GET", f"{base}/rows")
+    rows = []
+    for index, row in enumerate(row_resp.get("value", [])):
+        values  = (row.get("values") or [[]])[0]
+        by_name = {headers[i]: (values[i] if i < len(values) else "")
+                   for i in range(len(headers))}
+        obj = {col: by_name.get(col, "") for col in cols}
+        if str(obj.get(key_col, "")).strip():
+            obj["_row_index"] = index
+            rows.append(obj)
+    return rows, headers
+
+
+def find_row_by_key(token, drive_id, item_id, table_name, cols, key_col, key_value):
+    rows, headers = get_table_rows_by_key(token, drive_id, item_id, table_name, cols, key_col)
+    key_value = str(key_value or "").strip()
+    for r in rows:
+        if str(r.get(key_col, "")).strip() == key_value:
+            return r, headers
+    return None, headers
+
+
+def create_row(token, drive_id, item_id, table_name, cols, key_col, record):
+    """Add a new row. If key_col is not supplied/blank in record, auto-increments
+    it as max(int(key_col)) + 1 across existing rows (same pattern as
+    create_employee's 'ID' auto-increment). If supplied, rejects duplicates."""
+    rows, headers = get_table_rows_by_key(token, drive_id, item_id, table_name, cols, key_col)
+
+    new_record = {col: "" for col in cols}
+    new_record.update(record)
+
+    key_value = str(new_record.get(key_col, "")).strip()
+    if key_value:
+        if any(str(r.get(key_col, "")).strip() == key_value for r in rows):
+            raise GraphExcelError(f"{key_col} {key_value} already exists in {table_name}")
+    else:
+        current_ids = []
+        for r in rows:
+            try:
+                current_ids.append(int(float(r.get(key_col, 0))))
+            except (ValueError, TypeError):
+                pass
+        new_record[key_col] = max(current_ids or [0]) + 1
+
+    _write_row_add(token, drive_id, item_id, table_name, object_to_row(new_record, headers))
+    return new_record
+
+
+def update_row_by_key(token, drive_id, item_id, table_name, cols, key_col, key_value, patch):
+    row, headers = find_row_by_key(token, drive_id, item_id, table_name, cols, key_col, key_value)
+    if not row:
+        raise GraphExcelError(f"Row with {key_col}={key_value} not found in {table_name}")
+
+    merged = {col: row.get(col, "") for col in cols}
+    merged.update({k: v for k, v in patch.items() if k in cols})
+
+    row_index = row["_row_index"]
+    _write_row_patch(token, drive_id, item_id, table_name, row_index, object_to_row(merged, headers))
+    return merged
+
+
+def append_row(token, drive_id, item_id, table_name, cols, record):
+    """Add a new row with no key/PK column at all — for tables where no single
+    column is unique per row (e.g. AuditTemplate's checklist-item rows, whose
+    real identity is the combination Code+Version+ItemNo, not any one column)."""
+    base = f"/drives/{drive_id}/items/{item_id}/workbook/tables/{table_name}"
+    col_resp = graph_request(token, "GET", f"{base}/columns?$select=name")
+    headers  = [c.get("name", "") for c in col_resp.get("value", [])]
+    new_record = {col: "" for col in cols}
+    new_record.update(record)
+    _write_row_add(token, drive_id, item_id, table_name, object_to_row(new_record, headers))
+    return new_record
+
+
+def update_row_by_index(token, drive_id, item_id, table_name, cols, headers, row, patch):
+    """Patch a row already in hand (e.g. from get_table_rows_by_key, which keeps
+    _row_index) directly by its index — skips the key-column lookup entirely.
+    Needed when the table's only natural grouping column (e.g. AuditTemplate's
+    Code) repeats across multiple rows, so find_row_by_key/update_row_by_key
+    would only ever touch the first match instead of every matching row."""
+    merged = {col: row.get(col, "") for col in cols}
+    merged.update({k: v for k, v in patch.items() if k in cols})
+    _write_row_patch(token, drive_id, item_id, table_name, row["_row_index"], object_to_row(merged, headers))
+    return merged

@@ -49,6 +49,7 @@ New Operator Monitoring/
   | Jumper Skill | `_JUMPER_EXCEL_CACHE` | `jumper_excel` | — (read-only) |
   | Trainer Skill | `_TRAINER_EXCEL_CACHE` | `trainer_excel` | — (read-only) |
   | GICA | `_GICA_CACHE` | `gica_excel` | ✓ หลัง POST `/api/gica/<bu>/employees`, PATCH `.../result` |
+  | Audit | `_AUDIT_CACHE` | `audit_excel` | ✓ หลังทุก write ของ Audit (`/api/audit/templates/forms`, `/plans`, `/executions`, `/findings`, `/respond`, `/close`) |
   | ~~`_JUMPER_CACHE`~~ | — | — | ⚠️ **legacy/dead** — รองรับ `/api/jumper-data` (JSON flow เดิม) ที่ frontend ไม่เรียกใช้แล้ว ไม่มี L2 ไม่ต้อง migrate |
 
   ⚠️ **แก้ไฟล์ Excel ตรงบน OneDrive (ไม่ผ่านแอป) ระบบไม่มีทางรู้** เพราะไม่มี webhook/polling ติดไฟล์ — ต้องรอ TTL หมดอายุทั้ง L1+L2 (สูงสุด 5 นาที) นี่คือ behavior เดิมตั้งแต่ก่อนมี KV ไม่ใช่สิ่งที่ KV ทำให้แย่ลง
@@ -56,10 +57,10 @@ New Operator Monitoring/
 - **Force Refresh** (ปุ่มฉุกเฉิน, แสดงเฉพาะ Admin Sign In ใน Admin Settings modal ใต้ "Configure Special Holidays"): ล้าง L1+L2 ของทุก module พร้อมกันในคลิกเดียว สำหรับกรณีแก้ Excel ตรงแล้วไม่อยากรอ TTL — cooldown 300 วินาทีต่อครั้ง เก็บ timestamp ไว้ใน **KV** (`force_refresh_last_at`, ไม่ใช่ in-process) เพื่อให้ cooldown ถูกต้องข้าม serverless instance ด้วย ดู `/api/admin/force-refresh` (POST), `/api/admin/force-refresh-status` (GET) ใน `app.py`
 
 ### Frontend (Vanilla JS)
-- ไม่ใช้ framework — `static/js/app.js` เป็น plain JS ~7603 บรรทัด
+- ไม่ใช้ framework — `static/js/app.js` เป็น plain JS ~8900+ บรรทัด
 - ใช้ Chart.js v4 (CDN) + `chartjs-plugin-annotation` สำหรับกราฟ
 - ใช้ jsPDF (CDN) สำหรับ export PDF
-- แบ่งเป็น tab หลัก 5 แท็บ: `newOperator`, `jumper`, `trainer`, `sewingOperator`, `gica`
+- แบ่งเป็น tab หลัก 6 แท็บ: `newOperator`, `jumper`, `trainer`, `sewingOperator`, `gica`, `audit`
 
 ### Data Source
 | Tab | แหล่งข้อมูล | Endpoint | วิธีอ่าน |
@@ -69,6 +70,7 @@ New Operator Monitoring/
 | Trainer Skill | `Trainer_Monitoring.xlsx` (tables `TrainerListAll`, `BUSetup`, `top_3`) | `/api/trainer-excel` | Graph API `/workbook/tables` |
 | Sewing Operator | มาจาก table `SewingOperatorCount` ใน `Jumper_Monitoring.xlsx` (ส่วนหนึ่งของ payload `/api/jumper-excel`) | `/api/jumper-excel` | อ่านพร้อมกับ Jumper Skill |
 | GICA | Excel เดียว (GICA.xlsx) บน OneDrive | `/api/gica-excel` | Graph API `/workbook/tables` — auto-discover GICA_* tables ทีละ BU |
+| Audit | Excel เดียว (`Audit_Monitoring.xlsx`) บน OneDrive, 4 table ไม่แบ่งตาม BU | `/api/audit-excel` | Graph API `/workbook/tables` — อ่าน 4 table (`AuditTemplate`/`AuditPlan`/`AuditExecution`/`AuditFinding`) แบบ parallel ดูรายละเอียดที่ [Audit Module](#audit-module) |
 
 > ทุก endpoint ในตารางนี้ผ่าน **L1 (in-process) → L2 (KV) → Graph API** ก่อนถึงจะ "วิธีอ่าน" ที่ระบุ — ดู [Caching](#backend-flask) ด้านบนสำหรับ cache key ของแต่ละ module
 
@@ -106,6 +108,7 @@ New Operator Monitoring/
 | GICA compare | `.gica-compare-grid`, `.gica-compare-header`, `.gica-compare-cell` (div+grid ไม่ใช่ `<table>` เพื่อหลีกเลี่ยง global CSS leak) |
 | GICA paired | `.gica-modal--paired-left`, `.gica-modal--paired-right` (side-by-side modal layout) |
 | KPI BU tabs | `.gica-kpi-bu-tabs`, `.gica-kpi-bu-tab`, `.gica-kpi-bu-tab--active` |
+| Audit Create Form modal | `.audit-form-modal__panel`, `.audit-form-modal__body`, `.audit-form-modal__footer`, `.audit-btn`, `.audit-btn--cancel`, `.audit-btn--confirm` — **เจตนาแยกจาก `.gica-kpi-*`** ไม่ใช้ปนกัน แม้หน้าตาคล้าย KPI Setup modal |
 | Container | `#gica-summary`, `#jtp-summary`, `#trainer-summary` (layout เป็น CSS ไม่ใช่ JS) |
 
 **Known Issue:** Global unscoped `table { min-width:1050px; } th { background:var(--blue); }` ที่ ~line 1593 leak เข้าไปใน `<table>` ทุกตัว — workaround ด้วย div+grid (เช่น gica-compare) แต่ยังไม่ได้แก้ที่ root
@@ -149,7 +152,7 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 ### 4. Cache-busting (สำคัญ — ลืมบ่อย)
 
 ทุกครั้งที่แก้ `app.js` หรือ `styles.css` ต้อง **bump `?v=` ใน `index.html`**
-(ปัจจุบัน `styles.css?v=137`, `app.js?v=296`) ไม่งั้น browser cache ไฟล์เก่า
+(ปัจจุบัน `styles.css?v=158`, `app.js?v=356`) ไม่งั้น browser cache ไฟล์เก่า
 
 ---
 
@@ -157,13 +160,14 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 
 ### 3-Door Login System
 
-หน้า login มี 3 ประตู ผู้ใช้เลือกก่อนเข้าระบบ:
+หน้า login มี 3 ประตู ผู้ใช้เลือกก่อนเข้าระบบ — QE Sign In มี 3 ปุ่มย่อย (View / Edit / **Audit**) และปุ่ม
+**Audit Mode เป็น nested picker อีกชั้น**: Auditor (ต้อง password) / Auditee (ไม่ต้อง password):
 
 | Door | ประตู | ต้องรหัสผ่าน? | ต้อง Microsoft Login? | Roles |
 |---|---|---|---|---|
 | CSA Sign In | CSA Dashboard | ไม่ | View Mode: ไม่ / Edit Mode: ใช่ (OAuth) | `csa_view`, `csa_user` |
-| QE Sign In | GICA Dashboard | ใช่ (`QE_DOOR_PASSWORD`) | View Mode: ไม่ / Edit Mode: ไม่ (shared token) | `qe_view`, `qe_user` |
-| Admin Sign In | CSA & GICA Dashboard | ใช่ (`ADMIN_DOOR_PASSWORD`) | ใช่ (OAuth + email check) | `admin` |
+| QE Sign In | GICA Dashboard / **Audit Dashboard** | View/Edit/Auditor: ใช่ (`QE_DOOR_PASSWORD`) / **Auditee: ไม่** | ไม่ทุกปุ่ม (shared token) | `qe_view`, `qe_user`, `qe_audit`, `qe_auditee` |
+| Admin Sign In | ทุกระบบ (CSA / GICA / Audit) | ใช่ (`ADMIN_DOOR_PASSWORD`) | ใช่ (OAuth + email check) | `admin` |
 
 ```
 User → เลือก Door → ใส่ password (ถ้ามี)
@@ -171,8 +175,20 @@ User → เลือก Door → ใส่ password (ถ้ามี)
      → View Mode: POST /manager-login หรือ /qe-view-login → shared token session
      → Edit Mode (CSA): GET /login?door=csa → Azure AD OAuth
      → Edit Mode (QE): POST /qe-edit-login → shared token + qe_user role
+     → Audit Mode (QE) → เลือก Auditor/Auditee:
+         → Auditor: ใส่ password เหมือนเดิม → POST /qe-audit-login → shared token + qe_audit role
+         → Auditee: ไม่มี password gate → POST /qe-auditee-login → shared token + qe_auditee role
      → Admin: GET /login?door=admin → Azure AD OAuth + ADMIN_EMAIL check
 ```
+
+⚠️ **`qeEditBtn`/`qeAuditorBtn` ใช้ `data-door="qe"` ตัวเดียวกัน** (password gate เดียวกัน) แต่ login คนละ route —
+แยกด้วย `data-login-route` attribute บนปุ่ม (`/qe-edit-login` vs `/qe-audit-login`) ที่ `_submitDoorPassword()`
+อ่านจากปุ่มที่ถูกกด (`app.js`) — ถ้าเพิ่มปุ่มใหม่ใต้ door เดิมในอนาคต **ต้องตั้ง `data-login-route` ทุกครั้ง**
+ไม่งั้นจะ fallback ไป `/qe-edit-login` เงียบๆ (ของเดิมเคยมี bug แบบนี้มาก่อน)
+
+⚠️ **Auditee ไม่มี `data-door`** — ปุ่ม `qeAuditeeBtn` ไม่ผ่าน password gate เลย เรียก
+`_openViewOnlySession('/qe-auditee-login', ...)` ตรงๆ เหมือน `csaViewBtn`/`qeViewBtn` (ปุ่ม View Mode อื่นๆ)
+ไม่ใช่ pattern เดียวกับ `qeEditBtn`/`qeAuditorBtn`
 
 ### Session Types
 
@@ -182,26 +198,34 @@ User → เลือก Door → ใส่ password (ถ้ามี)
 | `csa_user` | CSA → Edit Mode (OAuth) | User's own token | CSA tabs | ✓ |
 | `qe_view` | QE → View Mode | `MANAGER_REFRESH_TOKEN` | GICA tab | ❌ |
 | `qe_user` | QE → Edit Mode | `MANAGER_REFRESH_TOKEN` | GICA tab | ✓ (GICA only) |
+| `qe_audit` | QE → Audit Mode → Auditor | `MANAGER_REFRESH_TOKEN` | Audit tab — ทุก sub-tab | ✓ (Audit ทุก route ยกเว้น Approve เป็น qe_audit/admin เท่านั้น) |
+| `qe_auditee` | QE → Audit Mode → Auditee | `MANAGER_REFRESH_TOKEN` | Audit tab — เฉพาะ Dashboard/Audit Plan/Finding-CAR (ไม่เห็น Template) | ✓ เฉพาะ `POST /api/audit/plans/<id>/respond` เท่านั้น — write อื่นทุกตัว 403 |
 | `admin` | Admin → OAuth | User's own token | All tabs | ✓ |
 | `manager` | Legacy (ไม่มีปุ่มแล้ว) | `MANAGER_REFRESH_TOKEN` | All tabs | ❌ |
 
-**QE Edit Mode ใช้ `MANAGER_REFRESH_TOKEN` แทน per-user OAuth** เพราะ OneDrive sharing permissions
-ทำให้ต้องเปิด access ให้ทีละคน — shared token หลีกเลี่ยงปัญหา 403 Access Denied
+**QE Edit/Audit Mode ใช้ `MANAGER_REFRESH_TOKEN` แทน per-user OAuth** เพราะ OneDrive sharing permissions
+ทำให้ต้องเปิด access ให้ทีละคน — shared token หลีกเลี่ยงปัญหา 403 Access Denied (`qe_auditee` ก็ใช้ token
+เดียวกันนี้ แม้จะไม่ผ่าน door password — ดู `qe_auditee_login()` ใน `app.py`)
 
 ### Key Backend Functions
 
 | Function | หน้าที่ |
 |---|---|
-| `_open_shared_token_session(role, display_name)` | สร้าง session ด้วย MANAGER_REFRESH_TOKEN — ใช้ทั้ง view-only และ QE edit |
+| `_open_shared_token_session(role, display_name)` | สร้าง session ด้วย MANAGER_REFRESH_TOKEN — ใช้ทั้ง view-only, QE edit, QE audit (Auditor) และ QE auditee |
 | `get_valid_token(force_refresh)` | ดึง access token จาก cache หรือ refresh — handle token rotation |
-| `require_writable(allowed_roles)` | Guard decorator ตรวจ role ก่อนอนุญาตเขียน |
+| `require_writable(allowed_roles)` | Guard decorator ตรวจ role ก่อนอนุญาตเขียน — route ส่วนใหญ่ของ Audit ใช้ `('qe_audit', 'admin')`, มีแค่ `/api/audit/plans/<id>/respond` ที่เพิ่ม `'qe_auditee'` เข้าไปด้วย |
 | `_do_token_refresh(refresh_token)` | Raw HTTP refresh call (ไม่ใช้ MSAL) |
 
 ### Role-Based UI
 
 - **Topbar title**: เปลี่ยนตาม door — `_applyRoleBrandTitle(role)` (re-apply หลัง language switch)
-- **Role badge**: `_roleBadgeText(role)` → CSA (View Mode) / CSA (Edit Mode) / QE (View Mode) / QE (Edit Mode) / Admin Mode
-- **Tab visibility**: CSA doors เห็นแค่ CSA tabs, QE doors เห็นแค่ GICA, Admin เห็นหมด
+- **Role badge**: `_roleBadgeText(role)` → CSA (View Mode) / CSA (Edit Mode) / QE (View Mode) / QE (Edit Mode) / QE (Audit Mode - Auditor) / QE (Audit Mode - Auditee) / Admin Mode
+- **Tab visibility**: CSA doors เห็นแค่ CSA tabs, `qe_view`/`qe_user` เห็นแค่ GICA, `qe_audit`/`qe_auditee` เห็นแค่ Audit
+  (`qe_auditee` เห็นแค่ Dashboard/Audit Plan/Finding-CAR sub-tab — ดู `initAuditTab()` ใน `app.js` ที่ซ่อนปุ่ม
+  Template เมื่อ `currentRole === 'qe_auditee'`), Admin เห็นหมด
+- **Audit Plan action button**: gate ด้วย 2 ระดับแยกกัน ไม่ใช่ canWrite ตัวเดียว — `canManage`
+  (`qe_audit`/`admin`: สร้าง Plan, เปิด Execution, Cancel, Approval) vs `canRespond`
+  (`qe_audit`/`qe_auditee`/`admin`: ปุ่ม Respond เท่านั้น) ดู `_auditPlanActionBtn()` ใน `app.js`
 
 ---
 
@@ -216,6 +240,8 @@ User → เลือก Door → ใส่ password (ถ้ามี)
 | POST | `/manager-login` | — | เปิด csa_view session ด้วย MANAGER_REFRESH_TOKEN |
 | POST | `/qe-view-login` | door_unlocked_qe | เปิด qe_view session ด้วย MANAGER_REFRESH_TOKEN |
 | POST | `/qe-edit-login` | door_unlocked_qe | เปิด qe_user session ด้วย MANAGER_REFRESH_TOKEN |
+| POST | `/qe-audit-login` | door_unlocked_qe | เปิด qe_audit (Auditor) session ด้วย MANAGER_REFRESH_TOKEN |
+| POST | `/qe-auditee-login` | — (ไม่ต้อง unlock door) | เปิด qe_auditee session ด้วย MANAGER_REFRESH_TOKEN — ไม่มี password gate |
 | POST | `/api/door-unlock` | — | ตรวจ password → set session flag |
 | GET | `/api/me` | — | ดู auth status + user info + role |
 | GET | `/api/departments` | — | List departments ทั้งหมด |
@@ -229,6 +255,16 @@ User → เลือก Door → ใส่ password (ถ้ามี)
 | GET | `/api/gica-excel` | — | GICA assessment data จาก GICA.xlsx (cached 5 นาที) |
 | POST | `/api/gica/<bu>/employees` | ✓ writable | เพิ่มพนักงาน GICA ใหม่ |
 | PATCH | `/api/gica/<bu>/employees/<empid>/result` | ✓ writable | เพิ่ม/แก้ผลสอบ GICA |
+| GET | `/api/audit-excel` | ✓ | Audit data จาก Audit_Monitoring.xlsx (cached 5 นาที) |
+| POST | `/api/audit/templates/forms` | ✓ writable | สร้าง Form ใหม่ หรือ version ใหม่ของ Form เดิม (ถ้า `Code` ตรงกับของเดิม) |
+| POST | `/api/audit/plans` | ✓ writable | สร้าง Audit Plan ใหม่ (PlanID auto-gen แบบ `YYYY-MM-NNNN`) |
+| PATCH | `/api/audit/plans/<plan_id>` | ✓ writable | แก้ Plan (เช่น เปลี่ยน Status) |
+| POST | `/api/audit/executions` | ✓ writable | บันทึกผลตรวจ (รับ array ได้ — เขียนทีเดียวทั้ง checklist) |
+| POST | `/api/audit/plans/<plan_id>/respond` | ✓ writable (`qe_audit`/**`qe_auditee`**/`admin`) | Auditee submit response ทุก Open finding ของ Plan ทีเดียว (bulk, Open→Responded, Plan Issued→Pending Approval) — **route เดียวใน Audit ที่ `qe_auditee` เขียนได้** |
+| PATCH | `/api/audit/findings/<id>/approve` | ✓ writable | Auditor approve finding เดียว (Responded→Approved) — ถ้า Approved ครบทุกข้อของ Plan จะตั้ง Plan Status=Completed อัตโนมัติ |
+| POST | `/api/audit/findings` | ⚠️ legacy | เปิด Finding เดี่ยวด้วยมือ — **frontend ไม่เรียกใช้แล้ว** Finding ทุกข้อตอนนี้ auto-create จาก NC execution items (ดู [Finding / CAR](#finding--car--auto-create--3-step-status-lifecycle)) |
+| PATCH | `/api/audit/findings/<id>/respond` | ⚠️ legacy | Respond finding เดี่ยว — **frontend ไม่เรียกใช้แล้ว** ถูกแทนด้วย bulk `/plans/<plan_id>/respond` ด้านบน |
+| PATCH | `/api/audit/findings/<id>/close` | ⚠️ legacy alias | Alias เดิมของ `/approve` (ก่อนเปลี่ยนชื่อ Closed→Approved) — ยังใช้งานได้ แต่ frontend เรียก `/approve` ตรงแทน |
 
 ---
 
@@ -453,6 +489,272 @@ Tables ที่อ่าน: `Jumper_G1...Jumper_TRM` (per BU, ดู `JUMPER_B
 | `_makeJumperPositionChart()` | Stacked bar พร้อม target gap (Center 2.5%, Inline 5.0%) |
 | `renderJumperTable()` | ตาราง sortable + paginated + 3 filters |
 | `JT_PROD` / `window._JTP` | Training progress tracker — SVG donut, persist ใน localStorage |
+
+---
+
+## Audit Module
+
+### Overview
+แท็บ Audit คือระบบ Internal Process Audit ผูกกับ BU/Dept เดิม (G1-G4/TRM/EA) เข้าถึงได้เฉพาะ
+`qe_audit` (QE Sign In → Audit Mode → **Auditor**, ต้อง password), `qe_auditee` (QE Sign In → Audit Mode
+→ **Auditee**, ไม่ต้อง password) และ `admin` — ดู [Authentication Flow](#authentication-flow) สำหรับ
+role/door ดู [API Routes](#api-routes) สำหรับ endpoint ทั้งหมด **`qe_auditee` เห็นแค่ Dashboard/Audit
+Plan/Finding-CAR (ไม่มี Template) และเขียนได้แค่ผ่านปุ่ม Respond เท่านั้น** — ส่วนที่เหลือทั้งหมดในหัวข้อนี้
+อ้างอิงมุมมองของ `qe_audit` (Auditor) เป็นหลัก เว้นแต่ระบุไว้เป็นอย่างอื่น
+
+มี 4 sub-tab ที่เห็นในแถบ (สำหรับ Auditor — Auditee เห็นแค่ 3 ตัวแรก): **Dashboard / Audit Plan / Template / Finding-CAR**
+(`.gica-subtab-bar` reuse pattern เดียวกับ GICA, ดู `syncAuditSubtabTop()` ใน `app.js`) — **Execution**
+เป็น panel ที่ 5 ที่ยังมีอยู่แต่ **ไม่มีปุ่มในแถบ sub-tab** เข้าถึงได้ผ่านปุ่ม "เปิด Execution" ในตาราง Audit
+Plan เท่านั้น (`_auditSwitchSubtab('execution')` เรียกตรงจาก `_mountAuditPlan()` ใน `app.js`) — Plan ที่เปิด
+มาเป็น**ค่าตายตัว ไม่มี dropdown ให้เปลี่ยน** (ของเดิมเคยมี "Switch Plan" select แต่เอาออกแล้ว เพราะ Plan
+ถูกกำหนดมาจากหน้า Audit Plan แล้ว) ปิดกลับไปหน้า Audit Plan ได้ผ่านปุ่ม ✕ มุมขวาบนหรือกด **Esc**
+(`_auditCloseExecution()` + `_auditExecutionEscHandler()` ใน `app.js`, wire ครั้งเดียวใน `initAuditTab()`)
+
+⚠️ **ปุ่ม "Save Execution Results" disable ตัวเองทันทีที่กด** (เปลี่ยน label เป็น "Saving…") จนกว่า
+`POST /api/audit/executions` จะเสร็จ — กันปัญหา double-submit ตอน user กดซ้ำระหว่างรอ (เขียนทั้ง checklist
+ใช้เวลาหลายวินาที) ถ้า error จะ re-enable ปุ่มกลับให้กดใหม่ได้ ถ้า success ไม่ต้อง re-enable เพราะ
+`_auditRefetch()` re-render panel ทั้งก้อนใหม่อยู่แล้ว (ปุ่มใหม่จะ enable เองโดย default)
+
+### Dashboard — KPI cards + per-BU donuts (same CSS toolbox as GICA Performance)
+Sub-tab แรกของ Audit คือ Dashboard — ใช้ design system เดียวกับ GICA Performance page เป๊ะ (`stat-grid`,
+`.bu-name`/`.bu-head`, `.mini-bar__*`, leader-line SVG donut) ไม่สร้าง pattern ใหม่ ดูหัวข้อ
+[CSS Toolbox](#1-css-toolbox-design-system--เขียน-class-ไม่ใช่-inline) ด้านบน
+
+**แถว 1 — 4 การ์ด (`stat-grid--4`):**
+
+| การ์ด | แสดงอะไร | ที่มาข้อมูล |
+|---|---|---|
+| Total Audit | จำนวน Plan ทั้งหมด + กราฟแท่งแนวตั้งต่อ BU (`buBarChart()`) — แต่ละแท่ง stack 2 ส่วน: Completed (สีเต็ม) กับ ยังไม่ Completed (สีจาง opacity 0.3, รวมทุก status อื่นเป็นก้อนเดียว ไม่แยกย่อย) | `data.plans` |
+| Overall Score | Donut สัดส่วน Conformity/Major NC/Minor NC/OFI ปัจจุบัน (หลังแก้ไขแล้ว) — center text = % Compliance | `e.ActualResult` ของทุก execution |
+| Original Score | Donut เดียวกัน แต่อ่านจาก `Score` ดิบ (ไม่เปลี่ยนแปลง) — ไม่ใช่ flip card แล้ว (เคยลองทำ flip แต่เปลี่ยนใจ แยกเป็นการ์ดถาวรแทน) | `e.Score` ของทุก execution |
+| Overall Status | Donut สัดส่วน Plan Status ทั้งหมด (Planned/Issued/Pending Approval/Completed/Cancelled) — center text = % Completion Rate | `data.plans` |
+
+**แถว 2 — 6 การ์ด (`stat-grid--6`):** หนึ่งการ์ดต่อ BU แสดง donut เล็กของ rating breakdown จาก
+**Plan ล่าสุดที่มี execution data เท่านั้น** (`PlanID` สูงสุดของ BU นั้นที่มีแถวใน `executions`) — BU ที่ยังไม่มี
+Plan ใดมี execution เลยจะโชว์การ์ดจาง (`.stat-card--empty`) ข้อความ "— no data —" เหมือน pattern ของ GICA
+
+**Donut renderer ใช้ร่วมกัน** — `_leaderDonut(counts, tot, categories, colorOf, labelOf, opts, center)` เป็น
+generic SVG leader-line donut (รับ category list + color/label resolver + center-text callback) ส่วน
+`ratingDonut()` (4 ratings, center = Compliance %) กับ `statusDonut()` (5 plan statuses, center = Completion
+Rate %) เป็น thin wrapper รอบฟังก์ชันนี้ — ขยาย category ใหม่ในอนาคตให้เขียน wrapper ใหม่แบบนี้ ไม่ต้อง
+duplicate SVG logic ทั้งก้อน
+
+**สี:** `AUDIT_RATING_HEX` (4 ratings) และ `AUDIT_PLAN_STATUS_HEX` (5 statuses) เป็น literal hex (ไม่ใช่
+CSS var) เพื่อให้ใช้ใน SVG `stroke`/`fill` ได้ตรงๆ — แยกจาก `AUDIT_RATING_COLOR`/`AUDIT_STATUS_COLOR` เดิม
+ที่เป็น semantic class name (`ok`/`warn`/`danger`/`muted`) สำหรับ badge เท่านั้น (mirror แนวทางเดียวกับ
+`GICA_GRADE_COLORS` ของ GICA)
+
+**Category/Year filters** — อยู่แถวเดียวกับ `.audit-subtab-bar` ชิดขวาสุด (`.audit-dash-filters`,
+`margin-left:auto`) เห็นได้ทุก sub-tab ของ Audit (เพราะอยู่ใน nav row เดียวกัน) แต่มีผลแค่กับการ์ด Dashboard
+เท่านั้น — Category = ตัวเลือกจาก `Plan.AuditTitle` ที่ไม่ซ้ำกัน, Year = ตัวเลือกจาก 4 ตัวแรกของ `PlanID`
+(format `YYYY-MM-NNNN`) ไม่ใช่ column จริง ตัวเลือกถูกสร้างใหม่ทุกครั้งที่ `_auditData` รีเฟรช
+(`_populateAuditDashFilters()`, เก็บค่าที่เลือกไว้ถ้ายังมีอยู่ใน option ใหม่ ไม่งั้น reset เป็น "All")
+`_computeAuditDashboardVm()` filter `plans` ก่อนตามทั้งสองตัวกรอง แล้ว derive `executions` จาก `PlanID`
+ที่เหลือ ดังนั้นทุกการ์ดในแถบ Dashboard (รวม BU donut แถว 2) สอดคล้องกับตัวกรองเดียวกันเสมอ
+
+### Data Model — `Audit_Monitoring.xlsx`
+Workbook เดียว 4 table **ไม่แบ่งตาม BU** (ต่างจาก GICA ที่แบ่ง table ต่อ BU) — BU เป็นแค่ column value
+ใน `AuditPlan`/`AuditFinding` เท่านั้น `AuditTemplate` ไม่มี BU เลย (Form ใช้ได้ทุก BU)
+
+| Table | PK | คอลัมน์จริงใน Excel (มีเว้นวรรค/ตัวพิมพ์ตามนี้เป๊ะ) |
+|---|---|---|
+| `AuditTemplate` | **ไม่มี row-level PK** (ดูหัวข้อด้านล่าง) | `Template Name`, `Category`, `Item No.`, `Item Text`, `Code`, `Version`, `Active`, `Created By`, `Created At` |
+| `AuditPlan` | `PlanID` | `BU`, `Department`, `FormVersion`, `AuditTitle`, `ScheduledDate`, `Auditor1`, `Auditor2`, `Auditor3`, `Status`, `CreatedBy`, `Notes` |
+| `AuditExecution` | `ExecutionID` | `PlanID`, `ItemNo`, `Score`, `ActualResult`, `Comment`, `ExecutedBy` |
+| `AuditFinding` | `FindingID` | `PlanID`, `ExecutionID`, `BU`, `Severity`, `Description`, `RootCause`, `CorrectiveAction`, `Responsible Person`, `Due Date`, `Status`, `OpenedBy`, `OpeneDate` (ชื่อจริงสะกดแบบนี้ ไม่ใช่ typo ในโค้ด), `RespondedBy`, `ClosedBy`, `ClosedDate`, `Notes` |
+
+⚠️ **`AuditTemplate` ไม่มี `TemplateItemID`/`Template ID` แล้ว** (ลบออกแล้ว — ของเดิมเคยมี แทนที่ด้วย
+Category+Version, ดูหัวข้อ Template ด้านล่าง) **`AuditPlan` ไม่มี `TemplateID` แล้ว ใช้ `FormVersion`
+แทน** **`AuditExecution` ไม่มี `TemplateItemID` แล้ว ใช้ `ItemNo` แทน** — ถ้าเจอชื่อคอลัมน์เหล่านี้ในโค้ดเก่า/
+เอกสารเก่าที่ยังหลุดอยู่ ถือเป็นของค้าง ห้ามใช้อ้างอิง schema จริง
+
+⚠️ **ไม่มี `CreatedAt` ใน `AuditPlan`, ไม่มี `ExecutedAt` ใน `AuditExecution`, ไม่มี `RespondedAt` ใน
+`AuditFinding`** — ถูกตัดออกตอน implement เพราะ Excel table จริงไม่มีคอลัมน์เหล่านี้ ห้ามเพิ่มกลับมาในโค้ด
+โดยไม่เพิ่มคอลัมน์ใน Excel ก่อน
+
+### Field-name translation layer (สำคัญมาก ก่อนแก้ Audit ต้องเข้าใจจุดนี้)
+Excel header ของ Audit มีเว้นวรรค/ตัวสะกดไม่ตรง pattern เดิม (`Template ID` มีเว้นวรรค, `Item No.`
+มีจุด, `OpeneDate`/`ClosedDate` คนละชื่อกับที่อื่น) — ต่างจาก GICA/Jumper ที่ column ชื่อสะอาดตรงกับ field
+name ใน code เลย ด้วยเหตุนี้ Audit จึงมี **translation layer แยก** ที่ module อื่นไม่มี:
+
+- `config.py` → `AUDIT_FIELD_MAPS = {kind: {api_field_name: real_excel_header}}` (kind = `template`/`plan`/`execution`/`finding`)
+- `app.py` → `_audit_map_in(kind, api_record)` (API → Excel ตอน write) / `_audit_map_out(kind, excel_row)` (Excel → API ตอน read)
+- **Frontend (`app.js`) และส่วนอื่นของ `app.py` เห็นแค่ API field name ที่สะอาด** (เช่น `ItemNo`, `ItemText`, `OpenedAt`) — ไม่เห็นชื่อ Excel จริงเลย
+- ถ้าจะเพิ่มคอลัมน์ใหม่ใน Excel: เพิ่ม column จริงก่อน → เพิ่มเข้า `AUDIT_*_COLS` (ชื่อ Excel เป๊ะ) → เพิ่มเข้า `AUDIT_FIELD_MAPS[kind]` (api_name → excel_name) → ใช้ api_name ในโค้ดที่เหลือทั้งหมด
+
+`graph_excel.py` มีฟังก์ชัน generic เพิ่มสำหรับ Audit โดยเฉพาะ (ของ GICA เดิม hardcode key เป็น `"empid"`
+ใช้กับ Audit ไม่ได้): `get_table_rows_by_key`, `find_row_by_key`, `create_row`, `update_row_by_key` —
+รับ `key_col` เป็น parameter แทน hardcode ใช้กับ `plan`/`execution`/`finding` (มี PK column จริงที่ unique
+ทุกแถว) ส่วน `AuditTemplate` (ไม่มี PK column ที่ unique ทุกแถว — ดูหัวข้อ Template ด้านล่าง) ใช้
+`append_row`/`update_row_by_index` แทน (ไม่ต้องมี key เลย, update โดยตรงผ่าน `_row_index` ที่ติดมากับแถว)
+
+### PlanID — รูปแบบพิเศษ ไม่ใช่ auto-increment ธรรมดา
+`PlanID` เป็น string format **`YYYY-MM-NNNN`** (เช่น `2026-06-0001`) — running number รายเดือน
+รีเซ็ตทุกเดือนปฏิทิน ไม่ใช่ running number ทั้งระบบ — generate โดย `_audit_next_plan_id()` (`app.py`)
+สแกน `PlanID` ที่มี prefix เดือนปัจจุบันแล้ว +1 **ห้ามใช้ `<int:plan_id>` ใน route** (เป็น string) —
+ดู `PATCH /api/audit/plans/<plan_id>`
+
+### Plan Status — ตั้งอัตโนมัติทั้งสาย ไม่ใช่ user-set (ยกเว้น Planned/Cancelled)
+`AUDIT_PLAN_STATUSES = ["Planned", "Completed", "Issued", "Pending Approval", "Cancelled"]`
+(`config.py`) — `Issued`/`Pending Approval`/`Completed` ไม่มี UI ให้ผู้ใช้เลือกตรงๆ ทั้งหมดตั้งอัตโนมัติโดย
+backend ตามจังหวะของ Respond/Approval workflow ส่วน `Cancelled` เป็น manual แต่ทำได้แค่ตอน Status
+ยังเป็น `Planned` เท่านั้น (ดูหัวข้อ Cancel ด้านล่าง) — **ไม่มี `InProgress` แล้ว** (ของเดิมเคยมีไว้เป็น
+placeholder แต่ไม่เคยมี UI ตั้งค่านี้จริง เลยตัดออกเพื่อลด state ที่ไม่ใช้งาน):
+
+```
+Planned --[Save Execution มี NC]--> Issued
+Planned --[ผู้ใช้กด Cancel + ยืนยันใน modal]--> Cancelled
+Issued             --[Auditee submit ครบทุก Open finding]--> Pending Approval
+Pending Approval   --[Auditor approve ครบทุก finding]--> Completed
+```
+
+1. **Issued**: กด "Save Execution Results" สำเร็จ (`api_audit_create_execution()` ใน `app.py`) — อ่าน
+   `AuditExecution` rows ทั้งหมดของ `PlanID` นั้นสดๆ (ไม่ใช้ cache เก่า — ดู `_audit_execution_scores_for_plan()`)
+   ถ้ามี `Score` เป็น `Major Non-Conformity`/`Minor Non-Conformity` ที่ไหนก็ตาม → `Status = "Issued"` พร้อม
+   auto-create Finding จากแต่ละแถว NC (`_auto_create_findings_for_plan()`) ถ้าไม่มี NC เลย → `Status = "Completed"`
+   ตรงนี้เลย (ไม่ต้องผ่าน Respond/Approval เพราะไม่มี finding ให้ approve)
+2. **Pending Approval**: `POST /api/audit/plans/<plan_id>/respond` (bulk submit ทุก Open finding ของ
+   Plan) ตั้ง Plan `Status = "Pending Approval"` ทันที (ไม่เช็คว่า Responded ครบทุกข้อหรือยัง เพราะ endpoint
+   นี้รับเป็น array ของทุก Open finding อยู่แล้ว)
+3. **Completed**: `PATCH /api/audit/findings/<id>/approve` หลัง approve ทุกข้อของ Plan ครบ (เช็คผ่าน
+   `_audit_all_findings_approved()` ที่อ่านสดจาก Excel ทุกครั้งหลัง approve แต่ละข้อ) → ตั้ง Plan
+   `Status = "Completed"` อัตโนมัติ
+4. **Cancelled**: ในตาราง Audit Plan แถวไหนที่ `Status === 'Planned'` (และมีสิทธิ์เขียน) จะคลิกได้
+   (`.audit-plan-row--cancellable` ใน `app.js`, มี `cursor:pointer` + hover) คลิกแล้วเปิด confirm modal
+   (`_auditOpenCancelPlanModal()` → `#audit-plan-cancel-modal`) กดยืนยันแล้วยิง
+   `PATCH /api/audit/plans/<plan_id>` ด้วย `{Status: "Cancelled"}` ตรงๆ (reuse generic update route
+   เดิม ไม่มี endpoint แยก) คลิกที่ปุ่ม "เปิด Execution" ในแถวเดียวกันจะไม่ trigger modal นี้ (event handler
+   เช็ค `e.target.closest('button')` ก่อน)
+
+ปุ่ม action ที่คอลัมน์ Execution ในตาราง Audit Plan เปลี่ยนตาม Status (`_auditPlanActionBtn()`, `app.js`):
+
+| Plan Status | ปุ่มที่แสดง | คลิกแล้วไปไหน |
+|---|---|---|
+| `Planned` | "เปิด Execution" (และทั้งแถวคลิกได้เพื่อ Cancel) | `_auditSwitchSubtab('execution')` / `_auditOpenCancelPlanModal()` |
+| `Issued` | "Respond" | `_auditOpenPlanRespondModal()` — modal รวมทุก Open finding |
+| `Pending Approval` | "Approval" | `_auditOpenPlanApprovalModal()` — modal รวมทุก Responded finding |
+| `Completed` / `Cancelled` | disable (`—`) | — |
+
+ถ้าจะแก้ผลตรวจของ Plan ที่ Issued/Pending Approval/Completed แล้วในอนาคต ต้องเปลี่ยน Status กลับเป็น
+`Planned` ก่อน (ผ่าน `PATCH /api/audit/plans/<plan_id>`) — ยังไม่มี UI ทำสิ่งนี้
+
+### Template = "Form" (Google/MS Forms model) + Versioning
+Template ไม่ใช่ checklist เดี่ยวๆ แต่เป็น **Form** ที่มี Code + Version ควบคุม (เหมือน document control):
+
+- **Code**: identity คงที่ข้าม version (เช่น `AUD-CSA-001`) — ผู้ใช้กรอกตอนสร้าง Form ใหม่
+- **Version**: เลขจำนวนเต็ม เพิ่มทุกครั้งที่แก้ Form — แก้ Form = สร้าง **แถว item ใหม่ทั้งชุด** (Code เดิม,
+  Version+1) แล้วปิด `Active=FALSE` ของทุกแถวเวอร์ชันเก่า (เก็บไว้เป็นประวัติ ไม่ลบ) ดู
+  `_audit_write_create_form()` ใน `app.py`
+- **Category**: ค่าเดียวต่อทั้ง Form (เช่น `"CSA Process"`) — **ไม่ใช่** sub-section ภายใน item อีกแล้ว —
+  ใช้เป็นตัวเลือกใน **Audit Title dropdown** ตอนสร้าง Audit Plan (เลือก Category → resolve Version
+  ของ Form ที่ Active อัตโนมัติ ดู `_auditOpenPlanCreateModal()` ใน `app.js`)
+- **ไม่มี BU** ใน Template — Form ใช้กับทุก BU
+- **ไม่มี ScoreScale/Weight** — ตัดออกแล้ว เพราะการตรวจไม่มีคะแนนถ่วงน้ำหนักหรือ Pass/Fail อีกต่อไป
+  (ดูหัวข้อ Execution Rating ด้านล่าง)
+- UI: หน้า Template list แสดง **1 แถวต่อ 1 Form** (group by `Code`, แสดง version ล่าสุด) คลิกแถว →
+  modal รายละเอียดทุก item ของ version นั้น ปุ่ม "Edit (New Version)" เปิด modal เดิม pre-fill
+  พร้อมสร้าง version ใหม่เมื่อ save — ดู `_auditFormGroups()`, `_auditOpenFormModal()`,
+  `_auditOpenFormDetailModal()` ใน `app.js`
+
+⚠️ **`AuditTemplate` ไม่มี row-level PK column** (ของเดิมเคยมี `TemplateItemID`+`Template ID` แต่ลบออก
+แล้ว) — identity ของแถว checklist item คือ **Code + Version + Item No.** รวมกัน, ไม่ใช่ column เดียว
+`Code` เองซ้ำกันได้ทุกแถวของ Form เดียวกัน (ไม่ unique ทั้งตาราง) จึงใช้เป็น key ของ `get_table_rows_by_key`
+ได้แค่เป็น sentinel "แถวนี้มีข้อมูลจริงไหม" เท่านั้น **ห้ามใช้ `update_row_by_key`/`create_row` (generic, ต้อง
+unique) กับ `AuditTemplate`** — ใช้ `update_row_by_index`/`append_row` แทน (ดูหัวข้อ Field-name translation
+layer ด้านบน) `AuditPlan.FormVersion` (แทนที่ `TemplateID` เดิม) join กับ `AuditTemplate` ผ่าน
+`AuditTitle`(=`Category`)+`FormVersion`(=`Version`) ไม่ใช่ FK number เดียว — ดู
+`_computeAuditExecutionVm()` ใน `app.js` `AuditExecution.ItemNo` (แทนที่ `TemplateItemID` เดิม) คือ Item
+No. ของ checklist item ภายใน scope ของ Plan นั้น (ไม่ unique ข้าม version แต่ unique พอภายใต้ PlanID เดียว
+เพราะ Plan ผูกกับ version เดียวอยู่แล้ว)
+
+### Execution Rating — fixed enum, ไม่ใช่คะแนน
+ทุก checklist item ที่ตรวจใน Execution ใช้ rating ตายตัว **ไม่มี weighted score, ไม่มี Pass/Fail**:
+
+```python
+AUDIT_EXECUTION_RATINGS = ["Conformity", "Major Non-Conformity", "Minor Non-Conformity", "OFI"]
+```
+(`config.py`, mirror ด้วย `AUDIT_EXECUTION_RATINGS` constant ใน `app.js`) — เก็บใน `AuditExecution.Score`
+(ชื่อ column เดิมจากตอนยังเป็นคะแนน แต่ตอนนี้เก็บ string จาก enum นี้)
+
+#### `Score` vs `ActualResult` — immutable original vs current resolved state
+`ActualResult` เป็น column ใหม่ (เพิ่มหลัง `Score` ใน Excel) — **`Score` ไม่เปลี่ยนแปลงอีกเลยหลังบันทึกครั้งแรก**
+เป็น snapshot ของสิ่งที่ตรวจเจอ ณ ขณะตรวจจริง ส่วน `ActualResult` เริ่มต้นเป็นค่าเดียวกับ `Score` (เซ็ตพร้อมกัน
+ใน `api_audit_create_execution()`) แต่จะ**ถูกเปลี่ยนเป็น `"Conformity"`** อัตโนมัติเมื่อ Finding ที่เกิดจาก
+แถวนั้นถูก Approve แล้ว (`_do_audit_finding_approve()` ใน `app.py` — match ผ่าน `Finding.ExecutionID`)
+สะท้อนว่าประเด็นนั้นถูกแก้ไขจบแล้ว ไม่ใช่ว่าตอนตรวจไม่เจอปัญหา
+
+- ใช้ `Score` เมื่อต้องการดูประวัติ/สิ่งที่ตรวจเจอจริง (เช่น การ์ด "Original Score" บน Dashboard)
+- ใช้ `ActualResult` เมื่อต้องการดูสถานะปัจจุบัน/compliance ล่าสุด (เช่น การ์ด "Overall Score" บน Dashboard)
+- `_build_audit_payload()` มี fallback: ถ้า `ActualResult` ว่าง (แถวเก่าก่อนมี column นี้) ให้ใช้ `Score` แทน
+  ดังนั้น frontend ที่อ่าน `e.ActualResult || e.Score` จะปลอดภัยเสมอ
+
+⚠️ **`AuditExecution` ไม่มี `HasFinding` แล้ว** (ลบออกแล้ว) — rating เองบอกอยู่แล้วว่า item นั้นเป็น
+finding หรือไม่ (rating ใดๆที่ไม่ใช่ `Conformity`) ไม่ต้องมี checkbox แยกซ้ำ การเปิด Finding ทำผ่าน
+`POST /api/audit/findings` ตรงๆ (ดูหัวข้อ Finding / CAR ด้านล่าง) ไม่ผูกกับ field นี้ใน Execution row
+อีกแล้ว `AUDIT_RATING_COLOR` (`app.js`) คือตัวแปรสีเฉพาะของ rating 4 ค่านี้ — ใช้ทั้งกับ badge (view-only)
+และปุ่มเลือกที่หน้า Execution Result เป็น **4 ปุ่ม ไม่ใช่ dropdown** (`.audit-rating-btngroup` ครอบ 4
+`.audit-rating-btn`, ปกติสีขาว/เทากลาง — ปุ่มที่เลือกจะได้ class `.audit-rating-btn--active` +
+`.audit-rating-btn--{ok|warn|danger|muted}` ตอนคลิกผ่าน listener ใน `_mountAuditExecution()`, ค่าที่เลือก
+เก็บใน `data-score` ของ container `.audit-exec-score-group` ไม่ใช่ `value` ของ `<select>`)
+
+### Finding / CAR — auto-create + 3-step status lifecycle
+`AuditFinding` 1 table ครอบคลุมทั้ง Finding และ CAR data — **ไม่มี sub-tab "CAR Report" แยกแล้ว**
+(ของเดิมเคยมี แต่เอาออกแล้ว เพราะเป็น data ชุดเดียวกับ Finding/CAR เป๊ะ) คอลัมน์ที่ CAR Report เคยมี
+(`Opened`, `Aging`, `Approver Comment`) ถูกรวมเข้าไปในตาราง **Finding / CAR** sub-tab เดียวแทน — ดู
+`_computeAuditFindingVm()`/`_auditFindingHtml()` ใน `app.js` (`agingDays` คำนวณจาก `_auditDaysSince(f.OpenedAt)`
+เฉพาะแถวที่ยังไม่ `Approved`)
+
+**ไม่มี UI สร้าง Finding ด้วยมือแล้ว** ("Open New Finding" form ถูกเอาออกจากหน้า Finding/CAR) — Finding
+ทุกข้อ **auto-create จาก `AuditExecution` ที่มี rating เป็น Non-Conformity** (`Major Non-Conformity` /
+`Minor Non-Conformity`, ดู `AUDIT_RATING_TO_SEVERITY` ใน `config.py`) ทันทีที่กด "Save Execution Results"
+สำเร็จ ผ่าน `_auto_create_findings_for_plan()` ใน `app.py` (idempotent — เช็ค Finding ที่มีอยู่แล้วผ่าน
+`ExecutionID` ก่อนสร้างซ้ำ เผื่อ save execution รอบเดิมซ้ำ)
+
+```
+Status: Open (auto) → Responded (bulk, ต่อ Plan) → Approved (ต่อ finding)
+(ห้าม skip step หรือถอยหลัง — validate ใน route handler)
+
+1. Execution บันทึก NC  → _auto_create_findings_for_plan()         (Status=Open, OpenedBy/OpeneDate)
+2. Auditee ตอบทุกข้อ      → POST /api/audit/plans/<plan_id>/respond  (bulk ทุก Open finding ของ Plan
+                                                                     ทีเดียว → Responded, Plan→Pending Approval)
+3. Auditor approve ทีละข้อ → PATCH /api/audit/findings/<id>/approve   (Responded → Approved;
+                                                                     ครบทุกข้อ → Plan Status=Completed อัตโนมัติ)
+```
+⚠️ **มี role `qe_auditee` แยกแล้ว** (QE Sign In → Audit Mode → Auditee, ไม่ต้อง password — ดู
+[Session Types](#session-types) ด้านบน) แต่ `RespondedBy`/`OpenedBy`/`ApprovedBy` ยังเป็น free text เหมือนเดิม
+(ไม่ใช่ FK ไป user account ของแต่ละคน — shared token ทุกคนใช้ session เดียวกัน) ดูรายละเอียด Plan Status ↔
+ปุ่ม (Respond/Approval) ที่หัวข้อ [Plan Status](#plan-status--ตั้งอัตโนมัติทั้งสาย-ไม่ใช่-user-set-ยกเว้น-plannedcancelled) ด้านบน
+
+### Date columns — ต้องผ่าน `_audit_to_iso()` ไม่ใช่ `_gica_to_iso()`
+Graph API คืนค่า date column (`ScheduledDate`, `Due Date`, `OpeneDate`, `ClosedDate`) เป็น serial-day
+**ทั้งแบบ number และแบบ string ตัวเลข** (เช่น `"46213"`) — `_gica_to_iso()` เดิมของ GICA สมมติว่า string
+ใดๆคือ date ที่ format ไว้แล้ว เลย parse ผิดถ้าเจอ string ตัวเลข จึงเขียน **`_audit_to_iso()`** แยกใน
+`app.py` (ไม่แก้ `_gica_to_iso()` เดิม กัน regression ฝั่ง GICA) — ใช้ `_audit_to_iso()` เท่านั้นกับ date
+column ของ Audit ห้ามใช้ `_gica_to_iso()` ตรงๆ
+
+แสดงผลฝั่ง frontend ใช้ `_auditFmtDate()` ซึ่ง delegate ไปที่ `_gicaFmtDate()` (format `11 Jul 2026`
+เหมือน GICA) — reuse ได้เพราะเป็นแค่ display formatting ไม่เกี่ยวกับ parsing bug ฝั่ง backend
+
+### Frontend Functions (app.js)
+| ฟังก์ชัน | หน้าที่ |
+|---|---|
+| `initAuditTab()` | Lazy-load ครั้งเดียว, fetch `/api/audit-excel`, wire sub-tab + modal ทั้งหมด |
+| `_auditRefetch()` | Re-fetch + re-render ทุก sub-tab หลัง write (ไม่ reset `_auditLoaded` flow ซับซ้อนแบบ GICA) |
+| `_auditFormGroups(templates)` | Group items by `Code` → 1 entry ต่อ Form, เก็บทุก version ไว้ (`byVersion`) |
+| `_auditTemplateGroups(templates)` | Group items by `Category`+`Version` (1 version เดียว) — ใช้ตอน resolve ชื่อ Form ในตาราง Plan/join Execution |
+| `renderAuditDashboard/Plan/Template/Execution/Finding()` | Orchestrator ต่อ sub-tab ตาม compute→html→mount pattern (ดูหัวข้อ Render Architecture ใน Frontend Code Conventions ด้านบน) — ไม่มี `renderAuditCarReport()` แล้ว (sub-tab ถูกรวมเข้า Finding) |
+| `_auditOpenPlanCreateModal()` / `_wireAuditPlanCreateModal()` | Modal สร้าง Plan — Audit Title เป็น dropdown จาก Category ของ Form ที่ Active |
+| `_auditOpenFormModal()` / `_wireAuditFormModal()` | Modal สร้าง/แก้ Form (Create ใหม่ หรือ New Version ถ้ามี `existingForm`) |
+| `_auditOpenFormDetailModal()` / `_wireAuditFormDetailModal()` | Modal แสดงรายละเอียด Form 1 รายการ + ปุ่ม Edit (New Version) |
+| `_auditPlanActionBtn(p, canManage, canRespond)` | Resolve ปุ่ม action ต่อแถว Plan ตาม `Status` — gate 2 ระดับแยกกัน: `canManage` (`qe_audit`/`admin`: เปิด Execution/Approval) vs `canRespond` (+`qe_auditee`: ปุ่ม Respond เท่านั้น) |
+| `_auditOpenPlanRespondModal(planId)` / `_wireAuditPlanRespondModal()` | Modal รวมทุก Open finding ของ Plan — Auditee กรอก RootCause/CorrectiveAction/PreventiveAction/ResponsiblePerson/DueDate แล้ว Submit ทีเดียว → `POST /api/audit/plans/<id>/respond` (รองรับ Esc ปิด) |
+| `_auditOpenPlanApprovalModal(planId)` / `_wireAuditPlanApprovalModal()` | Modal รวมทุก Responded finding ของ Plan — Auditor ใส่ comment + Approve ทีละข้อ → `PATCH /api/audit/findings/<id>/approve`, อัปเดต card in-place |
+| `_wireAuditApproveModal()` | Modal approve finding เดียวจากตาราง Finding/CAR โดยตรง (`#audit-approve-modal`) — ใช้ endpoint เดียวกับ Approval modal ข้างบน |
+| `_auditOpenCancelPlanModal(planId)` / `_wireAuditCancelPlanModal()` | Modal ยืนยัน Cancel Plan — เปิดจากการคลิกทั้งแถวของ Plan ที่ `Status==='Planned'` (`.audit-plan-row--cancellable`, เช็ค `e.target.closest('button')` ก่อนกัน conflict กับปุ่ม "เปิด Execution" ในแถวเดียวกัน) ยืนยันแล้วยิง `PATCH /api/audit/plans/<id>` ตรงๆ ด้วย `{Status:'Cancelled'}` รองรับ Esc ปิด |
+| `_computeAuditDashboardVm(data)` / `_auditDashboardHtml(vm)` | Dashboard compute→html — ดูหัวข้อ [Dashboard](#dashboard--kpi-cards--per-bu-donuts-same-css-toolbox-as-gica-performance) ด้านบนสำหรับรายละเอียดการ์ดและ filter |
+| `_leaderDonut(...)` / `ratingDonut(...)` / `statusDonut(...)` | Generic leader-line SVG donut renderer + 2 thin wrapper สำหรับ rating (Card 2/3 + BU row 2) และ plan status (Card 4) |
+| `_populateAuditDashFilters()` / `_wireAuditDashFilters()` | สร้าง option ของ Category/Year filter จาก `_auditData` สดทุกครั้ง (เก็บค่าที่เลือกไว้ถ้ายังมีอยู่) + wire `change` listener → `renderAuditDashboard()` ตรงๆ ไม่ refetch |
+| `_gicaDaysBadge(iso)` | reuse ของ GICA ตรงๆ สำหรับ Days Remaining badge ใน Plan table (สีตาม threshold) — Plan ที่ `Status` เป็น `Completed`/`Cancelled` แสดง `—` แทนเสมอ (ไม่นับวันต่อแล้ว) |
 
 ---
 

@@ -66,6 +66,7 @@ EXCEL_COLUMNS = [
     "ID",
     "Employee ID",
     "Employee Name",
+    "Type",
     "Grade",
     "Week",
     "CSA Start Date",
@@ -186,3 +187,187 @@ GICA_KPI_TABLES = {
     "G4": "kpi_g4", "EA": "kpi_ea", "TRM": "kpi_trm",
 }
 GICA_KPI_COLS = ["level", "target"]
+
+# ── Audit Module Excel ────────────────────────────────────────────────────────
+# Single workbook (Audit_Monitoring.xlsx), 4 named tables — BU is a column value,
+# not a per-BU table suffix (unlike GICA).
+AUDIT_EXCEL_SHARE_URL = (
+    "https://nanyangtextilegroup-my.sharepoint.com/:x:/g/personal/"
+    "pongsathon_s_nanyangtextile_com/"
+    "IQC9YgGU-6C3RrBljKtGdQ_WAUNpvdkFs6zsAow0l9_6Q08?e=L3u7dr"
+)
+
+# NOTE: column lists below are the ACTUAL Excel table headers (verbatim, incl.
+# spaces/punctuation) — _read_excel_table maps by header name, so these must
+# match exactly what's in the workbook. The app's internal/API field names are
+# clean (no spaces) and are translated to/from these real headers via
+# AUDIT_FIELD_MAPS (see app.py's _audit_map_in/_audit_map_out) — the frontend
+# and the rest of app.py only ever see the clean API field names.
+# Template = a "Form" (Google/MS Forms model): a Code identifies the form
+# across edits, Version increments on every edit (old version's rows get
+# Active=FALSE and are kept for history, new version's rows get Active=TRUE).
+# Category is one value per whole form (e.g. "CSA Process"), not a per-item
+# sub-section — it's what populates the Audit Title dropdown in Audit Plan.
+# No ScoreScale/Weight — every checklist item is rated at Execution time from
+# a fixed enum (see AUDIT_EXECUTION_RATINGS), not a per-item custom scale.
+# No BU — a Form applies across every BU, not scoped to one.
+AUDIT_TEMPLATE_TABLE = "AuditTemplate"
+# No row-level PK column (TemplateItemID/Template ID removed) — a checklist
+# item row's real identity is the combination Code+Version+ItemNo, which is
+# already enough to resolve "all items of this exact Form version" (joined
+# from AuditPlan.AuditTitle/FormVersion) without a synthetic ID column.
+AUDIT_TEMPLATE_COLS = [
+    "Template Name", "Category",
+    "Item No.", "Item Text", "Code", "Version", "Active",
+    "Created By", "Created At",
+]
+
+# Fixed rating scale applied to every checklist item during Execution — no
+# weighted scoring, no Pass/Fail.
+AUDIT_EXECUTION_RATINGS = [
+    "Conformity", "Major Non-Conformity", "Minor Non-Conformity", "OFI",
+]
+
+AUDIT_PLAN_TABLE = "AuditPlan"
+# FormVersion (replaces the old TemplateID FK) pins the exact Form *version*
+# selected at creation time — joined against AuditTemplate by AuditTitle
+# (= Category) + FormVersion (= Version), so Execution always uses the
+# checklist as it existed when the Plan was created, even if the Form is
+# edited (new version) afterward.
+AUDIT_PLAN_COLS = [
+    "PlanID", "BU", "Department", "FormVersion", "AuditTitle",
+    "ScheduledDate", "Auditor1", "Auditor2", "Auditor3", "Status", "CreatedBy", "Notes",
+]  # no CreatedAt column in the actual table; up to 3 auditors instead of 1 AuditorName
+
+AUDIT_EXECUTION_TABLE = "AuditExecution"
+# ItemNo (replaces the old TemplateItemID FK) identifies the checklist item
+# within the Plan's pinned Form version (AuditPlan.AuditTitle+FormVersion) —
+# see AUDIT_PLAN_COLS comment above.
+# No HasFinding column (removed) — the rating itself (AUDIT_EXECUTION_RATINGS)
+# already says whether an item is a finding (any non-Conformity rating), so a
+# separate yes/no checkbox was redundant. A Finding is opened explicitly via
+# POST /api/audit/findings when an auditor decides one is warranted.
+#
+# ActualResult is a NEW Excel column (add it right after Score in the actual
+# workbook before deploying this version). Score is the immutable rating
+# recorded at audit time and never changes again. ActualResult starts out as a
+# copy of Score, but flips to "Conformity" the moment the Finding it produced
+# gets Approved (see _do_audit_finding_approve in app.py) — it reflects the
+# CURRENT state of the item, not the original finding. Dashboard "Overall
+# Score" reads ActualResult (not Score) so it shows up-to-date compliance.
+AUDIT_EXECUTION_COLS = [
+    "ExecutionID", "PlanID", "ItemNo", "Score", "ActualResult", "Comment", "ExecutedBy",
+]  # no ExecutedAt column in the actual table
+
+AUDIT_FINDING_TABLE = "AuditFinding"
+# PreventiveAction is a NEW Excel column (add it between CorrectiveAction and
+# "Responsible Person" in the actual workbook before deploying this version).
+# "ClosedBy"/"ClosedDate"/"Notes" Excel columns are repurposed as
+# ApprovedBy/ApprovedAt/ApproverComment — no rename needed in Excel, only the
+# API field names changed (see AUDIT_FIELD_MAPS['finding'] below).
+AUDIT_FINDING_COLS = [
+    "FindingID", "PlanID", "ExecutionID", "BU", "Severity", "Description",
+    "RootCause", "CorrectiveAction", "PreventiveAction",
+    "Responsible Person", "Due Date", "Status",
+    "OpenedBy", "OpeneDate", "RespondedBy", "ClosedBy", "ClosedDate", "Notes",
+]
+
+# key -> (table_name, cols, key_col) — looped over for parallel fetch and for
+# the generic graph_excel CRUD helpers (see graph_excel.py). key_col names are
+# identical between the API and the real Excel header for all 4 tables (no
+# spaces in any *ID column / in "Code"), so no mapping is needed for these.
+# For plan/execution/finding, key_col IS a real unique-per-row PK. For
+# template it is NOT — see the comment on that entry below.
+AUDIT_TABLES = {
+    # "template"'s 3rd element is NOT a unique-per-row PK (Code repeats across
+    # every item row of the same Form) — it's only a "is this row populated"
+    # sentinel column for get_table_rows_by_key's read-side filter. Writes to
+    # AuditTemplate go through append_row/update_row_by_index instead of the
+    # generic create_row/update_row_by_key, which both require uniqueness.
+    "template":  (AUDIT_TEMPLATE_TABLE,  AUDIT_TEMPLATE_COLS,  "Code"),
+    "plan":      (AUDIT_PLAN_TABLE,      AUDIT_PLAN_COLS,      "PlanID"),
+    "execution": (AUDIT_EXECUTION_TABLE, AUDIT_EXECUTION_COLS, "ExecutionID"),
+    "finding":   (AUDIT_FINDING_TABLE,   AUDIT_FINDING_COLS,   "FindingID"),
+}
+
+# key -> {api_field_name: real_excel_header} — translation table used by
+# app.py's _audit_map_in (API → Excel, for writes) and _audit_map_out
+# (Excel → API, for reads). Keeps every API/JSON field name space-free and
+# stable even though the underlying Excel headers have spaces/punctuation/typos.
+AUDIT_FIELD_MAPS = {
+    "template": {
+        "TemplateName":   "Template Name",
+        "Category":       "Category",
+        "ItemNo":         "Item No.",
+        "ItemText":       "Item Text",
+        "Code":           "Code",
+        "Version":        "Version",
+        "Active":         "Active",
+        "CreatedBy":      "Created By",
+        "CreatedAt":      "Created At",
+    },
+    "plan": {
+        "PlanID":        "PlanID",
+        "BU":            "BU",
+        "Department":    "Department",
+        "FormVersion":   "FormVersion",
+        "AuditTitle":    "AuditTitle",
+        "ScheduledDate": "ScheduledDate",
+        "Auditor1":      "Auditor1",
+        "Auditor2":      "Auditor2",
+        "Auditor3":      "Auditor3",
+        "Status":        "Status",
+        "CreatedBy":     "CreatedBy",
+        "Notes":         "Notes",
+    },
+    "execution": {
+        "ExecutionID":   "ExecutionID",
+        "PlanID":        "PlanID",
+        "ItemNo":        "ItemNo",
+        "Score":         "Score",
+        "ActualResult":  "ActualResult",
+        "Comment":       "Comment",
+        "ExecutedBy":    "ExecutedBy",
+    },
+    "finding": {
+        "FindingID":         "FindingID",
+        "PlanID":            "PlanID",
+        "ExecutionID":       "ExecutionID",
+        "BU":                "BU",
+        "Severity":          "Severity",
+        "Description":       "Description",
+        "RootCause":         "RootCause",
+        "CorrectiveAction":  "CorrectiveAction",
+        "PreventiveAction":  "PreventiveAction",   # new Excel column
+        "ResponsiblePerson": "Responsible Person",
+        "DueDate":           "Due Date",
+        "Status":            "Status",
+        "OpenedBy":          "OpenedBy",
+        "OpenedAt":          "OpeneDate",
+        "RespondedBy":       "RespondedBy",
+        # "ClosedBy"/"ClosedDate"/"Notes" are repurposed — Excel column names
+        # unchanged; only the API-facing names changed to reflect the new flow.
+        "ApprovedBy":        "ClosedBy",
+        "ApprovedAt":        "ClosedDate",
+        "ApproverComment":   "Notes",
+    },
+}
+
+AUDIT_BUS = list(DEPARTMENTS.keys())
+
+AUDIT_FINDING_STATUSES   = ["Open", "Responded", "Approved"]
+AUDIT_FINDING_SEVERITIES = ["Minor", "Major", "Critical"]
+# Plan status transitions:
+#   Planned → Issued (auto, when execution has NC items)
+#   → Pending Approval (auto, when auditee submits bulk Respond)
+#   → Completed (auto, when auditor approves all findings)
+#   Planned → Cancelled (manual, only while still Planned — see api_audit_cancel_plan)
+# "Completed"/"Issued"/"Pending Approval" are not user-set — see app.py.
+AUDIT_PLAN_STATUSES      = ["Planned", "Completed", "Issued", "Pending Approval", "Cancelled"]
+
+# Maps execution rating → Finding severity for auto-created findings.
+# OFI is excluded — it does not trigger Plan "Issued" status, so no Finding.
+AUDIT_RATING_TO_SEVERITY = {
+    "Major Non-Conformity": "Major",
+    "Minor Non-Conformity": "Minor",
+}

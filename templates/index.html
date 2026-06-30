@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=150" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=158" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -50,6 +50,7 @@
     <button class="tab-btn" data-tab="trainer" data-i18n="tabTrainer">Trainer</button>
     <button class="tab-btn" data-tab="sewingOperator" data-i18n="tabSewingOperator">Sewing Operator</button>
     <button class="tab-btn" data-tab="gica">GICA</button>
+    <button class="tab-btn" data-tab="audit">Audit</button>
   </nav>
 
   <!-- Register Modal -->
@@ -96,6 +97,13 @@
         <div class="form-grid">
           <label><span data-i18n="employeeId">Employee ID</span><input name="Employee ID" readonly /></label>
           <label><span data-i18n="employeeName">Employee Name</span><input name="Employee Name" /></label>
+          <label>
+            <span data-i18n="empType">Type</span>
+            <select name="Type">
+              <option value="Sewing">Sewing</option>
+              <option value="QC/QA">QC/QA</option>
+            </select>
+          </label>
           <label>
             <span data-i18n="grade">Grade</span>
             <select name="Grade">
@@ -180,7 +188,7 @@
           <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">CSA Sign In</h3>
           <button id="csaViewBtn" class="login-btn">View Mode</button>
-          <button id="csaMsBtn" class="login-btn login-btn--disabled" disabled title="ยังไม่เปิดใช้งาน">Edit Mode</button>
+          <button id="csaMsBtn" class="login-btn login-btn--disabled" disabled title="This function is not yet enabled">Edit Mode</button>
           <p id="csaViewError" class="login-error hidden"></p>
         </div>
 
@@ -189,8 +197,19 @@
           <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">QE Sign In</h3>
           <button id="qeViewBtn" class="login-btn">View Mode</button>
-          <button id="qeEditBtn" class="login-btn" data-door="qe">Edit Mode</button>
+          <button id="qeEditBtn" class="login-btn" data-door="qe" data-login-route="/qe-edit-login">Edit Mode</button>
+          <button id="qeAuditModeBtn" class="login-btn">Audit Mode</button>
           <p id="qeViewError" class="login-error hidden"></p>
+        </div>
+
+        <!-- QE Audit Mode sub-panel: Auditor (password-gated, full access) vs
+             Auditee (no password, Dashboard/Audit Plan/Finding-CAR only) -->
+        <div id="loginDoor-qe-audit" class="login-door-panel hidden">
+          <button class="login-door-back" id="qeAuditBack">← back</button>
+          <h3 class="login-door-panel__title">Audit Mode</h3>
+          <button id="qeAuditorBtn" class="login-btn" data-door="qe" data-login-route="/qe-audit-login">Auditor</button>
+          <button id="qeAuditeeBtn" class="login-btn">Auditee</button>
+          <p id="qeAuditeeError" class="login-error hidden"></p>
         </div>
 
         <!-- Admin sub-panel -->
@@ -228,52 +247,46 @@
         <button type="button" class="newop-subtab-btn" data-subtab="qcqa">QC-QA</button>
       </div>
 
-      <div id="newop-sewing-panel">
-        <!-- BU selection moved to hover sub-menu on New Operator tab — hidden here -->
-        <section class="card home-card" style="display:none">
-          <h2 data-i18n="selectDept">Select BU</h2>
-          <div id="departmentGrid" class="department-grid"></div>
-        </section>
+      <!-- Same content serves both Sewing and QC-QA — only the data differs
+           (filtered by the "Type" Excel column), so there's one shared panel
+           rather than two duplicate DOM trees. -->
+      <!-- BU selection moved to hover sub-menu on New Operator tab — hidden here -->
+      <section class="card home-card" style="display:none">
+        <h2 data-i18n="selectDept">Select BU</h2>
+        <div id="departmentGrid" class="department-grid"></div>
+      </section>
 
-        <!-- Overall Dashboard -->
-        <div id="homeDashLoading" class="sk-screen">
-          <div class="jtp-row2">
-            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-            <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
-          </div>
-          <div class="sk-row">
-            <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
-            <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+      <!-- Overall Dashboard -->
+      <div id="homeDashLoading" class="sk-screen">
+        <div class="jtp-row2">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div><div class="sk-bar"></div></div>
+        </div>
+        <div class="sk-row">
+          <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+          <div class="sk-card" style="min-height:180px;"><div class="sk-lbl"></div><div class="sk-chart-area"></div></div>
+        </div>
+      </div>
+
+
+      <section id="homeDashCard" class="card home-dash-card hidden">
+        <div class="home-dash-header">
+          <h2 data-i18n="overallDashboard">Overall Dashboard</h2>
+          <div class="home-dash-controls">
+            <button id="exportPngBtn" class="export-btn" title="Export PNG">PNG</button>
+            <button id="exportPdfBtn" class="export-btn" title="Export PDF">PDF</button>
+            <select id="homeDashYearFilter" class="year-select"></select>
+            <button id="homeDashRefreshBtn" class="small refresh-btn" data-i18n="refresh">Refresh</button>
           </div>
         </div>
 
-
-        <section id="homeDashCard" class="card home-dash-card hidden">
-          <div class="home-dash-header">
-            <h2 data-i18n="overallDashboard">Overall Dashboard</h2>
-            <div class="home-dash-controls">
-              <button id="exportPngBtn" class="export-btn" title="Export PNG">PNG</button>
-              <button id="exportPdfBtn" class="export-btn" title="Export PDF">PDF</button>
-              <select id="homeDashYearFilter" class="year-select"></select>
-              <button id="homeDashRefreshBtn" class="small refresh-btn" data-i18n="refresh">Refresh</button>
-            </div>
-          </div>
-
-          <div id="homeDashGrid" class="hidden"></div>
-          <div id="homeDashAnalytics" class="hidden"></div>
-        </section>
-      </div>
-
-      <div id="newop-qcqa-panel" class="hidden">
-        <div class="tab-placeholder">
-          <div class="tab-placeholder-icon">🚧</div>
-          <p data-i18n="tabComingSoon">อยู่ระหว่างพัฒนา กรุณารอสักครู่...</p>
-        </div>
-      </div>
+        <div id="homeDashGrid" class="hidden"></div>
+        <div id="homeDashAnalytics" class="hidden"></div>
+      </section>
     </section>
 
     <!-- Dashboard Page -->
@@ -805,6 +818,219 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=320"></script>
+  <!-- Audit Tab -->
+  <div id="tabContent-audit" class="tab-content hidden">
+    <main class="container">
+
+      <div id="audit-loading" class="sk-screen">
+        <div class="jtp-row2">
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div><div class="sk-bar" style="margin-top:auto;"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-bar"></div><div class="sk-bar-s"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-num"></div><div class="sk-text"></div></div>
+          <div class="sk-card"><div class="sk-lbl"></div><div class="sk-val"></div><div class="sk-text"></div></div>
+        </div>
+      </div>
+      <div id="audit-error" class="card hero hidden" style="text-align:center;padding:40px;"></div>
+
+      <div id="audit-dashboard" class="hidden">
+        <div class="audit-subtab-bar gica-subtab-bar">
+          <button class="audit-subtab-btn gica-subtab-btn gica-subtab-btn--active" data-audit-subtab="dashboard">Dashboard</button>
+          <button class="audit-subtab-btn gica-subtab-btn" data-audit-subtab="plan">Audit Plan</button>
+          <button class="audit-subtab-btn gica-subtab-btn" data-audit-subtab="template">Template</button>
+          <button class="audit-subtab-btn gica-subtab-btn" data-audit-subtab="finding">Finding / CAR</button>
+          <div class="audit-dash-filters">
+            <select id="audit-dash-filter-category" class="gica-form-input"><option value="all">All Categories</option></select>
+            <select id="audit-dash-filter-year" class="gica-form-input"><option value="all">All Years</option></select>
+          </div>
+        </div>
+
+        <div id="audit-dashboard-panel"></div>
+        <div id="audit-plan-panel" class="hidden"></div>
+        <div id="audit-template-panel" class="hidden"></div>
+        <div id="audit-execution-panel" class="hidden"></div>
+        <div id="audit-finding-panel" class="hidden"></div>
+
+        <!-- Plan-level: Respond modal — Auditee fills all Open findings at once -->
+        <div id="audit-plan-respond-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-plan-respond-backdrop"></div>
+          <div class="gica-modal__panel audit-wide-modal__panel">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:1rem;">Respond to Findings — <span id="audit-plan-respond-plan-id"></span></h4>
+              <button class="gica-modal__close" id="audit-plan-respond-close" aria-label="ปิด">✕</button>
+            </div>
+            <div id="audit-plan-respond-body" class="audit-wide-modal__body"></div>
+            <div class="gica-kpi-modal__footer">
+              <p id="audit-plan-respond-error" class="login-error hidden"></p>
+              <button class="gica-kpi-btn gica-kpi-btn--cancel" id="audit-plan-respond-cancel">Cancel</button>
+              <button class="gica-kpi-btn gica-kpi-btn--confirm" id="audit-plan-respond-submit">Submit Response</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Plan-level: Approval modal — Auditor reviews &amp; approves each finding -->
+        <div id="audit-plan-approval-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-plan-approval-backdrop"></div>
+          <div class="gica-modal__panel audit-wide-modal__panel">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:1rem;">Approval — <span id="audit-plan-approval-plan-id"></span></h4>
+              <button class="gica-modal__close" id="audit-plan-approval-close" aria-label="ปิด">✕</button>
+            </div>
+            <div id="audit-plan-approval-body" class="audit-wide-modal__body"></div>
+            <div class="gica-kpi-modal__footer" style="justify-content:flex-end;">
+              <button class="gica-kpi-btn gica-kpi-btn--cancel" id="audit-plan-approval-done">Close</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Finding tab: per-finding Approve modal (small, single finding) -->
+        <div id="audit-approve-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-approve-backdrop"></div>
+          <div class="gica-modal__panel gica-kpi-modal__panel">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:1rem;">Approve Finding</h4>
+              <button class="gica-modal__close" id="audit-approve-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="gica-kpi-modal__body">
+              <div class="gica-form-row">
+                <label class="gica-form-label">Reviewer Comment (optional)</label>
+                <textarea id="audit-approve-comment" class="gica-form-input" rows="3"></textarea>
+              </div>
+              <p id="audit-approve-error" class="login-error hidden"></p>
+            </div>
+            <div class="gica-kpi-modal__footer">
+              <button class="gica-kpi-btn gica-kpi-btn--cancel" id="audit-approve-cancel">Cancel</button>
+              <button class="gica-kpi-btn gica-kpi-btn--confirm" id="audit-approve-confirm">Approve</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Audit Plan: Create modal -->
+        <div id="audit-plan-create-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-plan-create-backdrop"></div>
+          <div class="gica-modal__panel audit-form-modal__panel">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:1rem;">Create Audit Plan</h4>
+              <button class="gica-modal__close" id="audit-plan-create-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="audit-form-modal__body">
+              <div class="gica-form-row">
+                <label class="gica-form-label">BU</label>
+                <select id="audit-plan-bu" class="gica-form-input"></select>
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label">Department</label>
+                <input type="text" id="audit-plan-dept" class="gica-form-input">
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label">Audit Title</label>
+                <select id="audit-plan-title" class="gica-form-input"><option value="">— Select —</option></select>
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label">Scheduled Date</label>
+                <input type="date" id="audit-plan-date" class="gica-form-input">
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label">Auditor 1</label>
+                <input type="text" id="audit-plan-auditor1" class="gica-form-input">
+              </div>
+              <div class="gica-form-row hidden" id="audit-plan-auditor2-row">
+                <label class="gica-form-label">Auditor 2</label>
+                <input type="text" id="audit-plan-auditor2" class="gica-form-input">
+              </div>
+              <div class="gica-form-row hidden" id="audit-plan-auditor3-row">
+                <label class="gica-form-label">Auditor 3</label>
+                <input type="text" id="audit-plan-auditor3" class="gica-form-input">
+              </div>
+              <button type="button" id="audit-plan-add-auditor-btn" class="audit-btn audit-btn--cancel" style="margin-bottom:14px;">+ Add Auditor</button>
+              <div class="gica-form-row">
+                <label class="gica-form-label">Notes</label>
+                <textarea id="audit-plan-notes" class="gica-form-input" rows="2"></textarea>
+              </div>
+              <p id="audit-plan-error" class="login-error hidden"></p>
+            </div>
+            <div class="audit-form-modal__footer">
+              <button class="audit-btn audit-btn--cancel" id="audit-plan-create-cancel">Cancel</button>
+              <button class="audit-btn audit-btn--confirm" id="audit-plan-create-confirm">Create Plan</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Template: Create Form / New Version modal (Google/MS-Forms model) -->
+        <div id="audit-template-form-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-form-modal-backdrop"></div>
+          <div class="gica-modal__panel audit-form-modal__panel">
+            <div class="gica-modal__head">
+              <h4 id="audit-form-modal-title" style="margin:0;font-size:1rem;">Create New Form</h4>
+              <button class="gica-modal__close" id="audit-form-modal-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="audit-form-modal__body">
+              <div class="gica-form-row">
+                <label class="gica-form-label">Form Name</label>
+                <input type="text" id="audit-form-name" class="gica-form-input">
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label">Category (used as Audit Title in Audit Plan)</label>
+                <input type="text" id="audit-form-category" class="gica-form-input" placeholder="e.g. CSA Process">
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label">Code</label>
+                <input type="text" id="audit-form-code" class="gica-form-input" placeholder="e.g. AUD-CSA-001">
+              </div>
+              <label class="gica-form-label">Checklist Items</label>
+              <div id="audit-form-items-container" style="margin-bottom:10px;"></div>
+              <button type="button" id="audit-form-add-item-btn" class="audit-btn audit-btn--cancel" style="margin-bottom:14px;">+ Add Item</button>
+              <p id="audit-form-error" class="login-error hidden"></p>
+            </div>
+            <div class="audit-form-modal__footer">
+              <button class="audit-btn audit-btn--cancel" id="audit-form-modal-cancel">Cancel</button>
+              <button class="audit-btn audit-btn--confirm" id="audit-form-modal-save">Save Form</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Template: Form detail (view all items of one form/version) -->
+        <div id="audit-template-detail-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-detail-backdrop"></div>
+          <div class="gica-modal__panel audit-form-modal__panel">
+            <div class="gica-modal__head">
+              <h4 id="audit-detail-title" style="margin:0;font-size:1rem;"></h4>
+              <button class="gica-modal__close" id="audit-detail-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="audit-form-modal__body">
+              <div id="audit-detail-meta" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
+              <div id="audit-detail-items"></div>
+            </div>
+            <div class="audit-form-modal__footer">
+              <button class="audit-btn audit-btn--cancel" id="audit-detail-close-btn">Close</button>
+              <button class="audit-btn audit-btn--confirm hidden" id="audit-detail-edit-btn">Edit (New Version)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Audit Plan: Cancel confirm modal (row click while Status=Planned) -->
+        <div id="audit-plan-cancel-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-plan-cancel-backdrop"></div>
+          <div class="gica-modal__panel audit-form-modal__panel audit-form-modal__panel--sm">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:1rem;">Cancel Audit Plan</h4>
+              <button class="gica-modal__close" id="audit-plan-cancel-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="audit-form-modal__body">
+              <p>ต้องการยกเลิก Audit Plan <strong id="audit-plan-cancel-id"></strong> ใช่หรือไม่?</p>
+              <p class="u-muted" style="margin-top:6px;">เมื่อยกเลิกแล้ว Plan นี้จะไม่สามารถเปิด Execution ได้อีก</p>
+              <p id="audit-plan-cancel-error" class="login-error hidden"></p>
+            </div>
+            <div class="audit-form-modal__footer">
+              <button class="audit-btn audit-btn--cancel" id="audit-plan-cancel-back">ไม่ยกเลิก</button>
+              <button class="audit-btn audit-btn--confirm" id="audit-plan-cancel-confirm" style="background:var(--danger,#dc2626);color:#fff;border-color:var(--danger,#dc2626);">ยืนยันยกเลิก</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /#audit-dashboard -->
+    </main>
+  </div>
+
+  <script src="/static/js/app.js?v=356"></script>
 </body>
 </html>

@@ -24,3 +24,6 @@ flask_output.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Raw data dumps — app reads from Excel/OneDrive only, these aren't needed
+Report/

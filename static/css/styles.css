@@ -1878,7 +1878,7 @@ tbody tr:hover { filter: brightness(.97); }
 .stat-card__sub-row span   { font-size: 11px; text-align: right; line-height: 1.3; }
 
 /* — Dashboard summary containers (replace JS container.style.cssText) — */
-#gica-summary, #jtp-summary, #trainer-summary, #gica-sched-summary { display: flex; flex-direction: column; gap: 12px; }
+#gica-summary, #jtp-summary, #trainer-summary, #gica-sched-summary, #audit-dashboard-panel { display: flex; flex-direction: column; gap: 12px; }
 
 /* — Card header row; min-height keeps chart canvases aligned across columns — */
 .card-head {
@@ -2691,3 +2691,55 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-cal-evt__dot { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 5px; height: 5px; border-radius: 50%; background: #dc2626; }
 .gica-cal-evt-types { display: inline-flex; gap: 2px; margin: 0 3px; vertical-align: middle; }
 .gica-cal-evt-type-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Audit: Create New Form modal (own classes — NOT shared with GICA KPI) ── */
+.audit-form-modal__panel { width: 520px; max-width: 92vw; }
+.audit-form-modal__panel--sm { width: 380px; }
+.audit-form-modal__body { padding: 0 0 4px; }
+.audit-form-modal__footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+/* Audit Plan table: row is clickable when Status=Planned (opens Cancel confirm) */
+.audit-plan-row--cancellable { cursor: pointer; transition: background .12s; }
+.audit-plan-row--cancellable:hover { background: var(--btn-bg); }
+
+/* Respond / Approval plan-level modals (wider, scrollable body) */
+.audit-wide-modal__panel { width: 680px; max-width: 96vw; max-height: 90vh; display: flex; flex-direction: column; }
+.audit-wide-modal__body  { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Finding card inside Respond / Approval modals */
+.audit-finding-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; background: var(--surface); }
+.audit-finding-card__head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.audit-finding-card__title { font-size: 0.85rem; font-weight: 600; flex: 1; }
+.audit-finding-card__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.audit-finding-card__fields--wide { grid-template-columns: 1fr; }
+.audit-finding-card__readonly { font-size: 0.82rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.audit-finding-card__readonly p { margin: 0; }
+.audit-finding-card__readonly strong { color: var(--text); }
+.audit-finding-card__approve-row { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-light); }
+.audit-finding-card__approve-row textarea { flex: 1; }
+.audit-approve-single-btn { padding: 7px 18px; border-radius: 7px; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: none; background: var(--ok, #16a34a); color: #fff; white-space: nowrap; transition: opacity .15s; }
+.audit-approve-single-btn:hover { opacity: 0.85; }
+.audit-approve-single-btn:disabled { opacity: 0.45; cursor: default; }
+.audit-btn { padding: 7px 22px; border-radius: 7px; font-size: 0.82rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border); transition: opacity .15s, background .15s; }
+.audit-btn--cancel { background: var(--surface); color: var(--text-muted); }
+.audit-btn--cancel:hover { background: var(--border-light); }
+.audit-btn--confirm { background: var(--primary, #6366f1); color: #fff; border-color: transparent; }
+.audit-btn--confirm:hover { opacity: 0.88; }
+
+/* ── Audit: Execution Result — 4-button picker, colored per AUDIT_RATING_COLOR kind ── */
+.audit-rating-btngroup { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.audit-rating-btn {
+  padding: 5px 2px; font-size: 0.6rem; font-weight: 600; line-height: 1.1;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-muted); cursor: pointer; text-align: center; word-break: break-word;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.audit-rating-btn:hover { background: var(--border-light); }
+.audit-rating-btn--active.audit-rating-btn--ok     { background: var(--badge-ok-bg);     color: var(--ok);         border-color: var(--ok); }
+.audit-rating-btn--active.audit-rating-btn--warn   { background: var(--badge-warn-bg);   color: var(--warn);       border-color: var(--warn); }
+.audit-rating-btn--active.audit-rating-btn--danger { background: var(--badge-danger-bg); color: var(--danger);     border-color: var(--danger); }
+.audit-rating-btn--active.audit-rating-btn--muted  { background: var(--badge-muted-bg);  color: var(--text-muted); border-color: var(--border); }
+
+/* ── Audit: Dashboard Category/Year filters — same row as the sub-tab bar, right-aligned ── */
+.audit-dash-filters { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.audit-dash-filters select { width: auto; min-width: 130px; font-size: 0.78rem; padding: 5px 10px; }

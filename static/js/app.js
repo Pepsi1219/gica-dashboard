@@ -29,6 +29,7 @@ const TRANSLATIONS = {
     newRecord:              'บันทึกข้อมูลใหม่',
     employeeId:             'รหัสพนักงาน',
     employeeName:           'ชื่อพนักงาน',
+    empType:                'ประเภท',
     grade:                  'เกรด',
     selectPlaceholder:      '-- เลือก --',
     saveNew:                'บันทึกพนักงานใหม่',
@@ -166,6 +167,7 @@ const TRANSLATIONS = {
     newRecord:              'Create New Record',
     employeeId:             'Employee ID',
     employeeName:           'Employee Name',
+    empType:                'Type',
     grade:                  'Grade',
     selectPlaceholder:      '-- Select --',
     saveNew:                'Save New Employee',
@@ -303,6 +305,7 @@ const TRANSLATIONS = {
     newRecord:              'ບັນທຶກຂໍ້ມູນໃໝ່',
     employeeId:             'ລະຫັດພະນັກງານ',
     employeeName:           'ຊື່ພະນັກງານ',
+    empType:                'ປະເພດ',
     grade:                  'ເກຣດ',
     selectPlaceholder:      '-- ເລືອກ --',
     saveNew:                'ບັນທຶກພະນັກງານໃໝ່',
@@ -440,6 +443,7 @@ const TRANSLATIONS = {
     newRecord:              'Tạo bản ghi mới',
     employeeId:             'Mã nhân viên',
     employeeName:           'Tên nhân viên',
+    empType:                'Loại',
     grade:                  'Cấp bậc',
     selectPlaceholder:      '-- Chọn --',
     saveNew:                'Lưu nhân viên mới',
@@ -584,8 +588,18 @@ let currentRole       = 'user';  // 'user' | 'manager' (view-only)
 let lastCalc          = null;
 let currentLang       = localStorage.getItem('lang')  || 'th';
 let currentTheme      = localStorage.getItem('theme') || 'light';
+let currentNewOpType  = 'Sewing'; // 'Sewing' | 'QC/QA' — active New Operator subtab
 
 const $ = (id) => document.getElementById(id);
+
+// Blank/missing Type (legacy rows from before this column existed) counts as
+// Sewing, so nothing silently disappears from the Sewing view.
+function _matchesNewOpType(emp) {
+  return ((emp['Type'] || '').trim() || 'Sewing') === currentNewOpType;
+}
+function _filterByNewOpType(employees) {
+  return (employees || []).filter(_matchesNewOpType);
+}
 
 // ===== TRANSLATION HELPERS =====
 function t(key, vars = {}) {
@@ -1105,6 +1119,9 @@ function renderEmployeeTable(employees) {
   const body = $('employeeTableBody');
   body.innerHTML = '';
 
+  // scope to the active Sewing/QC-QA subtab before anything else downstream sees it
+  employees = _filterByNewOpType(employees);
+
   // analytics block follows the year filter; table rows additionally follow the status filter
   const yearScoped = currentYearFilter
     ? employees.filter(emp => {
@@ -1158,7 +1175,7 @@ async function loadDashboard(applyYearDefault = false) {
     const query = getHolidayQuery();
     const data = await api(`/api/${currentDepartment}/employees${query ? '?' + query : ''}`);
     lastEmployees = data.employees || [];
-    populateEmpYearFilter(lastEmployees, applyYearDefault);
+    populateEmpYearFilter(_filterByNewOpType(lastEmployees), applyYearDefault);
     _newOpTableState.page = 1;
     renderEmployeeTable(lastEmployees);
     showMessage(t('loadedCount', { n: lastEmployees.length }));
@@ -1172,6 +1189,36 @@ async function loadDashboard(applyYearDefault = false) {
       showMessage(err.message, true);
     }
   }
+}
+
+// Rebuilds #homeDashYearFilter's options from CSA Start Date across all
+// departments, scoped to the active Sewing/QC-QA subtab. Preserves the
+// current selection if it's still a valid year for that subtab's data
+// (otherwise falls back to "All Years"). Returns the sorted year list so
+// callers can decide on a default. Shared by loadHomeDashboard (initial
+// fetch) and the subtab switch handler (re-derive from already-cached data).
+function _rebuildHomeDashYearOptions() {
+  const years = new Set();
+  Object.values(allDeptData).forEach(emps => {
+    _filterByNewOpType(emps).forEach(emp => {
+      const d = normalizeDateForInput(emp['CSA Start Date']);
+      if (d) years.add(d.slice(0, 4));
+    });
+  });
+
+  const sel = $('homeDashYearFilter');
+  if (!sel) return [];
+  const prev = sel.value;
+  const sortedYears = [...years].sort().reverse();
+  sel.innerHTML = `<option value="" data-i18n="allYears">${t('allYears')}</option>`;
+  sortedYears.forEach(yr => {
+    const opt = document.createElement('option');
+    opt.value = yr;
+    opt.textContent = yr;
+    if (yr === prev) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  return sortedYears;
 }
 
 // ===== HOME DASHBOARD =====
@@ -1209,33 +1256,15 @@ async function loadHomeDashboard() {
       if (r.status === 'fulfilled') allDeptData[r.value.key] = r.value.employees;
     });
 
-    // Build year options from CSA Start Date across all departments
-    const years = new Set();
-    Object.values(allDeptData).forEach(emps => {
-      emps.forEach(emp => {
-        const d = normalizeDateForInput(emp['CSA Start Date']);
-        if (d) years.add(d.slice(0, 4));
-      });
-    });
-
+    const sortedYears = _rebuildHomeDashYearOptions();
     const sel = $('homeDashYearFilter');
-    const prev = sel.value;
-    const sortedYears = [...years].sort().reverse();
-    sel.innerHTML = `<option value="" data-i18n="allYears">${t('allYears')}</option>`;
-    sortedYears.forEach(yr => {
-      const opt = document.createElement('option');
-      opt.value = yr;
-      opt.textContent = yr;
-      if (yr === prev) opt.selected = true;
-      sel.appendChild(opt);
-    });
 
     // First load only: default to the latest year with data instead of "All
     // Years". Once set, leave later refreshes alone so an explicit "All
     // Years" choice isn't silently overridden.
     if (!_homeDashYearDefaulted) {
       _homeDashYearDefaulted = true;
-      if (!prev && sortedYears.length) sel.value = sortedYears[0];
+      if (!sel.value && sortedYears.length) sel.value = sortedYears[0];
     }
 
     hide(loadingEl);
@@ -1959,9 +1988,9 @@ function renderAnalytics(yearFilter) {
   if (!el) return;
   if (!Object.keys(allDeptData).length) { hide(el); return; }
 
-  const employees = currentAnalyticsDept
+  const employees = _filterByNewOpType(currentAnalyticsDept
     ? (allDeptData[currentAnalyticsDept] || [])
-    : Object.values(allDeptData).flat();
+    : Object.values(allDeptData).flat());
   const s = computeAnalytics(employees, yearFilter, currentDayMode);
   const trendData = computeTrendData(employees, yearFilter);
 
@@ -2203,7 +2232,7 @@ function renderHomeDashboard(yearFilter) {
   const tbody = table.createTBody();
 
   departments.forEach(dep => {
-    const employees = allDeptData[dep.key] || [];
+    const employees = _filterByNewOpType(allDeptData[dep.key] || []);
     const filtered  = yearFilter
       ? employees.filter(emp => {
           const d = normalizeDateForInput(emp['CSA Start Date']);
@@ -2468,6 +2497,7 @@ async function createNewEmployee() {
     'Employee ID':    $('newEmployeeId').value.trim(),
     'Employee Name':  $('newEmployeeName').value.trim(),
     'CSA Start Date': $('newCsaStartDate').value,
+    'Type':           currentNewOpType, // tag with whichever subtab (Sewing/QC-QA) was open
   };
   if (!payload['Employee ID']) {
     showMessage(t('pleaseEnterEmployeeId'), true);
@@ -2514,7 +2544,7 @@ function searchEmployee() {
 function fillEditForm(emp) {
   const form   = $('editForm');
   const fields = [
-    'Employee ID', 'Employee Name', 'Grade',
+    'Employee ID', 'Employee Name', 'Type', 'Grade',
     'CSA Start Date', 'Basic Start', 'Basic End',
     'Operation Start', 'Operation End', 'Resign Date',
     'Transfers Date', 'Graduate Eff', 'Comment',
@@ -2522,6 +2552,10 @@ function fillEditForm(emp) {
   fields.forEach(name => {
     const input = form.elements[name];
     if (!input) return;
+    if (name === 'Type') {
+      input.value = (emp['Type'] || '').trim() || 'Sewing'; // blank/legacy rows default to Sewing
+      return;
+    }
     input.value = input.type === 'date' ? normalizeDateForInput(emp[name]) : (emp[name] || '');
   });
 
@@ -2571,6 +2605,8 @@ function _roleBadgeText(role) {
     case 'csa_user': return 'CSA (Edit Mode)';
     case 'qe_view':  return 'QE (View Mode)';
     case 'qe_user':  return 'QE (Edit Mode)';
+    case 'qe_audit': return 'QE (Audit Mode - Auditor)';
+    case 'qe_auditee': return 'QE (Audit Mode - Auditee)';
     case 'admin':    return 'Admin Mode';
     case 'manager':  return 'CSA (View Mode)'; // legacy role name
     default:         return '';
@@ -2591,6 +2627,9 @@ function _applyRoleBrandTitle(role) {
   } else if (['qe_view', 'qe_user'].includes(role)) {
     titleEl.textContent = 'GICA Dashboard';
     subEl.textContent   = 'Garment Inspection Competency Assessment';
+  } else if (role === 'qe_audit' || role === 'qe_auditee') {
+    titleEl.textContent = 'Audit Dashboard';
+    subEl.textContent   = 'Internal Process Audit';
   } else if (role === 'admin') {
     titleEl.textContent = 'CSA & GICA Dashboard';
     subEl.textContent   = 'Center of Skill Acquisition · Garment Inspection Competency Assessment';
@@ -2598,7 +2637,7 @@ function _applyRoleBrandTitle(role) {
 }
 
 function initTabBar() {
-  const TAB_IDS = ['newOperator', 'jumper', 'trainer', 'sewingOperator', 'gica'];
+  const TAB_IDS = ['newOperator', 'jumper', 'trainer', 'sewingOperator', 'gica', 'audit'];
   const btnGroup = document.getElementById('mainTabBar');
   if (!btnGroup) return;
 
@@ -2614,9 +2653,10 @@ function initTabBar() {
       if (el) el.classList.toggle('hidden', id !== tabKey);
     });
     // Admin Settings (Special Holidays) is a New Operator feature — never show
-    // it while on the GICA tab, even for admin/csa_user sessions that can write.
-    $('adminBtn')?.classList.toggle('hidden', tabKey === 'gica' || !_adminBtnAllowedByRole);
+    // it while on the GICA/Audit tabs, even for admin/csa_user sessions that can write.
+    $('adminBtn')?.classList.toggle('hidden', tabKey === 'gica' || tabKey === 'audit' || !_adminBtnAllowedByRole);
     if (tabKey === 'gica')       requestAnimationFrame(syncGicaSubtabTop);
+    if (tabKey === 'audit')      requestAnimationFrame(syncAuditSubtabTop);
     if (tabKey === 'newOperator') requestAnimationFrame(syncNewOpSubtabTop);
     // update placeholder text if i18n already loaded
     TAB_IDS.forEach(id => {
@@ -2634,6 +2674,7 @@ function initTabBar() {
       if (btn.dataset.tab === 'jumper')  initJumperTab();
       if (btn.dataset.tab === 'trainer') initTrainerTab();
       if (btn.dataset.tab === 'gica')    initGicaTab();
+      if (btn.dataset.tab === 'audit')   initAuditTab();
     };
   });
 
@@ -2656,7 +2697,19 @@ function syncTabBarTop() {
 function syncGicaSubtabTop() {
   const topbarEl = document.querySelector('.topbar');
   const tabBarEl = document.getElementById('mainTabBar');
-  const subtabEl = document.querySelector('.gica-subtab-bar');
+  const subtabEl = document.querySelector('#tabContent-gica .gica-subtab-bar');
+  if (topbarEl && tabBarEl && subtabEl) {
+    subtabEl.style.top = (topbarEl.offsetHeight + tabBarEl.offsetHeight) + 'px';
+  }
+}
+
+// Separate from syncGicaSubtabTop because both tabs reuse the .gica-subtab-bar
+// class — a single generic selector would always resolve to whichever one is
+// first in the DOM, even while hidden (offsetHeight 0), breaking the other tab.
+function syncAuditSubtabTop() {
+  const topbarEl = document.querySelector('.topbar');
+  const tabBarEl = document.getElementById('mainTabBar');
+  const subtabEl = document.querySelector('#tabContent-audit .gica-subtab-bar');
   if (topbarEl && tabBarEl && subtabEl) {
     subtabEl.style.top = (topbarEl.offsetHeight + tabBarEl.offsetHeight) + 'px';
   }
@@ -2677,16 +2730,21 @@ function syncNewOpSubtabTop() {
 }
 
 // Wires the Sewing/QC-QA subtab bar on the New Operator landing page.
-// QC-QA has no backend data yet — it's a placeholder, same pattern as the
-// Jumper/Trainer/Sewing Operator "coming soon" tabs.
+// Both subtabs reuse the same dashboard markup — switching just changes
+// currentNewOpType and re-renders against already-fetched data (no refetch),
+// scoped via the "Type" column added to each BU's Excel table.
 function initNewOpSubtabs() {
   document.querySelectorAll('.newop-subtab-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.newop-subtab-btn').forEach(b =>
         b.classList.toggle('newop-subtab-btn--active', b === btn));
-      const subtab = btn.dataset.subtab;
-      $('newop-sewing-panel')?.classList.toggle('hidden', subtab !== 'sewing');
-      $('newop-qcqa-panel')?.classList.toggle('hidden', subtab !== 'qcqa');
+      currentNewOpType = btn.dataset.subtab === 'qcqa' ? 'QC/QA' : 'Sewing';
+
+      // Home Dashboard: re-render against the already-cached allDeptData
+      if (Object.keys(allDeptData).length) {
+        _rebuildHomeDashYearOptions();
+        renderHomeDashboard($('homeDashYearFilter').value);
+      }
     };
   });
 }
@@ -2753,6 +2811,7 @@ function _showLoginDoor(door) {
 function _showLoginDoorPicker() {
   $('loginDoors').classList.remove('hidden');
   ['csa', 'qe', 'admin'].forEach(d => $('loginDoor-' + d)?.classList.add('hidden'));
+  $('loginDoor-qe-audit')?.classList.add('hidden');
 }
 
 async function _openViewOnlySession(route, btn, errEl) {
@@ -2820,6 +2879,8 @@ function _hideDoorPasswordPanel() {
   $('loginCard').classList.remove('hidden');
 }
 
+let _doorLoginRoutePending = '';   // set alongside _doorPasswordPending — which POST route to call after unlock
+
 async function _submitDoorPassword() {
   const door     = _doorPasswordPending;
   const password = $('doorPasswordInput').value;
@@ -2832,10 +2893,13 @@ async function _submitDoorPassword() {
   try {
     await api('/api/door-unlock', { method: 'POST', body: JSON.stringify({ door, password }) });
     if (door === 'qe') {
-      // QE Edit Mode writes through the shared MANAGER_REFRESH_TOKEN (the file
-      // owner's own account) instead of each person's own Microsoft login — no
-      // OAuth redirect needed once the door password is verified.
-      await api('/qe-edit-login', { method: 'POST' });
+      // QE Edit/Audit Mode write through the shared MANAGER_REFRESH_TOKEN (the
+      // file owner's own account) instead of each person's own Microsoft login —
+      // no OAuth redirect needed once the door password is verified. Which mode
+      // (Edit vs Audit) is decided by data-login-route on the button that was
+      // clicked, NOT hardcoded here — qeEditBtn and qeAuditBtn share the same
+      // door="qe" password gate but log in to different roles.
+      await api(_doorLoginRoutePending || '/qe-edit-login', { method: 'POST' });
       window.location.reload();
     } else {
       window.location.href = `/login?door=${door}`;
@@ -2856,9 +2920,25 @@ function initLoginDoors() {
   $('csaViewBtn')?.addEventListener('click', () => _openViewOnlySession('/manager-login', $('csaViewBtn'), $('csaViewError')));
   $('qeViewBtn')?.addEventListener('click', () => _openViewOnlySession('/qe-view-login', $('qeViewBtn'), $('qeViewError')));
 
+  // Audit Mode is its own nested picker (QE door → Audit Mode → Auditor/Auditee)
+  // rather than a direct password-gated button — Auditor still needs the door
+  // password, but Auditee (the person being audited, not QE staff) does not.
+  $('qeAuditModeBtn')?.addEventListener('click', () => {
+    $('loginDoor-qe')?.classList.add('hidden');
+    $('loginDoor-qe-audit')?.classList.remove('hidden');
+  });
+  $('qeAuditBack')?.addEventListener('click', () => {
+    $('loginDoor-qe-audit')?.classList.add('hidden');
+    $('loginDoor-qe')?.classList.remove('hidden');
+  });
+  $('qeAuditeeBtn')?.addEventListener('click', () => _openViewOnlySession('/qe-auditee-login', $('qeAuditeeBtn'), $('qeAuditeeError')));
+
   // QE / Admin "Sign in with Microsoft" — must pass the door password first.
   document.querySelectorAll('.login-btn[data-door]').forEach(btn => {
-    btn.addEventListener('click', () => _showDoorPasswordPanel(btn.dataset.door));
+    btn.addEventListener('click', () => {
+      _doorLoginRoutePending = btn.dataset.loginRoute || '/qe-edit-login';
+      _showDoorPasswordPanel(btn.dataset.door);
+    });
   });
   $('doorPasswordBack')?.addEventListener('click', _hideDoorPasswordPanel);
   $('doorPasswordSubmit')?.addEventListener('click', _submitDoorPassword);
@@ -2869,6 +2949,11 @@ function initLoginDoors() {
     if (e.key !== 'Escape') return;
     if (!$('doorPasswordPanel').classList.contains('hidden')) {
       _hideDoorPasswordPanel();
+      return;
+    }
+    if (!$('loginDoor-qe-audit')?.classList.contains('hidden')) {
+      $('loginDoor-qe-audit').classList.add('hidden');
+      $('loginDoor-qe')?.classList.remove('hidden');
       return;
     }
     const openDoor = ['csa', 'qe', 'admin'].find(d => !$('loginDoor-' + d)?.classList.contains('hidden'));
@@ -3044,20 +3129,32 @@ async function init() {
   // though they can open the Admin Settings modal for holidays.
   $('forceRefreshSection')?.classList.toggle('hidden', currentRole !== 'admin');
 
-  // Role-based tab visibility: CSA roles never see GICA; QE roles see ONLY GICA;
+  // Role-based tab visibility: CSA roles never see GICA/Audit; QE roles see ONLY
+  // GICA; qe_audit/qe_auditee see ONLY Audit (sub-tab gating inside the module
+  // further restricts qe_auditee to Dashboard/Plan/Finding-CAR — see initAuditTab);
   // admin sees everything (no filtering needed).
   if (currentRole === 'admin') {
     // no-op — all tabs already visible by default
+  } else if (currentRole === 'qe_audit' || currentRole === 'qe_auditee') {
+    ['newOperator', 'jumper', 'trainer', 'sewingOperator', 'gica'].forEach(id => {
+      $('tabItem-' + id)?.classList.add('hidden');
+      document.querySelector(`.tab-btn[data-tab="${id}"]`)?.classList.add('hidden');
+    });
+    if (_switchMainTab) _switchMainTab('audit');
+    initAuditTab();
+    return;
   } else if (QE_ROLES.includes(currentRole)) {
     ['newOperator', 'jumper', 'trainer', 'sewingOperator'].forEach(id => {
       $('tabItem-' + id)?.classList.add('hidden');
       document.querySelector(`.tab-btn[data-tab="${id}"]`)?.classList.add('hidden');
     });
+    document.querySelector('.tab-btn[data-tab="audit"]')?.classList.add('hidden');
     if (_switchMainTab) _switchMainTab('gica');
     initGicaTab();
     return;
   } else if (CSA_ROLES.includes(currentRole)) {
     document.querySelector('.tab-btn[data-tab="gica"]')?.classList.add('hidden');
+    document.querySelector('.tab-btn[data-tab="audit"]')?.classList.add('hidden');
   }
 
   departments = await api('/api/departments');
@@ -7960,3 +8057,1393 @@ init().catch(err => {
   show($('loginPanel'));
   startLoginParticles();
 });
+
+// =============================================================================
+// AUDIT MODULE
+// Data comes from /api/audit-excel (Flask → Audit_Monitoring.xlsx via
+// MANAGER_REFRESH_TOKEN). One fetch per session, sub-tab views over the
+// same cached payload (Dashboard / Plan / Template / Execution / Finding-CAR),
+// following the compute → html → mount → render layering used by
+// GICA. Reachable by qe_audit (Auditor) / qe_auditee (Auditee) / admin per the
+// tab-visibility gate above. Most writes are qe_audit/admin only (server-
+// enforced) — the one exception is the bulk Respond endpoint, which qe_auditee
+// can also call (see canManage vs canRespond in _auditPlanActionBtn).
+// =============================================================================
+
+const AUDIT_BUS = ['G1', 'G2', 'G3', 'G4', 'TRM', 'EA'];
+const AUDIT_SEVERITY_COLOR = { Minor: 'warn', Major: 'danger', Critical: 'danger' };
+const AUDIT_STATUS_COLOR   = { Open: 'danger', Responded: 'warn', Approved: 'ok',
+                                Planned: 'muted', Completed: 'ok',
+                                Issued: 'danger', 'Pending Approval': 'warn', Cancelled: 'muted' };
+// Fixed rating scale for every checklist item at Execution time — no weighted
+// score, no Pass/Fail. Mirrors config.py's AUDIT_EXECUTION_RATINGS.
+const AUDIT_EXECUTION_RATINGS = ['Conformity', 'Major Non-Conformity', 'Minor Non-Conformity', 'OFI'];
+const AUDIT_RATING_COLOR = {
+  'Conformity': 'ok', 'Major Non-Conformity': 'danger',
+  'Minor Non-Conformity': 'warn', 'OFI': 'muted',
+};
+
+let _auditData = { templates: [], plans: [], executions: [], findings: [] };
+let _auditLoaded = false;
+let _auditActiveSubtab = 'dashboard';
+let _auditExecutionPlanId = null;   // which Plan is currently open in the Execution sub-tab
+let _auditApproveTargetId = null;   // FindingID pending in the per-finding Approve modal
+
+// Dashboard Category/Year filters — live in the sub-tab bar row (top-right),
+// apply only to the Dashboard cards. Year is read from PlanID's first 4 chars
+// ('YYYY-MM-NNNN' format), not a real column.
+let _auditDashCategory = 'all';
+let _auditDashYear = 'all';
+
+function _auditBadge(text, kind) {
+  return `<span class="badge ${kind || 'muted'}">${escapeHtml(text || '—')}</span>`;
+}
+
+// Reuses GICA's display format ('11 Jul 2026') for consistency across the app.
+function _auditFmtDate(iso) {
+  return _gicaFmtDate(iso);
+}
+
+function _auditDaysSince(iso) {
+  if (!iso) return null;
+  const d = new Date(String(iso).slice(0, 10));
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+// Groups checklist item rows by Category+Version (one specific Form *version*)
+// — used wherever code just needs "all items belonging to this exact version"
+// (e.g. resolving a Plan's linked Template name, joining Execution rows).
+// AuditPlan pins a version via AuditTitle(=Category)+FormVersion, not a
+// TemplateID FK — there is no single-row PK column on AuditTemplate.
+function _auditTemplateGroups(templates) {
+  const byKey = {};
+  templates.forEach(t => {
+    const category = String(t.Category || '').trim();
+    const version = t.Version;
+    if (!category || version === null || version === undefined || version === '') return;
+    const key = category + '|' + version;
+    if (!byKey[key]) byKey[key] = { category, version, templateName: t.TemplateName, items: [] };
+    byKey[key].items.push(t);
+  });
+  return Object.values(byKey).sort((a, b) =>
+    a.category.localeCompare(b.category) || (a.version - b.version));
+}
+
+// Groups checklist item rows by Code (the stable Form identity across edits —
+// Google/MS Forms model). Each group exposes only the LATEST version's items
+// for display, plus the full per-version breakdown for history/Edit-as-new-version.
+function _auditFormGroups(templates) {
+  const byCode = {};
+  templates.forEach(t => {
+    const code = String(t.Code || '').trim();
+    if (!code) return;  // skip legacy rows with no Code (pre-versioning data)
+    (byCode[code] = byCode[code] || []).push(t);
+  });
+  return Object.entries(byCode).map(([code, rows]) => {
+    const byVersion = {};
+    rows.forEach(r => {
+      const v = r.Version || 1;
+      (byVersion[v] = byVersion[v] || []).push(r);
+    });
+    const versions = Object.keys(byVersion).map(Number).sort((a, b) => b - a);
+    const latestVersion = versions[0];
+    const latestItems = (byVersion[latestVersion] || [])
+      .slice().sort((a, b) => (a.ItemNo ?? 0) - (b.ItemNo ?? 0));
+    const first = latestItems[0] || rows[0];
+    return {
+      code,
+      templateName: first.TemplateName,
+      category:     first.Category,
+      latestVersion,
+      latestItems,
+      versions,
+      byVersion,
+      isActive: latestItems.some(it => it.Active),
+    };
+  }).sort((a, b) => String(a.templateName || '').localeCompare(String(b.templateName || '')));
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
+async function initAuditTab() {
+  if (_auditLoaded) return;
+  const loadingEl = $('audit-loading');
+  const errorEl   = $('audit-error');
+  const dashEl    = $('audit-dashboard');
+  if (loadingEl) loadingEl.classList.remove('hidden');
+  if (errorEl)   errorEl.classList.add('hidden');
+  if (dashEl)    dashEl.classList.add('hidden');
+  try {
+    const data = await api('/api/audit-excel');
+    if (data.error) throw new Error(data.error);
+    _auditData = data;
+    _auditLoaded = true;
+
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (dashEl)    dashEl.classList.remove('hidden');
+    requestAnimationFrame(syncAuditSubtabTop);
+
+    // Auditee sees Dashboard / Audit Plan / Finding-CAR only — no Template
+    // (Auditor-only: managing checklist forms is not an Auditee concern).
+    if (currentRole === 'qe_auditee') {
+      dashEl.querySelector('.audit-subtab-btn[data-audit-subtab="template"]')?.classList.add('hidden');
+    }
+
+    dashEl.querySelectorAll('.audit-subtab-btn').forEach(btn => {
+      btn.addEventListener('click', () => _auditSwitchSubtab(btn.dataset.auditSubtab));
+    });
+    _wireAuditApproveModal();
+    _wireAuditPlanRespondModal();
+    _wireAuditPlanApprovalModal();
+    _wireAuditPlanCreateModal();
+    _wireAuditCancelPlanModal();
+    _wireAuditFormModal();
+    _wireAuditFormDetailModal();
+    _wireAuditDashFilters();
+    document.addEventListener('keydown', _auditExecutionEscHandler);
+    document.addEventListener('keydown', _auditFormDetailEscHandler);
+
+    _populateAuditDashFilters();
+    renderAuditDashboard();
+    renderAuditPlan();
+    renderAuditTemplate();
+    renderAuditExecution();
+    renderAuditFinding();
+  } catch (err) {
+    console.error('[AUDIT]', err);
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (errorEl) {
+      errorEl.classList.remove('hidden');
+      errorEl.innerHTML = `<p>โหลดข้อมูล Audit ไม่สำเร็จ: ${escapeHtml(err.message || '')}</p>
+        <button onclick="_auditLoaded=false;initAuditTab();" style="margin-top:8px;">ลองใหม่</button>`;
+    }
+  }
+}
+
+async function _auditRefetch() {
+  _auditLoaded = false;
+  const data = await api('/api/audit-excel');
+  _auditData = data;
+  _auditLoaded = true;
+  _populateAuditDashFilters();
+  renderAuditDashboard();
+  renderAuditPlan();
+  renderAuditTemplate();
+  renderAuditExecution();
+  renderAuditFinding();
+}
+
+// Dashboard Category/Year filter options are derived from live Plan data, so
+// re-derive (preserving the current selection where it's still valid) every
+// time _auditData refreshes, not just once at load.
+function _populateAuditDashFilters() {
+  const plans = _auditData.plans || [];
+
+  const catSel = $('audit-dash-filter-category');
+  if (catSel) {
+    const categories = Array.from(new Set(plans.map(p => p.AuditTitle).filter(Boolean))).sort();
+    if (!categories.includes(_auditDashCategory)) _auditDashCategory = 'all';
+    catSel.innerHTML = '<option value="all">All Categories</option>' +
+      categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    catSel.value = _auditDashCategory;
+  }
+
+  const yearSel = $('audit-dash-filter-year');
+  if (yearSel) {
+    const years = Array.from(new Set(plans
+      .map(p => String(p.PlanID || '').slice(0, 4))
+      .filter(y => /^\d{4}$/.test(y))))
+      .sort((a, b) => b.localeCompare(a));
+    if (!years.includes(_auditDashYear)) _auditDashYear = 'all';
+    yearSel.innerHTML = '<option value="all">All Years</option>' +
+      years.map(y => `<option value="${y}">${y}</option>`).join('');
+    yearSel.value = _auditDashYear;
+  }
+}
+
+function _wireAuditDashFilters() {
+  $('audit-dash-filter-category')?.addEventListener('change', e => {
+    _auditDashCategory = e.target.value;
+    renderAuditDashboard();
+  });
+  $('audit-dash-filter-year')?.addEventListener('change', e => {
+    _auditDashYear = e.target.value;
+    renderAuditDashboard();
+  });
+}
+
+function _auditSwitchSubtab(subtab) {
+  _auditActiveSubtab = subtab;
+  document.querySelectorAll('.audit-subtab-btn').forEach(b =>
+    b.classList.toggle('gica-subtab-btn--active', b.dataset.auditSubtab === subtab));
+  ['dashboard', 'plan', 'template', 'execution', 'finding'].forEach(key => {
+    const panelId = 'audit-' + key + '-panel';
+    $(panelId)?.classList.toggle('hidden', key !== subtab);
+  });
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+// Same semantic palette as AUDIT_RATING_COLOR's badge classes (ok/danger/warn/muted),
+// resolved to literal hex here because SVG stroke/fill needs a concrete color, not
+// a class name — mirrors GICA_GRADE_COLORS' approach for its grade donuts.
+const AUDIT_RATING_HEX = {
+  'Conformity':           '#16a34a',
+  'Major Non-Conformity': '#dc2626',
+  'Minor Non-Conformity': '#f59e0b',
+  'OFI':                  '#6b7280',
+};
+const AUDIT_RATING_SHORT = {
+  'Conformity': 'Conformity', 'Major Non-Conformity': 'Major NC',
+  'Minor Non-Conformity': 'Minor NC', 'OFI': 'OFI',
+};
+
+function _auditEmptyRatingCounts() {
+  return { 'Conformity': 0, 'Major Non-Conformity': 0, 'Minor Non-Conformity': 0, 'OFI': 0 };
+}
+
+// Card 3 "Overall Status" — distinct hex per Plan Status (Planned/Cancelled both
+// "muted" badge-wise, but need visually distinct donut slices, hence separate hues).
+const AUDIT_PLAN_STATUS_LIST = ['Planned', 'Issued', 'Pending Approval', 'Completed', 'Cancelled'];
+const AUDIT_PLAN_STATUS_HEX = {
+  'Planned':          '#94a3b8',
+  'Issued':           '#dc2626',
+  'Pending Approval': '#f59e0b',
+  'Completed':        '#16a34a',
+  'Cancelled':        '#6b7280',
+};
+
+function _computeAuditDashboardVm(data) {
+  // Category/Year filters (top-right of the sub-tab bar) — Category matches
+  // Plan.AuditTitle, Year matches PlanID's first 4 chars ('YYYY-MM-NNNN').
+  // Filtering plans first, then deriving executions only from the surviving
+  // PlanIDs, keeps every card on this dashboard consistent with the filter.
+  const allPlans = data.plans || [];
+  const plans = allPlans.filter(p =>
+    (_auditDashCategory === 'all' || p.AuditTitle === _auditDashCategory) &&
+    (_auditDashYear === 'all' || String(p.PlanID || '').slice(0, 4) === _auditDashYear));
+  const planIds = new Set(plans.map(p => p.PlanID));
+  const executions = (data.executions || []).filter(e => planIds.has(e.PlanID));
+
+  // Card 1: total audits + per-BU plan count (mini bar chart, BU-colored).
+  // Each bar splits Completed (full color) vs not-yet-Completed (faded —
+  // Planned/Issued/Pending Approval/Cancelled lumped into one segment).
+  const planCountByBu = {};
+  const planCompletedByBu = {};
+  AUDIT_BUS.forEach(bu => { planCountByBu[bu] = 0; planCompletedByBu[bu] = 0; });
+  plans.forEach(p => {
+    if (!(p.BU in planCountByBu)) return;
+    planCountByBu[p.BU]++;
+    if (p.Status === 'Completed') planCompletedByBu[p.BU]++;
+  });
+
+  // Card 3 "Overall Status": tally of every Plan's Status, all BU, all time.
+  const planStatusCounts = {};
+  AUDIT_PLAN_STATUS_LIST.forEach(s => planStatusCounts[s] = 0);
+  plans.forEach(p => { if (planStatusCounts[p.Status] !== undefined) planStatusCounts[p.Status]++; });
+
+  // Card 2: all-time rating breakdown across every execution item ever recorded.
+  // Reads ActualResult, not Score — Score is the immutable original rating,
+  // ActualResult flips to "Conformity" once the Finding it produced is
+  // Approved, so this reflects current (resolved) compliance, not history.
+  const overallRatingCounts = _auditEmptyRatingCounts();
+  let overallRatingTotal = 0;
+  // Back face of the flip card: the immutable original Score, untouched by any
+  // later Finding/CAR resolution — what the audit actually found at the time.
+  const originalRatingCounts = _auditEmptyRatingCounts();
+  let originalRatingTotal = 0;
+  executions.forEach(e => {
+    const result = e.ActualResult || e.Score;
+    if (overallRatingCounts[result] !== undefined) {
+      overallRatingCounts[result]++;
+      overallRatingTotal++;
+    }
+    if (originalRatingCounts[e.Score] !== undefined) {
+      originalRatingCounts[e.Score]++;
+      originalRatingTotal++;
+    }
+  });
+
+  // Row 2: latest Plan per BU (highest PlanID — 'YYYY-MM-NNNN' sorts lexicographically
+  // = chronologically) that actually has execution rows, then that Plan's rating split.
+  const buLatest = {};
+  AUDIT_BUS.forEach(bu => {
+    const buPlans = plans
+      .filter(p => p.BU === bu)
+      .sort((a, b) => String(b.PlanID || '').localeCompare(String(a.PlanID || '')));
+    const latestWithData = buPlans.find(p =>
+      executions.some(e => e.PlanID === p.PlanID));
+    if (!latestWithData) { buLatest[bu] = null; return; }
+    const counts = _auditEmptyRatingCounts();
+    let total = 0;
+    executions.filter(e => e.PlanID === latestWithData.PlanID).forEach(e => {
+      const result = e.ActualResult || e.Score;
+      if (counts[result] !== undefined) { counts[result]++; total++; }
+    });
+    buLatest[bu] = { planId: latestWithData.PlanID, counts, total };
+  });
+
+  return {
+    totalAudits: plans.length,
+    planCountByBu,
+    planCompletedByBu,
+    planStatusCounts,
+    overallRatingCounts,
+    overallRatingTotal,
+    originalRatingCounts,
+    originalRatingTotal,
+    buLatest,
+  };
+}
+
+function _auditDashboardHtml(vm) {
+  // Vertical SVG bar chart: one bar per BU, height ~ plan count, colored by that
+  // BU's theme color — same technique as GICA's per-BU bar chart on the
+  // "Total employees" card (_gicaSummaryHtml's buBarChart). Each bar stacks
+  // Completed (full color, bottom) vs not-yet-Completed (faded, top) — all
+  // non-Completed statuses lumped into one segment, not split further.
+  const buBarChart = () => {
+    const maxN = Math.max(1, ...AUDIT_BUS.map(bu => vm.planCountByBu[bu]));
+    const W = 220, CH = 70, PAD = 8, LH = 16, TPAD = 14;
+    const n = AUDIT_BUS.length;
+    const slot = (W - PAD * 2) / n;
+    const bw = Math.round(slot * 0.62);
+    const bo = (slot - bw) / 2;
+    const bars = AUDIT_BUS.map((bu, i) => {
+      const x  = Math.round(PAD + i * slot + bo);
+      const cx = Math.round(x + bw / 2);
+      const count = vm.planCountByBu[bu];
+      const completedCount = vm.planCompletedByBu[bu];
+      const notCompletedCount = count - completedCount;
+      const color = GICA_BU_COLORS[bu] || '#6b7280';
+      if (!count) {
+        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">no data</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${bu}</text>`;
+      }
+      const totalH = Math.max(Math.round(count / maxN * CH), 3);
+      const scale  = totalH / count;
+      const completedH    = completedCount    > 0 ? Math.max(Math.round(completedCount * scale), 2)    : 0;
+      const notCompletedH = Math.max(totalH - completedH, 0);
+      const topY = TPAD + CH - totalH;
+      const completedY    = TPAD + CH - completedH;
+      const notCompletedY = completedY - notCompletedH;
+      const clipId = `audit-bu-bar-clip-${bu}`;
+      return `<g>
+        <title>${bu} — Completed: ${completedCount}, Not Completed: ${notCompletedCount} (Total ${count})</title>
+        <defs><clipPath id="${clipId}"><rect x="${x}" y="${topY}" width="${bw}" height="${totalH}" rx="3"></rect></clipPath></defs>
+        <g clip-path="url(#${clipId})">
+          ${notCompletedH > 0 ? `<rect x="${x}" y="${notCompletedY}" width="${bw}" height="${notCompletedH}" fill="${color}" opacity="0.3"></rect>` : ''}
+          ${completedH > 0 ? `<rect x="${x}" y="${completedY}" width="${bw}" height="${completedH}" fill="${color}"></rect>` : ''}
+        </g>
+        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="8" font-weight="700" fill="${color}">${count}</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${bu}</text>
+      </g>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:32px;overflow:visible;">
+      <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
+      ${bars}
+    </svg>`;
+  };
+
+  // Leader-line donut (same visual technique as GICA's donutLabeled/donutLabeledSm),
+  // generalized over an arbitrary category list/color map so both the rating
+  // donut (Card 2) and the plan-status donut (Card 3) can share one renderer.
+  const _leaderDonut = (counts, tot, categories, colorOf, labelOf, opts, center) => {
+    const { cx: CX, cy: CY, r: R, sw, leadOut, leadH, vbW, vbH, fsMain, fsSub, fsCenterMain, fsCenterSub, centerYOff, centerSubYOff } = opts;
+    const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
+    const gap = tot ? 1.0 : 0;
+    let acc = 0;
+    const segs = [], lines = [];
+    categories.forEach(cat => {
+      const v = counts[cat] || 0;
+      if (!tot || !v) return;
+      const color = colorOf(cat);
+      const len  = v / tot * CIRC;
+      const dash = Math.max(len - gap, 0.5);
+      segs.push(`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(CIRC - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${CX} ${CY})"></circle>`);
+      const mid = -Math.PI / 2 + (acc + len / 2) / CIRC * 2 * Math.PI;
+      const mx2 = CX + outerR * Math.cos(mid),         my2 = CY + outerR * Math.sin(mid);
+      const ex = CX + (outerR + leadOut) * Math.cos(mid), ey = CY + (outerR + leadOut) * Math.sin(mid);
+      const isRight = ex >= CX;
+      const hx = ex + (isRight ? leadH : -leadH), hy = ey;
+      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
+      const pct = Math.round(v / tot * 100);
+      lines.push(`
+        <line x1="${mx2.toFixed(1)}" y1="${my2.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${color}" stroke-width="1.2" stroke-linecap="round"></line>
+        <line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${color}" stroke-width="1.2" stroke-linecap="round"></line>
+        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${color}"></circle>
+        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="${fsMain}" font-weight="600" fill="var(--text)">${labelOf(cat)}: ${v}</text>
+        <text x="${tx.toFixed(1)}" y="${(hy + fsMain + 2).toFixed(1)}" text-anchor="${anchor}" font-size="${fsSub}" fill="var(--text-muted)">(${pct}%)</text>`);
+      acc += len;
+    });
+    const { value: centerValue, color: centerColor, sub: centerSub } = center(counts, tot);
+    return `
+      <svg viewBox="0 0 ${vbW} ${vbH}" width="100%">
+        <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
+        ${segs.join('')}
+        ${lines.join('')}
+        <text x="${CX}" y="${CY + centerYOff}" text-anchor="middle" font-size="${fsCenterMain}" font-weight="800" fill="${tot ? centerColor : 'var(--text-muted)'}">${tot ? centerValue : '—'}</text>
+        <text x="${CX}" y="${CY + centerSubYOff}" text-anchor="middle" font-size="${fsCenterSub}" fill="var(--text-muted)" letter-spacing="0.5">${centerSub}</text>
+      </svg>`;
+  };
+
+  const _complianceCenter = (counts, tot) => {
+    const pct = tot ? Math.round((counts['Conformity'] || 0) / tot * 100) : 0;
+    return { value: pct + '%', color: pct >= 85 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626', sub: 'Compliance' };
+  };
+  const ratingDonut = (counts, tot, opts) =>
+    _leaderDonut(counts, tot, AUDIT_EXECUTION_RATINGS, r => AUDIT_RATING_HEX[r], r => AUDIT_RATING_SHORT[r], opts, _complianceCenter);
+
+  const _completionCenter = (counts, tot) => {
+    const pct = tot ? Math.round((counts['Completed'] || 0) / tot * 100) : 0;
+    return { value: pct + '%', color: pct >= 85 ? '#16a34a' : pct >= 60 ? '#f59e0b' : '#dc2626', sub: 'Completion Rate' };
+  };
+  const statusDonut = (counts, tot, opts) =>
+    _leaderDonut(counts, tot, AUDIT_PLAN_STATUS_LIST, s => AUDIT_PLAN_STATUS_HEX[s], s => s, opts, _completionCenter);
+
+  const bigDonutOpts  = { cx: 145, cy: 102, r: 50, sw: 20, leadOut: 12, leadH: 18, vbW: 300, vbH: 205, fsMain: 9.5, fsSub: 8.5, fsCenterMain: 22, fsCenterSub: 8.5, centerYOff: 8, centerSubYOff: 20 };
+  const smallDonutOpts = { cx: 125, cy: 88,  r: 43, sw: 20, leadOut: 7.5, leadH: 13, vbW: 255, vbH: 172, fsMain: 9,   fsSub: 8.5, fsCenterMain: 20, fsCenterSub: 9,   centerYOff: 6, centerSubYOff: 20 };
+
+  // Shared by both faces of the Overall Score flip card — front reads
+  // ActualResult (current state), back reads the immutable original Score.
+  const ratingFaceHtml = (label, counts, tot) => `
+    <div class="u-between">
+      <div class="stat-card__label">${label}</div>
+      <div style="text-align:right;">
+        ${AUDIT_EXECUTION_RATINGS.map(rating => `
+        <div class="u-between" style="width:108px;margin-left:auto;font-size:0.74rem;">
+          <span class="u-muted">${AUDIT_RATING_SHORT[rating]}</span><strong style="color:${AUDIT_RATING_HEX[rating]};">${counts[rating]}</strong>
+        </div>`).join('')}
+      </div>
+    </div>
+    ${ratingDonut(counts, tot, bigDonutOpts)}`;
+
+  const buCardsHtml = AUDIT_BUS.map(bu => {
+    const buColor = GICA_BU_COLORS[bu] || 'var(--text)';
+    const latest = vm.buLatest[bu];
+    if (!latest) {
+      return `<div class="stat-card stat-card--empty" style="min-width:0;">
+        <div class="bu-name u-muted">${bu}</div>
+        <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+      </div>`;
+    }
+    return `<div class="stat-card" style="min-width:0;">
+      <div class="u-between">
+        <div class="bu-head"><span class="bu-name" style="color:${buColor};">${bu}</span></div>
+        <span class="u-muted" style="font-size:0.7rem;font-weight:600;">#${escapeHtml(latest.planId)}</span>
+      </div>
+      ${ratingDonut(latest.counts, latest.total, smallDonutOpts)}
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="stat-grid stat-grid--4">
+      <div class="stat-card">
+        <div class="stat-card__label">Total Audit</div>
+        <div class="stat-card__value">${vm.totalAudits}</div>
+        ${buBarChart()}
+      </div>
+      <div class="stat-card">
+        ${ratingFaceHtml('Overall Score', vm.overallRatingCounts, vm.overallRatingTotal)}
+      </div>
+      <div class="stat-card">
+        ${ratingFaceHtml('Original Score', vm.originalRatingCounts, vm.originalRatingTotal)}
+      </div>
+      <div class="stat-card">
+        <div class="u-between">
+          <div class="stat-card__label">Overall Status</div>
+          <div style="text-align:right;">
+            ${AUDIT_PLAN_STATUS_LIST.map(status => `
+            <div class="u-between" style="width:120px;margin-left:auto;font-size:0.74rem;">
+              <span class="u-muted">${status}</span><strong style="color:${AUDIT_PLAN_STATUS_HEX[status]};">${vm.planStatusCounts[status]}</strong>
+            </div>`).join('')}
+          </div>
+        </div>
+        ${statusDonut(vm.planStatusCounts, vm.totalAudits, bigDonutOpts)}
+      </div>
+    </div>
+    <div class="stat-grid stat-grid--6">${buCardsHtml}</div>`;
+}
+
+function _mountAuditDashboard(html) {
+  const el = $('audit-dashboard-panel');
+  if (el) el.innerHTML = html;
+}
+
+function renderAuditDashboard() {
+  _mountAuditDashboard(_auditDashboardHtml(_computeAuditDashboardVm(_auditData)));
+}
+
+// ── Audit Plan ────────────────────────────────────────────────────────────────
+function _computeAuditPlanVm(data) {
+  const templateGroups = _auditTemplateGroups(data.templates || []);
+  // PlanID is a string ('YYYY-MM-NNNN'), not a number — lexicographic order
+  // already matches chronological order for this zero-padded format.
+  const plans = (data.plans || []).slice()
+    .sort((a, b) => String(b.PlanID || '').localeCompare(String(a.PlanID || '')));
+  return { plans, templateGroups };
+}
+
+// Stacked badges (not comma-joined text) — one badge per filled-in auditor,
+// 1 to 3, rendered vertically within the single table cell.
+function _auditPlanAuditorsHtml(p) {
+  const names = [p.Auditor1, p.Auditor2, p.Auditor3]
+    .map(a => String(a || '').trim()).filter(Boolean);
+  if (!names.length) return '—';
+  return `<div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+    ${names.map(n => `<span>${escapeHtml(n)}</span>`).join('')}
+  </div>`;
+}
+
+// canManage (qe_audit/admin): create Plan, run Execution, Approve, Cancel.
+// canRespond (qe_audit/qe_auditee/admin): only the Respond action — Auditee
+// is the person being audited, not QE staff, and only ever fills the Respond form.
+function _auditPlanActionBtn(p, canManage, canRespond) {
+  const id = escapeHtml(p.PlanID);
+  switch (p.Status) {
+    case 'Planned':
+      return canManage ? `<button class="audit-exec-open-btn" data-plan-id="${id}">เปิด Execution</button>` : '';
+    case 'Issued':
+      return canRespond ? `<button class="audit-plan-respond-btn" data-plan-id="${id}">Respond</button>` : '';
+    case 'Pending Approval':
+      return canManage ? `<button class="audit-plan-approval-btn" data-plan-id="${id}">Approval</button>` : '';
+    default:
+      return canManage ? `<button disabled class="audit-exec-open-btn" title="ปิดแล้ว">—</button>` : '';
+  }
+}
+
+function _auditPlanHtml(vm) {
+  const canManage = ['qe_audit', 'admin'].includes(currentRole);
+  const canRespond = ['qe_audit', 'qe_auditee', 'admin'].includes(currentRole);
+  const rows = vm.plans.map(p => {
+    const tg = vm.templateGroups.find(t => t.category === p.AuditTitle && t.version === p.FormVersion);
+    const actionBtn = _auditPlanActionBtn(p, canManage, canRespond);
+    const cancellable = canManage && p.Status === 'Planned';
+    return `<tr${cancellable ? ` class="audit-plan-row--cancellable" data-plan-id="${escapeHtml(p.PlanID)}" title="คลิกเพื่อยกเลิก Plan นี้"` : ''}>
+      <td class="drill-td">${escapeHtml(p.PlanID)}</td>
+      <td class="drill-td">${escapeHtml(p.BU)}</td>
+      <td class="drill-td">${escapeHtml(p.AuditTitle)}</td>
+      <td class="drill-td" style="text-align:center;max-height:60px;overflow-y:auto;white-space:normal;word-break:break-word;">${escapeHtml(tg ? tg.templateName : '—')}</td>
+      <td class="drill-td" style="text-align:center;">${p.FormVersion != null ? 'v' + escapeHtml(p.FormVersion) : '—'}</td>
+      <td class="drill-td">${_auditFmtDate(p.ScheduledDate)}</td>
+      <td class="drill-td" style="text-align:center;">${(p.Status === 'Completed' || p.Status === 'Cancelled') ? '—' : (_gicaDaysBadge(p.ScheduledDate) || '—')}</td>
+      <td class="drill-td" style="text-align:center;">${_auditPlanAuditorsHtml(p)}</td>
+      <td class="drill-td" style="text-align:center;">${_auditBadge(p.Status, AUDIT_STATUS_COLOR[p.Status])}</td>
+      <td class="drill-td" style="text-align:center;">${actionBtn}</td>
+      <td class="drill-td" style="max-width:220px;">
+        <div style="max-height:60px;overflow-y:auto;white-space:normal;word-break:break-word;">${escapeHtml(p.Notes || '—')}</div>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td class="drill-td" colspan="11">No audit plans yet</td></tr>`;
+
+  return `
+    <div class="stat-grid">
+      <div class="card card--section">
+        <div class="card-head u-between">
+          <h3 style="margin:0;font-size:1rem;">Audit Plans</h3>
+          ${canManage ? `<button id="audit-plan-open-create-btn" class="gica-kpi-btn gica-kpi-btn--confirm">+ Create Audit Plan</button>` : ''}
+        </div>
+        <div style="overflow-x:auto;">
+          <table><thead><tr>
+            <th class="drill-th">ID</th>
+            <th class="drill-th">BU</th>
+            <th class="drill-th">Title</th>
+            <th class="drill-th" style="text-align:center;">Audit Template</th>
+            <th class="drill-th" style="text-align:center;">Version</th>
+            <th class="drill-th">Scheduled</th>
+            <th class="drill-th" style="text-align:center;">Days Remaining</th>
+            <th class="drill-th" style="text-align:center;">Auditor</th>
+            <th class="drill-th" style="text-align:center;">Status</th>
+            <th class="drill-th" style="text-align:center;">Execution</th>
+            <th class="drill-th">Notes</th>
+          </tr></thead><tbody>${rows}</tbody></table>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _mountAuditPlan(html) {
+  const el = $('audit-plan-panel');
+  if (!el) return;
+  el.innerHTML = html;
+
+  el.querySelector('#audit-plan-open-create-btn')?.addEventListener('click', _auditOpenPlanCreateModal);
+
+  el.querySelectorAll('.audit-exec-open-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _auditExecutionPlanId = btn.dataset.planId;
+      _auditSwitchSubtab('execution');
+      renderAuditExecution();
+    });
+  });
+
+  el.querySelectorAll('.audit-plan-respond-btn').forEach(btn => {
+    btn.addEventListener('click', () => _auditOpenPlanRespondModal(btn.dataset.planId));
+  });
+
+  el.querySelectorAll('.audit-plan-approval-btn').forEach(btn => {
+    btn.addEventListener('click', () => _auditOpenPlanApprovalModal(btn.dataset.planId));
+  });
+
+  el.querySelectorAll('.audit-plan-row--cancellable').forEach(tr => {
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return; // let the "เปิด Execution" button handle its own click
+      _auditOpenCancelPlanModal(tr.dataset.planId);
+    });
+  });
+}
+
+function renderAuditPlan() {
+  _mountAuditPlan(_auditPlanHtml(_computeAuditPlanVm(_auditData)));
+}
+
+// ── Audit Plan: Cancel confirm modal (row click, only while Status=Planned) ───
+let _auditCancelTargetPlanId = null;
+
+function _auditOpenCancelPlanModal(planId) {
+  _auditCancelTargetPlanId = planId;
+  const idEl = $('audit-plan-cancel-id');
+  if (idEl) idEl.textContent = planId;
+  $('audit-plan-cancel-error')?.classList.add('hidden');
+  $('audit-plan-cancel-modal')?.classList.remove('hidden');
+}
+
+function _wireAuditCancelPlanModal() {
+  const close = () => { $('audit-plan-cancel-modal')?.classList.add('hidden'); _auditCancelTargetPlanId = null; };
+  $('audit-plan-cancel-close')?.addEventListener('click', close);
+  $('audit-plan-cancel-back')?.addEventListener('click', close);
+  $('audit-plan-cancel-backdrop')?.addEventListener('click', close);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('audit-plan-cancel-modal')?.classList.contains('hidden')) close();
+  });
+
+  $('audit-plan-cancel-confirm')?.addEventListener('click', async () => {
+    const errEl = $('audit-plan-cancel-error');
+    if (errEl) errEl.classList.add('hidden');
+    if (!_auditCancelTargetPlanId) return;
+    try {
+      await api(`/api/audit/plans/${_auditCancelTargetPlanId}`, {
+        method: 'PATCH', body: JSON.stringify({ Status: 'Cancelled' }),
+      });
+      close();
+      await _auditRefetch();
+      showMessage('Audit Plan ถูกยกเลิกแล้ว');
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
+    }
+  });
+}
+
+// ── Template ──────────────────────────────────────────────────────────────────
+function _computeAuditTemplateVm(data) {
+  return { forms: _auditFormGroups(data.templates || []) };
+}
+
+function _auditTemplateHtml(vm) {
+  const canWrite = ['qe_audit', 'admin'].includes(currentRole);
+  const rows = vm.forms.map(f => `
+    <tr class="audit-form-row" data-code="${escapeHtml(f.code)}" style="cursor:pointer;">
+      <td class="drill-td">${escapeHtml(f.templateName)}</td>
+      <td class="drill-td">${escapeHtml(f.category)}</td>
+      <td class="drill-td">${escapeHtml(f.code)}</td>
+      <td class="drill-td" style="text-align:center;">v${f.latestVersion}</td>
+      <td class="drill-td" style="text-align:center;">${f.latestItems.length}</td>
+      <td class="drill-td" style="text-align:center;">${f.isActive ? _auditBadge('Active', 'ok') : _auditBadge('Inactive', 'muted')}</td>
+    </tr>`).join('') || `<tr><td class="drill-td" colspan="6">No forms yet</td></tr>`;
+
+  return `
+    <div class="stat-grid">
+      <div class="card card--section">
+        <div class="card-head u-between">
+          <h3 style="margin:0;font-size:1rem;">Checklist Forms</h3>
+          ${canWrite ? `<button id="audit-form-open-create-btn" class="gica-kpi-btn gica-kpi-btn--confirm">+ Create New Form</button>` : ''}
+        </div>
+        <div style="overflow-x:auto;">
+          <table><thead><tr>
+            <th class="drill-th">Form Name</th><th class="drill-th">Category</th>
+            <th class="drill-th">Code</th>
+            <th class="drill-th" style="text-align:center;">Version</th>
+            <th class="drill-th" style="text-align:center;">Items</th>
+            <th class="drill-th" style="text-align:center;">Status</th>
+          </tr></thead><tbody>${rows}</tbody></table>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _mountAuditTemplate(html, vm) {
+  const el = $('audit-template-panel');
+  if (!el) return;
+  el.innerHTML = html;
+
+  el.querySelector('#audit-form-open-create-btn')?.addEventListener('click', () => _auditOpenFormModal(null));
+
+  el.querySelectorAll('.audit-form-row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const form = vm.forms.find(f => f.code === tr.dataset.code);
+      if (form) _auditOpenFormDetailModal(form);
+    });
+  });
+}
+
+function renderAuditTemplate() {
+  const vm = _computeAuditTemplateVm(_auditData);
+  _mountAuditTemplate(_auditTemplateHtml(vm), vm);
+}
+
+// ── Template: Form builder modal (Create / Edit-as-new-version) ───────────────
+// Static modal in index.html, wired once (like the other Audit modals).
+
+function _auditAddFormItemRow(itemText) {
+  const container = $('audit-form-items-container');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'audit-form-item-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;';
+  row.innerHTML = `
+    <span class="audit-form-item-no" style="padding-top:8px;font-size:0.8rem;color:var(--text-muted);min-width:22px;"></span>
+    <textarea class="gica-form-input audit-form-item-text" rows="1" style="flex:1;">${escapeHtml(itemText || '')}</textarea>
+    <button type="button" class="audit-form-item-remove audit-btn audit-btn--cancel" style="padding:6px 10px;">✕</button>
+  `;
+  row.querySelector('.audit-form-item-remove').addEventListener('click', () => {
+    row.remove();
+    _auditRenumberFormItems();
+  });
+  container.appendChild(row);
+  _auditRenumberFormItems();
+}
+
+function _auditRenumberFormItems() {
+  $('audit-form-items-container')?.querySelectorAll('.audit-form-item-row').forEach((row, i) => {
+    const numEl = row.querySelector('.audit-form-item-no');
+    if (numEl) numEl.textContent = (i + 1) + '.';
+  });
+}
+
+function _auditOpenFormModal(existingForm) {
+  $('audit-form-modal-title').textContent = existingForm
+    ? `Edit Form — New Version (current v${existingForm.latestVersion})`
+    : 'Create New Form';
+  $('audit-form-name').value = existingForm ? existingForm.templateName : '';
+  $('audit-form-category').value = existingForm ? existingForm.category : '';
+
+  const codeInput = $('audit-form-code');
+  codeInput.value = existingForm ? existingForm.code : '';
+  codeInput.disabled = !!existingForm;
+
+  const container = $('audit-form-items-container');
+  if (container) container.innerHTML = '';
+  if (existingForm) {
+    existingForm.latestItems.forEach(it => _auditAddFormItemRow(it.ItemText));
+  } else {
+    _auditAddFormItemRow('');
+  }
+
+  $('audit-form-error')?.classList.add('hidden');
+  $('audit-template-form-modal')?.classList.remove('hidden');
+}
+
+function _wireAuditFormModal() {
+  const close = () => $('audit-template-form-modal')?.classList.add('hidden');
+  $('audit-form-modal-close')?.addEventListener('click', close);
+  $('audit-form-modal-cancel')?.addEventListener('click', close);
+  $('audit-form-modal-backdrop')?.addEventListener('click', close);
+  $('audit-form-add-item-btn')?.addEventListener('click', () => _auditAddFormItemRow(''));
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modal = $('audit-template-form-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    close();
+  });
+
+  $('audit-form-modal-save')?.addEventListener('click', async () => {
+    const errEl = $('audit-form-error');
+    if (errEl) errEl.classList.add('hidden');
+    const templateName = $('audit-form-name')?.value.trim();
+    const category = $('audit-form-category')?.value.trim();
+    const code = $('audit-form-code')?.value.trim();
+    const items = Array.from($('audit-form-items-container')?.querySelectorAll('.audit-form-item-text') || [])
+      .map(ta => ({ ItemText: ta.value.trim() }))
+      .filter(it => it.ItemText);
+
+    if (!templateName || !category || !code) {
+      if (errEl) { errEl.textContent = 'Form Name, Category และ Code จำเป็นต้องกรอก'; errEl.classList.remove('hidden'); }
+      return;
+    }
+    if (!items.length) {
+      if (errEl) { errEl.textContent = 'ต้องมีอย่างน้อย 1 checklist item'; errEl.classList.remove('hidden'); }
+      return;
+    }
+
+    const record = {
+      TemplateName: templateName,
+      Category: category,
+      Code: code,
+      items,
+    };
+    try {
+      await api('/api/audit/templates/forms', { method: 'POST', body: JSON.stringify(record) });
+      close();
+      $('audit-template-detail-modal')?.classList.add('hidden');
+      await _auditRefetch();
+      showMessage('Form saved');
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
+    }
+  });
+}
+
+// ── Template: Form detail modal (read-only items list + Edit-as-new-version) ──
+function _auditOpenFormDetailModal(form) {
+  $('audit-detail-title').textContent = form.templateName;
+  $('audit-detail-meta').innerHTML = `
+    <span class="badge muted">Code: ${escapeHtml(form.code)}</span>
+    <span class="badge muted">v${form.latestVersion}</span>
+    <span class="badge muted">${escapeHtml(form.category)}</span>
+    ${form.isActive ? '<span class="badge ok">Active</span>' : '<span class="badge muted">Inactive</span>'}
+  `;
+  $('audit-detail-items').innerHTML = form.latestItems.map((it, i) => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--border-light);">
+      <strong>${i + 1}.</strong> ${escapeHtml(it.ItemText)}
+    </div>`).join('') || '<p class="u-muted">No items</p>';
+
+  const editBtn = $('audit-detail-edit-btn');
+  if (editBtn) {
+    editBtn.classList.toggle('hidden', !['qe_audit', 'admin'].includes(currentRole));
+    editBtn.onclick = () => {
+      $('audit-template-detail-modal')?.classList.add('hidden');
+      _auditOpenFormModal(form);
+    };
+  }
+  $('audit-template-detail-modal')?.classList.remove('hidden');
+}
+
+function _wireAuditFormDetailModal() {
+  const close = () => $('audit-template-detail-modal')?.classList.add('hidden');
+  $('audit-detail-close')?.addEventListener('click', close);
+  $('audit-detail-close-btn')?.addEventListener('click', close);
+  $('audit-detail-backdrop')?.addEventListener('click', close);
+}
+
+function _auditFormDetailEscHandler(e) {
+  if (e.key !== 'Escape') return;
+  const modal = $('audit-template-detail-modal');
+  if (modal && !modal.classList.contains('hidden')) modal.classList.add('hidden');
+}
+
+// ── Execution ─────────────────────────────────────────────────────────────────
+function _computeAuditExecutionVm(data, planId) {
+  const plans = data.plans || [];
+  const plan = plans.find(p => p.PlanID === planId) || null;
+  if (!plan) return { plan: null, plans, items: [] };
+
+  const templateItems = (data.templates || [])
+    .filter(t => t.Category === plan.AuditTitle && t.Version === plan.FormVersion)
+    .sort((a, b) => (a.ItemNo ?? 0) - (b.ItemNo ?? 0));
+  const existingByItem = {};
+  (data.executions || []).filter(e => e.PlanID === planId).forEach(e => {
+    existingByItem[e.ItemNo] = e;
+  });
+
+  const items = templateItems.map(t => ({
+    itemNo: t.ItemNo,
+    itemText: t.ItemText,
+    existing: existingByItem[t.ItemNo] || null,
+  }));
+
+  return { plan, plans, items };
+}
+
+// Result picker: 4 buttons, one per AUDIT_EXECUTION_RATINGS value. Unselected
+// buttons stay neutral/white; the active one is colored per AUDIT_RATING_COLOR
+// — same badge kind used for the read-only view.
+function _auditRatingBtnsHtml(currentScore) {
+  return AUDIT_EXECUTION_RATINGS.map(r => {
+    const kind = AUDIT_RATING_COLOR[r] || 'muted';
+    const active = currentScore === r;
+    return `<button type="button" class="audit-rating-btn${active ? ` audit-rating-btn--active audit-rating-btn--${kind}` : ''}" data-rating="${escapeHtml(r)}">${escapeHtml(r)}</button>`;
+  }).join('');
+}
+
+function _auditExecutionHtml(vm) {
+  const canWrite = ['qe_audit', 'admin'].includes(currentRole);
+
+  // Plan is fixed once Execution is opened from the Audit Plan page ("เปิด
+  // Execution") — it is NOT user-selectable here, just displayed.
+  if (!vm.plan) {
+    return `
+      <div class="card card--section">
+        <div class="card-head u-between">
+          <h3 style="margin:0;font-size:1rem;">Execution</h3>
+          <button id="audit-exec-close-btn" class="gica-modal__close" aria-label="ปิด" title="ปิด (Esc)">✕</button>
+        </div>
+        <p class="u-muted">เปิด Execution จากหน้า Audit Plan เพื่อบันทึกผลการตรวจ checklist</p>
+      </div>`;
+  }
+
+  const rows = vm.items.map((it, i) => `
+    <tr data-item-no="${it.itemNo}">
+      <td class="drill-td" style="text-align:center;">${i + 1}</td>
+      <td class="drill-td" style="white-space:normal;word-break:break-word;">${escapeHtml(it.itemText)}</td>
+      <td class="drill-td">
+        ${canWrite
+          ? `<div class="audit-rating-btngroup audit-exec-score-group" data-score="${it.existing ? escapeHtml(it.existing.Score) : ''}">${_auditRatingBtnsHtml(it.existing ? it.existing.Score : '')}</div>`
+          : (it.existing ? _auditBadge(it.existing.Score, AUDIT_RATING_COLOR[it.existing.Score]) : '—')}
+      </td>
+      <td class="drill-td">
+        ${canWrite
+          ? `<textarea class="gica-form-input audit-exec-comment-input" rows="1" style="width:100%;resize:vertical;min-height:30px;">${it.existing ? escapeHtml(it.existing.Comment) : ''}</textarea>`
+          : `<div style="max-height:36px;overflow-y:auto;white-space:normal;word-break:break-word;">${escapeHtml(it.existing ? it.existing.Comment : '—')}</div>`}
+      </td>
+    </tr>`).join('') || `<tr><td class="drill-td" colspan="4">This Form has no checklist items</td></tr>`;
+
+  return `
+    <div class="card card--section">
+      <div class="card-head u-between">
+        <h3 style="margin:0;font-size:1rem;">Execution — Plan #${vm.plan.PlanID} (${escapeHtml(vm.plan.AuditTitle)})</h3>
+        <button id="audit-exec-close-btn" class="gica-modal__close" aria-label="ปิด" title="ปิด (Esc)">✕</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="table-layout:fixed;min-width:0;"><colgroup>
+          <col style="width:40px;"><col style="width:280px;"><col style="width:360px;"><col style="width:160px;">
+        </colgroup><thead><tr>
+          <th class="drill-th" style="text-align:center;">#</th>
+          <th class="drill-th" style="text-align:center;">Item</th>
+          <th class="drill-th" style="text-align:center;">Result</th>
+          <th class="drill-th" style="text-align:center;">Comment</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      </div>
+      ${canWrite && vm.items.length ? `
+      <p id="audit-exec-error" class="login-error hidden" style="margin-top:8px;"></p>
+      <button id="audit-exec-save-btn" class="gica-kpi-btn gica-kpi-btn--confirm" style="margin-top:8px;">Save Execution Results</button>
+      ` : ''}
+    </div>`;
+}
+
+// Esc closes Execution (back to Audit Plan) only while that sub-tab is active
+// — wired once in initAuditTab, not re-wired on every render.
+function _auditExecutionEscHandler(e) {
+  if (e.key === 'Escape' && _auditActiveSubtab === 'execution') _auditCloseExecution();
+}
+
+function _auditCloseExecution() {
+  _auditSwitchSubtab('plan');
+}
+
+function _mountAuditExecution(html, vm) {
+  const el = $('audit-execution-panel');
+  if (!el) return;
+  el.innerHTML = html;
+
+  el.querySelector('#audit-exec-close-btn')?.addEventListener('click', _auditCloseExecution);
+
+  el.querySelectorAll('.audit-exec-score-group').forEach(group => {
+    group.querySelectorAll('.audit-rating-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rating = btn.dataset.rating;
+        const kind = AUDIT_RATING_COLOR[rating] || 'muted';
+        group.querySelectorAll('.audit-rating-btn').forEach(b => {
+          b.className = 'audit-rating-btn';
+        });
+        btn.classList.add('audit-rating-btn--active', `audit-rating-btn--${kind}`);
+        group.dataset.score = rating;
+      });
+    });
+  });
+
+  const saveBtn = el.querySelector('#audit-exec-save-btn');
+  saveBtn?.addEventListener('click', async () => {
+    if (saveBtn.disabled) return; // guard against double-click while a save is already in flight
+    const errEl = $('audit-exec-error');
+    if (errEl) errEl.classList.add('hidden');
+    const rows = Array.from(el.querySelectorAll('tr[data-item-no]'));
+    const payload = rows.map(tr => ({
+      PlanID: vm.plan.PlanID,
+      ItemNo: +tr.dataset.itemNo,
+      Score: tr.querySelector('.audit-exec-score-group')?.dataset.score || '',
+      Comment: tr.querySelector('.audit-exec-comment-input')?.value || '',
+    })).filter(r => r.Score !== '' || r.Comment !== '');
+    if (!payload.length) return;
+    const originalLabel = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    try {
+      await api('/api/audit/executions', { method: 'POST', body: JSON.stringify(payload) });
+      await _auditRefetch();
+      showMessage('Execution results saved');
+      // _auditRefetch() re-renders this panel from scratch (new button, fresh
+      // listener) — nothing left to re-enable here on the success path.
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalLabel;
+    }
+  });
+}
+
+function renderAuditExecution() {
+  const vm = _computeAuditExecutionVm(_auditData, _auditExecutionPlanId);
+  _mountAuditExecution(_auditExecutionHtml(vm), vm);
+}
+
+// ── Finding / CAR ─────────────────────────────────────────────────────────────
+function _computeAuditFindingVm(data) {
+  const findings = (data.findings || []).map(f => ({
+    ...f,
+    agingDays: f.Status !== 'Approved' ? _auditDaysSince(f.OpenedAt) : null,
+  })).sort((a, b) => (b.FindingID ?? 0) - (a.FindingID ?? 0));
+  return { findings, plans: data.plans || [] };
+}
+
+function _auditFindingHtml(vm) {
+  const canWrite = ['qe_audit', 'admin'].includes(currentRole);
+  const rows = vm.findings.map(f => `
+    <tr>
+      <td class="drill-td">${escapeHtml(f.PlanID)}</td>
+      <td class="drill-td">${escapeHtml(f.BU)}</td>
+      <td class="drill-td">${_auditBadge(f.Severity, AUDIT_SEVERITY_COLOR[f.Severity])}</td>
+      <td class="drill-td" style="max-width:260px;">
+        <div style="max-height:60px;overflow-y:auto;white-space:normal;word-break:break-word;">${escapeHtml(f.Description)}</div>
+      </td>
+      <td class="drill-td">${_auditFmtDate(f.OpenedAt)}</td>
+      <td class="drill-td">${escapeHtml(f.ResponsiblePerson)}</td>
+      <td class="drill-td">${_auditFmtDate(f.DueDate)}</td>
+      <td class="drill-td">${_auditBadge(f.Status, AUDIT_STATUS_COLOR[f.Status])}</td>
+      <td class="drill-td">${f.agingDays !== null ? f.agingDays + ' days' : '—'}</td>
+      <td class="drill-td">${escapeHtml(f.ApproverComment || '—')}</td>
+      <td class="drill-td">
+        ${canWrite && f.Status === 'Responded' ? `<button class="audit-finding-approve-btn" data-finding-id="${f.FindingID}">Approve</button>` : ''}
+      </td>
+    </tr>`).join('') || `<tr><td class="drill-td" colspan="11">No findings yet</td></tr>`;
+
+  return `
+    <div class="card card--section">
+      <div class="card-head"><h3 style="margin:0;font-size:1rem;">Findings / CAR</h3></div>
+      <div style="overflow-x:auto;">
+        <table><thead><tr>
+          <th class="drill-th">Plan ID</th><th class="drill-th">BU</th><th class="drill-th">Severity</th>
+          <th class="drill-th">Description</th><th class="drill-th">Opened</th>
+          <th class="drill-th">Responsible</th><th class="drill-th">Due</th>
+          <th class="drill-th">Status</th><th class="drill-th">Aging</th>
+          <th class="drill-th">Approver Comment</th><th class="drill-th"></th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
+}
+
+function _mountAuditFinding(html) {
+  const el = $('audit-finding-panel');
+  if (!el) return;
+  el.innerHTML = html;
+
+  el.querySelectorAll('.audit-finding-approve-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _auditApproveTargetId = +btn.dataset.findingId;
+      const commentEl = $('audit-approve-comment');
+      if (commentEl) commentEl.value = '';
+      $('audit-approve-error')?.classList.add('hidden');
+      $('audit-approve-modal')?.classList.remove('hidden');
+    });
+  });
+}
+
+function renderAuditFinding() {
+  _mountAuditFinding(_auditFindingHtml(_computeAuditFindingVm(_auditData)));
+}
+
+// ── Per-finding Approve modal (from Finding sub-tab) ─────────────────────────
+function _wireAuditApproveModal() {
+  const close = () => $('audit-approve-modal')?.classList.add('hidden');
+  $('audit-approve-close')?.addEventListener('click', close);
+  $('audit-approve-cancel')?.addEventListener('click', close);
+  $('audit-approve-backdrop')?.addEventListener('click', close);
+  $('audit-approve-confirm')?.addEventListener('click', async () => {
+    const errEl = $('audit-approve-error');
+    if (errEl) errEl.classList.add('hidden');
+    try {
+      await api(`/api/audit/findings/${_auditApproveTargetId}/approve`, {
+        method: 'PATCH',
+        body: JSON.stringify({ ApproverComment: $('audit-approve-comment')?.value || '' }),
+      });
+      close();
+      await _auditRefetch();
+      showMessage('Finding approved');
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
+    }
+  });
+}
+
+// ── Plan-level Respond modal (Auditee fills all Open findings at once) ────────
+function _auditOpenPlanRespondModal(planId) {
+  const findings = (_auditData.findings || []).filter(
+    f => f.PlanID === planId && f.Status === 'Open');
+  if (!findings.length) {
+    showMessage('ไม่มี Finding ที่รอตอบสำหรับ Plan นี้');
+    return;
+  }
+
+  const bodyEl = $('audit-plan-respond-body');
+  const planIdEl = $('audit-plan-respond-plan-id');
+  if (planIdEl) planIdEl.textContent = planId;
+  if (bodyEl) {
+    bodyEl.innerHTML = findings.map(f => `
+      <div class="audit-finding-card" data-finding-id="${f.FindingID}">
+        <div class="audit-finding-card__head">
+          ${_auditBadge(f.Severity, AUDIT_SEVERITY_COLOR[f.Severity])}
+          <span class="audit-finding-card__title">${escapeHtml(f.Description)}</span>
+        </div>
+        <div class="audit-finding-card__fields audit-finding-card__fields--wide">
+          <div class="gica-form-row">
+            <label class="gica-form-label">Root Cause <span style="color:#dc2626">*</span></label>
+            <textarea class="gica-form-input audit-rc-input" rows="2" placeholder="ระบุสาเหตุที่แท้จริง"></textarea>
+          </div>
+          <div class="gica-form-row">
+            <label class="gica-form-label">Corrective Action <span style="color:#dc2626">*</span></label>
+            <textarea class="gica-form-input audit-ca-input" rows="2" placeholder="การแก้ไขปัญหา"></textarea>
+          </div>
+          <div class="gica-form-row">
+            <label class="gica-form-label">Preventive Action</label>
+            <textarea class="gica-form-input audit-pa-input" rows="2" placeholder="การป้องกันไม่ให้เกิดซ้ำ"></textarea>
+          </div>
+        </div>
+        <div class="audit-finding-card__fields" style="margin-top:6px;">
+          <div class="gica-form-row">
+            <label class="gica-form-label">Responsible Person</label>
+            <input type="text" class="gica-form-input audit-resp-input" placeholder="ชื่อผู้รับผิดชอบ">
+          </div>
+          <div class="gica-form-row">
+            <label class="gica-form-label">Due Date</label>
+            <input type="date" class="gica-form-input audit-due-input">
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  $('audit-plan-respond-error')?.classList.add('hidden');
+  $('audit-plan-respond-modal')?.classList.remove('hidden');
+}
+
+function _wireAuditPlanRespondModal() {
+  const close = () => $('audit-plan-respond-modal')?.classList.add('hidden');
+  $('audit-plan-respond-close')?.addEventListener('click', close);
+  $('audit-plan-respond-cancel')?.addEventListener('click', close);
+  $('audit-plan-respond-backdrop')?.addEventListener('click', close);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('audit-plan-respond-modal')?.classList.contains('hidden')) close();
+  });
+
+  $('audit-plan-respond-submit')?.addEventListener('click', async () => {
+    const errEl = $('audit-plan-respond-error');
+    if (errEl) errEl.classList.add('hidden');
+
+    const cards = $('audit-plan-respond-body')?.querySelectorAll('.audit-finding-card') || [];
+    const payload = [];
+    let valid = true;
+    cards.forEach(card => {
+      const rc = card.querySelector('.audit-rc-input')?.value.trim();
+      const ca = card.querySelector('.audit-ca-input')?.value.trim();
+      if (!rc || !ca) { valid = false; return; }
+      payload.push({
+        findingId:         +card.dataset.findingId,
+        rootCause:         rc,
+        correctiveAction:  ca,
+        preventiveAction:  card.querySelector('.audit-pa-input')?.value.trim() || '',
+        responsiblePerson: card.querySelector('.audit-resp-input')?.value.trim() || '',
+        dueDate:           card.querySelector('.audit-due-input')?.value || '',
+      });
+    });
+
+    if (!valid) {
+      if (errEl) { errEl.textContent = 'กรุณากรอก Root Cause และ Corrective Action ให้ครบทุกข้อ'; errEl.classList.remove('hidden'); }
+      return;
+    }
+
+    // Derive planId from the first finding's PlanID stored in _auditData
+    const planId = (_auditData.findings || []).find(
+      f => f.FindingID === payload[0]?.findingId)?.PlanID;
+    if (!planId) return;
+
+    try {
+      $('audit-plan-respond-submit').disabled = true;
+      await api(`/api/audit/plans/${planId}/respond`, {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      close();
+      await _auditRefetch();
+      showMessage('Response submitted');
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
+    } finally {
+      const submitBtn = $('audit-plan-respond-submit');
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+}
+
+// ── Plan-level Approval modal (Auditor approves each finding) ─────────────────
+function _auditOpenPlanApprovalModal(planId) {
+  const findings = (_auditData.findings || []).filter(
+    f => f.PlanID === planId && (f.Status === 'Responded' || f.Status === 'Approved'));
+  if (!findings.length) {
+    showMessage('ไม่มี Finding ที่รอ Approve สำหรับ Plan นี้');
+    return;
+  }
+
+  const bodyEl = $('audit-plan-approval-body');
+  const planIdEl = $('audit-plan-approval-plan-id');
+  if (planIdEl) planIdEl.textContent = planId;
+  if (bodyEl) {
+    bodyEl.innerHTML = findings.map(f => {
+      const approved = f.Status === 'Approved';
+      return `
+      <div class="audit-finding-card" id="audit-apv-card-${f.FindingID}">
+        <div class="audit-finding-card__head">
+          ${_auditBadge(f.Severity, AUDIT_SEVERITY_COLOR[f.Severity])}
+          <span class="audit-finding-card__title">${escapeHtml(f.Description)}</span>
+          <span id="audit-apv-status-${f.FindingID}">${_auditBadge(f.Status, AUDIT_STATUS_COLOR[f.Status])}</span>
+        </div>
+        <div class="audit-finding-card__readonly">
+          <p><strong>Root Cause:</strong> ${escapeHtml(f.RootCause || '—')}</p>
+          <p><strong>Corrective Action:</strong> ${escapeHtml(f.CorrectiveAction || '—')}</p>
+          <p><strong>Preventive Action:</strong> ${escapeHtml(f.PreventiveAction || '—')}</p>
+          <p><strong>Responsible:</strong> ${escapeHtml(f.ResponsiblePerson || '—')} &nbsp;
+             <strong>Due:</strong> ${_auditFmtDate(f.DueDate)}</p>
+          ${approved && f.ApproverComment ? `<p><strong>Comment:</strong> ${escapeHtml(f.ApproverComment)}</p>` : ''}
+        </div>
+        ${approved ? '' : `
+        <div class="audit-finding-card__approve-row" id="audit-apv-form-${f.FindingID}">
+          <textarea class="gica-form-input" id="audit-apv-comment-${f.FindingID}" rows="2"
+            placeholder="Reviewer Comment (optional)"></textarea>
+          <button class="audit-approve-single-btn" data-finding-id="${f.FindingID}">✓ Approve</button>
+        </div>`}
+      </div>`;
+    }).join('');
+
+    // Wire per-finding Approve buttons inside modal
+    bodyEl.querySelectorAll('.audit-approve-single-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fid = +btn.dataset.findingId;
+        const comment = $(`audit-apv-comment-${fid}`)?.value || '';
+        btn.disabled = true;
+        try {
+          const res = await api(`/api/audit/findings/${fid}/approve`, {
+            method: 'PATCH', body: JSON.stringify({ ApproverComment: comment }),
+          });
+          // Update this card in-place
+          const statusEl = $(`audit-apv-status-${fid}`);
+          if (statusEl) statusEl.innerHTML = _auditBadge('Approved', AUDIT_STATUS_COLOR['Approved']);
+          const formEl = $(`audit-apv-form-${fid}`);
+          if (formEl) formEl.remove();
+          // If plan completed, show completion note
+          if (res.planStatus === 'Completed') {
+            const doneNote = document.createElement('p');
+            doneNote.style.cssText = 'text-align:center;color:var(--ok);font-weight:600;margin-top:12px;';
+            doneNote.textContent = '✓ ทุก Finding ได้รับการ Approve แล้ว — Plan เปลี่ยนเป็น Completed';
+            bodyEl.appendChild(doneNote);
+          }
+          await _auditRefetch();
+        } catch (err) {
+          btn.disabled = false;
+          showMessage('เกิดข้อผิดพลาด: ' + err.message, 'error');
+        }
+      });
+    });
+  }
+
+  $('audit-plan-approval-modal')?.classList.remove('hidden');
+}
+
+function _wireAuditPlanApprovalModal() {
+  const close = () => $('audit-plan-approval-modal')?.classList.add('hidden');
+  $('audit-plan-approval-close')?.addEventListener('click', close);
+  $('audit-plan-approval-backdrop')?.addEventListener('click', close);
+  $('audit-plan-approval-done')?.addEventListener('click', close);
+}
+
+// "+ Create Audit Plan" — static modal in index.html, wired once (like Respond/
+// Close above), populated fresh from _auditData each time it's opened so the
+// Template dropdown always reflects the latest checklist templates.
+function _auditOpenPlanCreateModal() {
+  const buSelect = $('audit-plan-bu');
+  if (buSelect) buSelect.innerHTML = AUDIT_BUS.map(bu => `<option value="${bu}">${bu}</option>`).join('');
+
+  // "Audit Title" is no longer free text — it's the Category of an active
+  // Form (Template), which also determines which Form Execution will use.
+  const activeForms = _auditFormGroups(_auditData.templates || []).filter(f => f.isActive);
+  const titleSelect = $('audit-plan-title');
+  if (titleSelect) {
+    titleSelect.innerHTML = '<option value="">— Select —</option>' +
+      activeForms.map(f => `<option value="${escapeHtml(f.category)}" data-form-version="${f.latestVersion}">${escapeHtml(f.category)}</option>`).join('');
+  }
+
+  ['audit-plan-dept', 'audit-plan-date', 'audit-plan-notes',
+   'audit-plan-auditor1', 'audit-plan-auditor2', 'audit-plan-auditor3'].forEach(id => {
+    const el = $(id);
+    if (el) el.value = '';
+  });
+  $('audit-plan-auditor2-row')?.classList.add('hidden');
+  $('audit-plan-auditor3-row')?.classList.add('hidden');
+  const addBtn = $('audit-plan-add-auditor-btn');
+  if (addBtn) { addBtn.disabled = false; addBtn.classList.remove('hidden'); }
+  $('audit-plan-error')?.classList.add('hidden');
+
+  $('audit-plan-create-modal')?.classList.remove('hidden');
+}
+
+function _wireAuditPlanCreateModal() {
+  const close = () => $('audit-plan-create-modal')?.classList.add('hidden');
+  $('audit-plan-create-close')?.addEventListener('click', close);
+  $('audit-plan-create-cancel')?.addEventListener('click', close);
+  $('audit-plan-create-backdrop')?.addEventListener('click', close);
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modal = $('audit-plan-create-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    close();
+  });
+
+  // "+ Add Auditor" reveals Auditor 2, then Auditor 3, then hides itself — max 3.
+  $('audit-plan-add-auditor-btn')?.addEventListener('click', () => {
+    if ($('audit-plan-auditor2-row')?.classList.contains('hidden')) {
+      $('audit-plan-auditor2-row')?.classList.remove('hidden');
+    } else if ($('audit-plan-auditor3-row')?.classList.contains('hidden')) {
+      $('audit-plan-auditor3-row')?.classList.remove('hidden');
+      $('audit-plan-add-auditor-btn')?.classList.add('hidden');
+    }
+  });
+
+  $('audit-plan-create-confirm')?.addEventListener('click', async () => {
+    const errEl = $('audit-plan-error');
+    if (errEl) errEl.classList.add('hidden');
+    const titleSelect = $('audit-plan-title');
+    const title = titleSelect?.value.trim();
+    if (!title) {
+      if (errEl) { errEl.textContent = 'Audit Title is required'; errEl.classList.remove('hidden'); }
+      return;
+    }
+    const record = {
+      BU: $('audit-plan-bu')?.value,
+      Department: $('audit-plan-dept')?.value || '',
+      FormVersion: +(titleSelect?.selectedOptions?.[0]?.dataset.formVersion || 0) || '',
+      AuditTitle: title,
+      ScheduledDate: $('audit-plan-date')?.value || '',
+      Auditor1: $('audit-plan-auditor1')?.value || '',
+      Auditor2: $('audit-plan-auditor2')?.value || '',
+      Auditor3: $('audit-plan-auditor3')?.value || '',
+      Notes: $('audit-plan-notes')?.value || '',
+    };
+    try {
+      await api('/api/audit/plans', { method: 'POST', body: JSON.stringify(record) });
+      close();
+      await _auditRefetch();
+      showMessage('Audit Plan created');
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
+    }
+  });
+}
+

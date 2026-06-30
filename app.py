@@ -13,6 +13,10 @@ import msal
 from config import (
     ADMIN_DOOR_PASSWORD,
     ADMIN_EMAIL,
+    AUDIT_EXCEL_SHARE_URL,
+    AUDIT_FIELD_MAPS,
+    AUDIT_RATING_TO_SEVERITY,
+    AUDIT_TABLES,
     AUTHORITY,
     CLIENT_ID,
     CLIENT_SECRET,
@@ -49,16 +53,22 @@ from kv_store import kv_delete, kv_get, kv_set
 from graph_excel import (
     GraphExcelError,
     TokenExpiredError,
+    append_row,
     create_employee,
     create_gica_employee,
+    create_row,
     encode_sharing_url,
     find_employee,
     find_gica_employee,
+    find_row_by_key,
     get_gica_drive_item,
     get_table_rows,
+    get_table_rows_by_key,
     graph_request,
     update_employee,
     update_gica_employee,
+    update_row_by_index,
+    update_row_by_key,
 )
 
 # ---------------------------------------------------------------------------
@@ -427,6 +437,30 @@ def qe_edit_login():
     if not session.get("door_unlocked_qe"):
         return jsonify({"error": "ต้องยืนยันรหัสผ่านก่อน"}), 403
     return _open_shared_token_session("qe_user", "QE Edit Mode")
+
+
+@app.route("/qe-audit-login", methods=["POST"])
+def qe_audit_login():
+    """QE Sign In → Audit Mode → Auditor. Shares the same door password gate as
+    Edit Mode ('qe' door) — writes go through the shared MANAGER_REFRESH_TOKEN,
+    same as qe_user. Role qe_audit is scoped to the Audit module only (see
+    require_writable() calls on the /api/audit/* routes and the frontend
+    tab-visibility branch in app.js). Auditor sees every Audit sub-tab and can
+    create Plans, manage Templates, score Executions, and Approve findings."""
+    if not session.get("door_unlocked_qe"):
+        return jsonify({"error": "ต้องยืนยันรหัสผ่านก่อน"}), 403
+    return _open_shared_token_session("qe_audit", "QE Audit Mode")
+
+
+@app.route("/qe-auditee-login", methods=["POST"])
+def qe_auditee_login():
+    """QE Sign In → Audit Mode → Auditee. No door password — Auditee is the
+    person being audited, not QE staff, so the gate is intentionally skipped.
+    Role qe_auditee is scoped to Dashboard/Audit Plan/Finding-CAR only (see the
+    frontend tab-visibility branch in app.js) and can only write through
+    POST /api/audit/plans/<id>/respond — every other Audit write route stays
+    restricted to qe_audit/admin."""
+    return _open_shared_token_session("qe_auditee", "QE Auditee Mode")
 
 
 @app.route("/api/door-unlock", methods=["POST"])
@@ -1520,6 +1554,816 @@ def api_gica_add_result(bu, empid):
         return jsonify({'error': str(exc)}), 500
 
 
+# ── Audit Module ──────────────────────────────────────────────────────────────
+# Audit_Monitoring.xlsx — one workbook, 4 named tables (AuditTemplate, AuditPlan,
+# AuditExecution, AuditFinding), NOT split per-BU (BU is a column value).
+# Reads ride the shared MANAGER_REFRESH_TOKEN (3-layer cache, same as GICA/
+# Jumper/Trainer). Writes ride the logged-in session's own token via call_graph
+# (qe_audit/admin sessions are shared-token sessions too, so this is the same
+# MANAGER_REFRESH_TOKEN account — the workbook must be shared with Edit
+# permission from that account).
+_AUDIT_CACHE: dict = {}
+
+
+# Excel headers use spaces/punctuation/typos as actually created in the workbook
+# (e.g. "Item No.", "OpeneDate") — these helpers translate between those
+# literal headers and clean, stable API field names (e.g. ItemNo, OpenedAt)
+# so nothing else in app.py or the frontend has to deal with the real header
+# spelling. See AUDIT_FIELD_MAPS in config.py.
+
+def _audit_map_out(kind, excel_row):
+    """Excel-header-keyed row -> clean API-field-keyed dict."""
+    if not excel_row:
+        return excel_row
+    field_map = AUDIT_FIELD_MAPS[kind]
+    out = {api_field: excel_row.get(excel_col, '') for api_field, excel_col in field_map.items()}
+    if '_row_index' in excel_row:
+        out['_row_index'] = excel_row['_row_index']
+    return out
+
+
+def _audit_map_in(kind, api_record):
+    """Clean API-field-keyed dict -> Excel-header-keyed dict (only known fields)."""
+    field_map = AUDIT_FIELD_MAPS[kind]
+    return {excel_col: api_record[api_field]
+            for api_field, excel_col in field_map.items() if api_field in api_record}
+
+
+def _fetch_audit_excel_data(token: str) -> dict:
+    """Resolve Audit_Monitoring.xlsx, read all 4 Audit tables in parallel.
+    Returns {'templates': [...], 'plans': [...], 'executions': [...], 'findings': [...]},
+    each row already translated to clean API field names via _audit_map_out."""
+    share_id = encode_sharing_url(AUDIT_EXCEL_SHARE_URL)
+    item = graph_request(
+        token, 'GET', f'/shares/{share_id}/driveItem',
+        headers={'Prefer': 'redeemSharingLinkIfNecessary'},
+    )
+    drive_id = item['parentReference']['driveId']
+    item_id  = item['id']
+
+    def _read(key, table_name, cols):
+        for attempt in range(3):
+            try:
+                rows = _read_excel_table(token, drive_id, item_id, table_name, cols)
+                rows = [_audit_map_out(key, r) for r in rows]
+                print(f'[AUDIT] {table_name}: {len(rows)} rows', flush=True)
+                return key, rows
+            except Exception as exc:
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))  # 1.5s, 3s backoff
+                else:
+                    print(f'[AUDIT] {table_name} skipped after 3 attempts: {exc}', flush=True)
+        return key, []
+
+    result = {}
+    with _ThreadPoolExecutor(max_workers=3) as ex:
+        futures = [
+            ex.submit(_read, key, table_name, cols)
+            for key, (table_name, cols, _pk) in AUDIT_TABLES.items()
+        ]
+        for fut in futures:
+            key, rows = fut.result()
+            result[key] = rows
+
+    return {
+        'templates':  result.get('template', []),
+        'plans':      result.get('plan', []),
+        'executions': result.get('execution', []),
+        'findings':   result.get('finding', []),
+    }
+
+
+def _audit_to_iso(v):
+    """Like _gica_to_iso, but also handles the Graph API returning a date's
+    underlying serial-day number as a NUMERIC STRING (e.g. '46213') instead of
+    a native float — _gica_to_iso's string branch assumes any string is
+    already a formatted date and passes it through unchanged, which breaks on
+    this shape. Left as a separate function (not modifying _gica_to_iso) so
+    GICA's existing behavior is untouched."""
+    if v in (None, '', 'null'):
+        return None
+    if isinstance(v, str):
+        s = v.strip()
+        if len(s) >= 10 and s[4:5] == '-':
+            return s[:10]
+        try:
+            return _gica_to_iso(float(s))
+        except (ValueError, TypeError):
+            return s or None
+    return _gica_to_iso(v)
+
+
+def _audit_num(v):
+    try:
+        return float(v) if v not in (None, '', 'null') else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _audit_bool(v):
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().upper() in ('TRUE', '1', 'YES')
+
+
+def _build_audit_payload(raw: dict) -> dict:
+    """Light shaping only — type coercion (numbers/bools), not heavy aggregation.
+    Dashboard/CAR-Report rollups (counts by status, CAR aging, etc.) are computed
+    on the frontend from this shared payload, mirroring how GICA's sub-tabs all
+    reshape the one cached payload client-side rather than caching N variants."""
+    # No row-level PK on AuditTemplate — "Code" non-blank is the sentinel for
+    # "this is a real item row" (see AUDIT_TABLES comment in config.py).
+    templates = [{
+        **t,
+        'ItemNo':  _audit_num(t.get('ItemNo')),
+        'Version': _audit_num(t.get('Version')),
+        'Active':  _audit_bool(t.get('Active')),
+    } for t in raw.get('templates', []) if str(t.get('Code', '')).strip()]
+
+    # PlanID is a formatted string ('YYYY-MM-NNNN', monthly running number),
+    # NOT a numeric auto-increment like the other 3 PKs — never coerce it with
+    # _audit_num, just pass it through as-is (already a clean string).
+    # ScheduledDate/DueDate/OpenedAt/ClosedAt are Date-formatted Excel columns —
+    # Graph API returns these as serial-day numbers, not strings, regardless of
+    # how they were written (same issue GICA solved with _gica_to_iso).
+    plans = [{
+        **p,
+        'FormVersion':   _audit_num(p.get('FormVersion')),
+        'ScheduledDate': _audit_to_iso(p.get('ScheduledDate')),
+    } for p in raw.get('plans', []) if str(p.get('PlanID', '')).strip()]
+
+    executions = [{
+        **e,
+        'ExecutionID': _audit_num(e.get('ExecutionID')),
+        'ItemNo':      _audit_num(e.get('ItemNo')),
+        # Score is the fixed rating enum string (Conformity/Major Non-Conformity/
+        # Minor Non-Conformity/OFI), not a number — _audit_num() would silently
+        # null it out (float("Conformity") raises, caught, returns None). Keep
+        # it as the raw string from Excel.
+        'Score':       str(e.get('Score', '')).strip(),
+        # ActualResult mirrors Score until a Finding tied to this row gets
+        # Approved (see _do_audit_finding_approve). Falls back to Score for
+        # rows written before the ActualResult column existed.
+        'ActualResult': str(e.get('ActualResult', '')).strip() or str(e.get('Score', '')).strip(),
+    } for e in raw.get('executions', []) if str(e.get('ExecutionID', '')).strip()]
+
+    findings = [{
+        **f,
+        'FindingID':   _audit_num(f.get('FindingID')),
+        'ExecutionID': _audit_num(f.get('ExecutionID')) if str(f.get('ExecutionID', '')).strip() else None,
+        'DueDate':     _audit_to_iso(f.get('DueDate')),
+        'OpenedAt':    _audit_to_iso(f.get('OpenedAt')),
+        'ApprovedAt':  _audit_to_iso(f.get('ApprovedAt')),
+    } for f in raw.get('findings', []) if str(f.get('FindingID', '')).strip()]
+
+    return {
+        'templates':  templates,
+        'plans':      plans,
+        'executions': executions,
+        'findings':   findings,
+    }
+
+
+@app.route('/api/audit-excel')
+def api_audit_excel():
+    """Return Audit data from Audit_Monitoring.xlsx on OneDrive.
+    L1 (in-process) -> L2 (shared KV) -> live Graph API fetch fallback.
+    Write endpoints below invalidate both L1 and L2 so edits show up immediately
+    instead of waiting out the TTL."""
+    _, error = require_token()
+    if error:
+        return error
+    global _AUDIT_CACHE
+    now = time.time()
+    if _AUDIT_CACHE.get('data') and now < _AUDIT_CACHE.get('exp', 0):
+        return jsonify(_AUDIT_CACHE['data'])
+
+    kv_payload = kv_get('audit_excel')
+    if kv_payload is not None:
+        _AUDIT_CACHE = {'data': kv_payload, 'exp': now + _JUMPER_CACHE_TTL}
+        return jsonify(kv_payload)
+
+    try:
+        token   = _get_manager_access_token()
+        raw     = _fetch_audit_excel_data(token)
+        payload = _build_audit_payload(raw)
+        _AUDIT_CACHE = {'data': payload, 'exp': now + _JUMPER_CACHE_TTL}
+        kv_set('audit_excel', payload, ttl_seconds=_JUMPER_CACHE_TTL)
+        return jsonify(payload)
+    except Exception as exc:
+        print(f'[AUDIT] /api/audit-excel error: {exc}')
+        return jsonify({'error': str(exc)}), 500
+
+
+# ── Audit writes (qe_audit Sign In / Admin only) ───────────────────────────────
+# Writes use the LOGGED-IN session's own access token (via call_graph/require_token).
+# The Audit_Monitoring.xlsx sharing link must grant Edit (not just View) access.
+
+def _audit_drive_item(token):
+    item = get_gica_drive_item(token, AUDIT_EXCEL_SHARE_URL)
+    return item['parentReference']['driveId'], item['id']
+
+
+def _audit_write_create(token, kind, record):
+    """record is API-field-keyed (e.g. 'ItemNo', 'ItemText') — translated to
+    the real Excel headers before writing, and the created row is translated
+    back to API field names before returning."""
+    table_name, cols, pk_col = AUDIT_TABLES[kind]
+    drive_id, item_id = _audit_drive_item(token)
+    excel_record = _audit_map_in(kind, record)
+    created = create_row(token, drive_id, item_id, table_name, cols, pk_col, excel_record)
+    return _audit_map_out(kind, created)
+
+
+def _audit_write_update(token, kind, key_value, patch):
+    """patch is API-field-keyed — see _audit_write_create."""
+    table_name, cols, pk_col = AUDIT_TABLES[kind]
+    drive_id, item_id = _audit_drive_item(token)
+    excel_patch = _audit_map_in(kind, patch)
+    updated = update_row_by_key(token, drive_id, item_id, table_name, cols, pk_col, key_value, excel_patch)
+    return _audit_map_out(kind, updated)
+
+
+def _audit_execution_scores_for_plan(token, plan_id):
+    """Fresh (not cached) list of Score values for every AuditExecution row of
+    one Plan — used right after a save to decide the Plan's auto Status, so it
+    must see the row that was just written, not the 5-minute-stale cache."""
+    table_name, cols, pk_col = AUDIT_TABLES['execution']
+    drive_id, item_id = _audit_drive_item(token)
+    rows, _headers = get_table_rows_by_key(token, drive_id, item_id, table_name, cols, pk_col)
+    plan_id = str(plan_id).strip()
+    return [str(r.get('Score', '')).strip() for r in rows if str(r.get('PlanID', '')).strip() == plan_id]
+
+
+def _auto_create_findings_for_plan(token, plan_id, nc_exec_rows, actor):
+    """Auto-create Finding rows for Major/Minor NC execution items.
+    Idempotent — skips any ExecutionID that already has a Finding row.
+    nc_exec_rows is the list of already-created execution dicts (API field names)
+    filtered to non-Conformity ratings; each must have ExecutionID and ItemNo."""
+    drive_id, item_id = _audit_drive_item(token)
+
+    # Look up Plan for BU, AuditTitle, FormVersion
+    p_table, p_cols, p_pk = AUDIT_TABLES['plan']
+    plan_raw, _ = find_row_by_key(token, drive_id, item_id, p_table, p_cols, p_pk, plan_id)
+    if not plan_raw:
+        return
+    plan = _audit_map_out('plan', plan_raw)
+    bu           = str(plan.get('BU', '')).strip()
+    audit_title  = str(plan.get('AuditTitle', '')).strip()
+    form_version = str(_audit_num(plan.get('FormVersion')) or '').strip()
+
+    # Build ItemNo → ItemText map from Template (active version only)
+    t_table, t_cols, t_key = AUDIT_TABLES['template']
+    tpl_rows, _ = get_table_rows_by_key(token, drive_id, item_id, t_table, t_cols, t_key)
+    item_text_map = {}
+    for tr in tpl_rows:
+        row = _audit_map_out('template', tr)
+        if (str(row.get('Category', '')).strip() == audit_title and
+                str(_audit_num(row.get('Version')) or '').strip() == form_version and
+                row.get('Active')):
+            try:
+                item_text_map[int(float(row.get('ItemNo', 0)))] = str(row.get('ItemText', ''))
+            except (TypeError, ValueError):
+                pass
+
+    # Collect existing ExecutionIDs already linked to a Finding (dedup guard)
+    f_table, f_cols, f_pk = AUDIT_TABLES['finding']
+    existing_rows, _ = get_table_rows_by_key(token, drive_id, item_id, f_table, f_cols, f_pk)
+    linked_exec_ids = {
+        str(r.get('ExecutionID', '')).strip()
+        for r in existing_rows
+        if str(r.get('ExecutionID', '')).strip()
+    }
+
+    for exec_row in nc_exec_rows:
+        exec_id  = str(exec_row.get('ExecutionID', '')).strip()
+        if not exec_id or exec_id in linked_exec_ids:
+            continue
+        try:
+            item_no = int(float(exec_row.get('ItemNo', 0)))
+        except (TypeError, ValueError):
+            item_no = 0
+        item_text = item_text_map.get(item_no, f'Item No. {item_no}')
+        severity  = AUDIT_RATING_TO_SEVERITY.get(str(exec_row.get('Score', '')).strip(), 'Minor')
+
+        new_finding = {
+            'PlanID':      plan_id,
+            'ExecutionID': exec_id,
+            'BU':          bu,
+            'Severity':    severity,
+            'Description': item_text,
+            'Status':      'Open',
+            'OpenedBy':    actor,
+            'OpenedAt':    _datetime.utcnow().isoformat(),
+        }
+        excel_rec = _audit_map_in('finding', new_finding)
+        create_row(token, drive_id, item_id, f_table, f_cols, f_pk, excel_rec)
+        linked_exec_ids.add(exec_id)  # prevent duplicates within this batch
+
+
+def _audit_all_findings_approved(token, plan_id):
+    """Return True iff the plan has at least one Finding and ALL are Approved."""
+    f_table, f_cols, f_pk = AUDIT_TABLES['finding']
+    drive_id, item_id = _audit_drive_item(token)
+    rows, _ = get_table_rows_by_key(token, drive_id, item_id, f_table, f_cols, f_pk)
+    plan_findings = [
+        _audit_map_out('finding', r)
+        for r in rows
+        if str(r.get('PlanID', '')).strip() == str(plan_id).strip()
+    ]
+    if not plan_findings:
+        return False
+    return all(str(f.get('Status', '')).strip() == 'Approved' for f in plan_findings)
+
+
+def _audit_next_plan_id(token, drive_id, item_id):
+    """PlanID is a monthly running number formatted 'YYYY-MM-NNNN' (e.g.
+    2026-06-0001), not a plain auto-increment integer — the counter resets
+    every calendar month. Scans existing PlanID values for the current
+    year-month prefix and returns prefix + (max existing seq + 1)."""
+    table_name, cols, pk_col = AUDIT_TABLES['plan']
+    rows, _headers = get_table_rows_by_key(token, drive_id, item_id, table_name, cols, pk_col)
+    prefix = _datetime.utcnow().strftime('%Y-%m')
+    max_seq = 0
+    for r in rows:
+        pid = str(r.get(pk_col, '')).strip()
+        if pid.startswith(prefix + '-'):
+            try:
+                max_seq = max(max_seq, int(pid.rsplit('-', 1)[-1]))
+            except ValueError:
+                pass
+    return f'{prefix}-{max_seq + 1:04d}'
+
+
+def _audit_write_create_plan(token, record):
+    """Like _audit_write_create('plan', ...) but generates the formatted
+    PlanID server-side instead of relying on create_row's generic
+    max(int)+1 auto-increment (which doesn't understand the YYYY-MM-NNNN
+    format)."""
+    table_name, cols, pk_col = AUDIT_TABLES['plan']
+    drive_id, item_id = _audit_drive_item(token)
+    plan_id = _audit_next_plan_id(token, drive_id, item_id)
+    excel_record = _audit_map_in('plan', record)
+    excel_record[pk_col] = plan_id
+    created = create_row(token, drive_id, item_id, table_name, cols, pk_col, excel_record)
+    return _audit_map_out('plan', created)
+
+
+def _audit_invalidate_cache():
+    global _AUDIT_CACHE
+    _AUDIT_CACHE = {}
+    kv_delete('audit_excel')
+
+
+def _audit_actor_name():
+    return (session.get('user') or {}).get('name', '')
+
+
+def _audit_write_create_form(token, form):
+    """Create a whole Form (Google/MS-Forms model) in one call: TemplateName +
+    Category + Code, plus N checklist items. If `Code` matches an existing
+    form, this is a new VERSION — Version = max existing Version for that
+    Code + 1, and every row currently Active for that Code gets Active=FALSE
+    (old version retired, kept for history) before the new version's rows are
+    written with Active=True.
+
+    AuditTemplate has no row-level PK column — identity is Code+Version+ItemNo.
+    Code itself repeats across every item row of the same Form, so the
+    deactivation step below uses update_row_by_index (by each row's own
+    _row_index) instead of the generic key-based update_row_by_key, which
+    would only ever touch the first matching row."""
+    table_name, cols, sentinel_col = AUDIT_TABLES['template']
+    drive_id, item_id = _audit_drive_item(token)
+
+    excel_rows, headers = get_table_rows_by_key(token, drive_id, item_id, table_name, cols, sentinel_col)
+
+    code = str(form.get('Code', '')).strip()
+    same_code_rows = [r for r in excel_rows if str(r.get('Code', '')).strip() == code] if code else []
+    version = 1
+    if same_code_rows:
+        versions = []
+        for r in same_code_rows:
+            try:
+                versions.append(int(float(r.get('Version', 0) or 0)))
+            except (ValueError, TypeError):
+                pass
+        version = (max(versions) if versions else 0) + 1
+        for r in same_code_rows:
+            if str(r.get('Active', '')).strip().upper() in ('TRUE', '1', 'YES'):
+                update_row_by_index(token, drive_id, item_id, table_name, cols, headers, r, {'Active': False})
+
+    actor = _audit_actor_name()
+    now_iso = _datetime.utcnow().isoformat()
+    created = []
+    for idx, raw_item in enumerate(form.get('items') or [], start=1):
+        item_text = str(raw_item.get('ItemText', '')).strip()
+        if not item_text:
+            continue
+        record = {
+            'TemplateName': form.get('TemplateName', ''),
+            'Category':     form.get('Category', ''),
+            'ItemNo':       idx,
+            'ItemText':     item_text,
+            'Code':         code,
+            'Version':      version,
+            'Active':       True,
+            'CreatedBy':    actor,
+            'CreatedAt':    now_iso,
+        }
+        excel_record = _audit_map_in('template', record)
+        row = append_row(token, drive_id, item_id, table_name, cols, excel_record)
+        created.append(_audit_map_out('template', row))
+    return created
+
+
+@app.route('/api/audit/templates/forms', methods=['POST'])
+def api_audit_create_template_form():
+    """Create a new Form, or a new Version of an existing one if `Code`
+    matches — see _audit_write_create_form."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    template_name = str(payload.get('TemplateName', '')).strip()
+    category = str(payload.get('Category', '')).strip()
+    code = str(payload.get('Code', '')).strip()
+    items = [it for it in (payload.get('items') or []) if str(it.get('ItemText', '')).strip()]
+    if not template_name:
+        return jsonify({'error': 'Template Name is required'}), 400
+    if not category:
+        return jsonify({'error': 'Category is required'}), 400
+    if not code:
+        return jsonify({'error': 'Code is required'}), 400
+    if not items:
+        return jsonify({'error': 'At least 1 checklist item is required'}), 400
+
+    form = {
+        'TemplateName': template_name,
+        'Category':     category,
+        'Code':         code,
+        'items':        items,
+    }
+    try:
+        created = call_graph(_audit_write_create_form, form)
+        _audit_invalidate_cache()
+        return jsonify({'message': 'Created', 'items': created})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/audit/plans', methods=['POST'])
+def api_audit_create_plan():
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    bu = str(payload.get('BU', '')).strip().upper()
+    if bu not in DEPARTMENTS:
+        return jsonify({'error': 'Invalid BU'}), 400
+    title = str(payload.get('AuditTitle', '')).strip()
+    if not title:
+        return jsonify({'error': 'AuditTitle is required'}), 400
+
+    record = {k: payload.get(k, '') for k in [
+        'BU', 'Department', 'FormVersion', 'AuditTitle',
+        'ScheduledDate', 'Auditor1', 'Auditor2', 'Auditor3', 'Notes',
+    ]}
+    record['BU']     = bu
+    record['Status'] = 'Planned'
+    record['CreatedBy'] = _audit_actor_name()
+    # No CreatedAt column in the actual AuditPlan table.
+
+    try:
+        created = call_graph(_audit_write_create_plan, record)
+        _audit_invalidate_cache()
+        return jsonify({'message': 'Created', 'plan': created})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/audit/plans/<plan_id>', methods=['PATCH'])
+def api_audit_update_plan(plan_id):
+    """E.g. manual status transition Planned -> Cancelled (used by the "Cancel
+    Plan" confirm modal in the frontend — only offered while Status=Planned).
+    plan_id is a plain string ('YYYY-MM-NNNN'), not an int — see _audit_next_plan_id."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    patch = {k: payload[k] for k in [
+        'BU', 'Department', 'FormVersion', 'AuditTitle',
+        'ScheduledDate', 'Auditor1', 'Auditor2', 'Auditor3', 'Status', 'Notes',
+    ] if k in payload}
+
+    try:
+        updated = call_graph(_audit_write_update, 'plan', plan_id, patch)
+        _audit_invalidate_cache()
+        return jsonify({'message': 'Saved', 'plan': updated})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/audit/executions', methods=['POST'])
+def api_audit_create_execution():
+    """Accepts either a single execution object or an array — writing a whole
+    audit's scored checklist in one call avoids opening N workbook write
+    sessions for N checklist items."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    items = payload if isinstance(payload, list) else [payload]
+    if not items:
+        return jsonify({'error': 'No execution rows provided'}), 400
+
+    actor = _audit_actor_name()
+    created_rows = []
+    try:
+        for raw_item in items:
+            plan_id = raw_item.get('PlanID')
+            item_no = raw_item.get('ItemNo')
+            if not plan_id or not item_no:
+                return jsonify({'error': 'PlanID and ItemNo are required'}), 400
+            record = {k: raw_item.get(k, '') for k in [
+                'PlanID', 'ItemNo', 'Score', 'Comment',
+            ]}
+            record['ExecutedBy'] = actor
+            # ActualResult starts as a copy of Score — Score itself never
+            # changes again after this write, but ActualResult flips to
+            # "Conformity" once the Finding it produced gets Approved (see
+            # _do_audit_finding_approve below).
+            record['ActualResult'] = record.get('Score', '')
+            # No ExecutedAt column in the actual AuditExecution table.
+            created_rows.append(call_graph(_audit_write_create, 'execution', record))
+
+        # Auto-update Plan Status from the full execution score set (not just
+        # the rows just written, so partial re-saves still resolve correctly).
+        plan_id = items[0].get('PlanID')
+        scores  = call_graph(_audit_execution_scores_for_plan, plan_id)
+        has_nc  = any(s in ('Major Non-Conformity', 'Minor Non-Conformity') for s in scores)
+        new_status = 'Issued' if has_nc else 'Completed'
+        call_graph(_audit_write_update, 'plan', plan_id, {'Status': new_status})
+
+        # Auto-create Finding rows for every NC execution item (idempotent).
+        if has_nc:
+            nc_rows = [r for r in created_rows
+                       if str(r.get('Score', '')).strip() in AUDIT_RATING_TO_SEVERITY]
+            if nc_rows:
+                token = get_valid_token()
+                _auto_create_findings_for_plan(token, plan_id, nc_rows, actor)
+
+        _audit_invalidate_cache()
+        return jsonify({'message': 'Created', 'executions': created_rows, 'planStatus': new_status})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/audit/findings', methods=['POST'])
+def api_audit_create_finding():
+    """Step 1: Auditor opens a Finding/CAR. Sets Status='Open', OpenedBy/At."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    bu = str(payload.get('BU', '')).strip().upper()
+    if bu not in DEPARTMENTS:
+        return jsonify({'error': 'Invalid BU'}), 400
+    description = str(payload.get('Description', '')).strip()
+    if not description:
+        return jsonify({'error': 'Description is required'}), 400
+
+    record = {k: payload.get(k, '') for k in [
+        'PlanID', 'ExecutionID', 'Severity', 'Description',
+        'ResponsiblePerson', 'DueDate',
+    ]}
+    record['BU']       = bu
+    record['Status']   = 'Open'
+    record['OpenedBy'] = _audit_actor_name()
+    record['OpenedAt'] = _datetime.utcnow().isoformat()
+
+    try:
+        created = call_graph(_audit_write_create, 'finding', record)
+        _audit_invalidate_cache()
+        return jsonify({'message': 'Created', 'finding': created})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+def _audit_finding_or_404(token, finding_id):
+    table_name, cols, pk_col = AUDIT_TABLES['finding']
+    drive_id, item_id = _audit_drive_item(token)
+    row, _headers = find_row_by_key(token, drive_id, item_id, table_name, cols, pk_col, finding_id)
+    return _audit_map_out('finding', row) if row else None
+
+
+@app.route('/api/audit/findings/<int:finding_id>/respond', methods=['PATCH'])
+def api_audit_finding_respond(finding_id):
+    """Step 2: Auditee responds. Sets RootCause/CorrectiveAction,
+    Status='Open' -> 'Responded', RespondedBy/At. Rejects if not currently Open."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    root_cause = str(payload.get('RootCause', '')).strip()
+    corrective_action = str(payload.get('CorrectiveAction', '')).strip()
+    if not root_cause or not corrective_action:
+        return jsonify({'error': 'RootCause and CorrectiveAction are required'}), 400
+
+    try:
+        token = get_valid_token()
+        finding = _audit_finding_or_404(token, finding_id)
+        if not finding:
+            return jsonify({'error': 'Finding not found'}), 404
+        if str(finding.get('Status', '')).strip() != 'Open':
+            return jsonify({'error': f"Cannot respond — current status is "
+                                      f"'{finding.get('Status', '')}', expected 'Open'"}), 409
+
+        patch = {
+            'RootCause':         root_cause,
+            'CorrectiveAction':  corrective_action,
+            'PreventiveAction':  str(payload.get('PreventiveAction', '')).strip(),
+            'ResponsiblePerson': str(payload.get('ResponsiblePerson', finding.get('ResponsiblePerson', ''))),
+            'DueDate':           str(payload.get('DueDate', finding.get('DueDate', ''))),
+            'Status':            'Responded',
+            'RespondedBy':       _audit_actor_name(),
+        }
+        updated = call_graph(_audit_write_update, 'finding', finding_id, patch)
+        _audit_invalidate_cache()
+        return jsonify({'message': 'Saved', 'finding': updated})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/audit/plans/<plan_id>/respond', methods=['POST'])
+def api_audit_plan_respond(plan_id):
+    """Bulk respond: Auditee submits Root Cause / Corrective Action /
+    Preventive Action / Responsible Person / Due Date for all Open findings
+    of one Plan at once. Transitions each finding Open→Responded, then moves
+    the Plan Issued→Pending Approval. qe_auditee is allowed here (and only
+    here) — every other Audit write route stays qe_audit/admin only."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'qe_auditee', 'admin'))
+    if deny:
+        return deny
+
+    items = request.json
+    if not isinstance(items, list) or not items:
+        return jsonify({'error': 'Expected a non-empty array of finding responses'}), 400
+
+    try:
+        actor = _audit_actor_name()
+        updated_findings = []
+        for item in items:
+            finding_id = item.get('findingId')
+            root_cause = str(item.get('rootCause', '')).strip()
+            corrective = str(item.get('correctiveAction', '')).strip()
+            if not finding_id or not root_cause or not corrective:
+                return jsonify({'error': 'findingId, rootCause, correctiveAction required per finding'}), 400
+            patch = {
+                'RootCause':         root_cause,
+                'CorrectiveAction':  corrective,
+                'PreventiveAction':  str(item.get('preventiveAction', '')).strip(),
+                'ResponsiblePerson': str(item.get('responsiblePerson', '')).strip(),
+                'DueDate':           str(item.get('dueDate', '')).strip(),
+                'Status':            'Responded',
+                'RespondedBy':       actor,
+            }
+            updated = call_graph(_audit_write_update, 'finding', finding_id, patch)
+            updated_findings.append(updated)
+
+        call_graph(_audit_write_update, 'plan', plan_id, {'Status': 'Pending Approval'})
+        _audit_invalidate_cache()
+        return jsonify({'message': 'Responded', 'findings': updated_findings,
+                        'planStatus': 'Pending Approval'})
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+def _do_audit_finding_approve(token, finding_id, approver_comment):
+    """Core approve logic — shared by /approve and the legacy /close route."""
+    finding = _audit_finding_or_404(token, finding_id)
+    if not finding:
+        return None, 404, 'Finding not found'
+    if str(finding.get('Status', '')).strip() != 'Responded':
+        return None, 409, (f"Cannot approve — status is "
+                           f"'{finding.get('Status', '')}', expected 'Responded'")
+
+    patch = {
+        'Status':          'Approved',
+        'ApprovedBy':      _audit_actor_name(),
+        'ApprovedAt':      _datetime.utcnow().isoformat(),
+        'ApproverComment': str(approver_comment or '').strip(),
+    }
+    updated = call_graph(_audit_write_update, 'finding', finding_id, patch)
+
+    # The issue is now resolved — flip the originating AuditExecution row's
+    # ActualResult to "Conformity" so it reflects current state. Score itself
+    # is left untouched (it's the immutable record of what was found at audit
+    # time). Ad-hoc findings opened without an ExecutionID have nothing to flip.
+    execution_id = finding.get('ExecutionID')
+    if execution_id:
+        call_graph(_audit_write_update, 'execution', execution_id, {'ActualResult': 'Conformity'})
+
+    plan_id = str(finding.get('PlanID', '')).strip()
+    plan_status = None
+    if plan_id and _audit_all_findings_approved(token, plan_id):
+        call_graph(_audit_write_update, 'plan', plan_id, {'Status': 'Completed'})
+        plan_status = 'Completed'
+
+    _audit_invalidate_cache()
+    return {'message': 'Approved', 'finding': updated, 'planStatus': plan_status}, 200, None
+
+
+@app.route('/api/audit/findings/<int:finding_id>/approve', methods=['PATCH'])
+def api_audit_finding_approve(finding_id):
+    """Auditor approves one Finding: Responded→Approved, records ApprovedBy/At
+    and optional ApproverComment. When every Finding for the Plan is Approved
+    the Plan status is automatically set to Completed."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    try:
+        token = get_valid_token()
+        result, status_code, err_msg = _do_audit_finding_approve(
+            token, finding_id, payload.get('ApproverComment', ''))
+        if err_msg:
+            return jsonify({'error': err_msg}), status_code
+        return jsonify(result)
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/audit/findings/<int:finding_id>/close', methods=['PATCH'])
+def api_audit_finding_close(finding_id):
+    """Legacy alias for /approve — ClosureNotes mapped to ApproverComment."""
+    _, error = require_token()
+    if error:
+        return error
+    deny = require_writable(('qe_audit', 'admin'))
+    if deny:
+        return deny
+
+    payload = request.json or {}
+    comment = payload.get('ApproverComment', payload.get('ClosureNotes', ''))
+    try:
+        token = get_valid_token()
+        result, status_code, err_msg = _do_audit_finding_approve(token, finding_id, comment)
+        if err_msg:
+            return jsonify({'error': err_msg}), status_code
+        return jsonify(result)
+    except AuthError as exc:
+        return _auth_error_response(exc)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
 # ── Admin: Force Refresh (emergency cache bust for all 4 modules) ──────────────
 # Cooldown is tracked in KV (not just in-process) so it holds even across
 # Vercel serverless instances/cold starts — admin in instance A can't bypass
@@ -1559,14 +2403,16 @@ def api_force_refresh():
     if remaining > 0:
         return jsonify({'error': 'Force Refresh is on cooldown', 'remainingSeconds': remaining}), 429
 
-    global _GICA_CACHE, _JUMPER_EXCEL_CACHE, _TRAINER_EXCEL_CACHE, _NEWOP_CACHE
+    global _GICA_CACHE, _JUMPER_EXCEL_CACHE, _TRAINER_EXCEL_CACHE, _NEWOP_CACHE, _AUDIT_CACHE
     _GICA_CACHE = {}
     _JUMPER_EXCEL_CACHE = {}
     _TRAINER_EXCEL_CACHE = {}
     _NEWOP_CACHE = {}
+    _AUDIT_CACHE = {}
     kv_delete('gica_excel')
     kv_delete('jumper_excel')
     kv_delete('trainer_excel')
+    kv_delete('audit_excel')
     for dept_key in DEPARTMENTS.keys():
         kv_delete(f'newop_employees_{dept_key}')
 
