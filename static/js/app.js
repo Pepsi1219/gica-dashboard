@@ -8095,6 +8095,12 @@ let _auditApproveTargetId = null;   // FindingID pending in the per-finding Appr
 let _auditDashCategory = 'all';
 let _auditDashYear = 'all';
 
+// Row 3 "Audit Trend" chart instance + its KPI target (Target Compliance %,
+// All BU only) — frontend-only, persisted to localStorage (no Excel/backend
+// table for this, unlike GICA's kpi_g1...kpi_trm tables).
+let _auditTrendChart = null;
+let _auditKpiTarget = Number(localStorage.getItem('auditKpiTargetCompliance')) || 80;
+
 function _auditBadge(text, kind) {
   return `<span class="badge ${kind || 'muted'}">${escapeHtml(text || '—')}</span>`;
 }
@@ -8292,6 +8298,15 @@ const AUDIT_RATING_HEX = {
   'Minor Non-Conformity': '#f59e0b',
   'OFI':                  '#6b7280',
 };
+// Softer variant used only by the "Audit Trend" stacked-bar chart (and its
+// header legend) — AUDIT_RATING_HEX's saturated 600-level tones read fine as
+// small donut/badge accents but feel heavy filling large bar areas.
+const AUDIT_TREND_RATING_HEX = {
+  'Conformity':           '#34d399',
+  'Major Non-Conformity': '#fb7185',
+  'Minor Non-Conformity': '#fbbf24',
+  'OFI':                  '#94a3b8',
+};
 const AUDIT_RATING_SHORT = {
   'Conformity': 'Conformity', 'Major Non-Conformity': 'Major NC',
   'Minor Non-Conformity': 'Minor NC', 'OFI': 'OFI',
@@ -8299,6 +8314,23 @@ const AUDIT_RATING_SHORT = {
 
 function _auditEmptyRatingCounts() {
   return { 'Conformity': 0, 'Major Non-Conformity': 0, 'Minor Non-Conformity': 0, 'OFI': 0 };
+}
+
+// Largest-remainder rounding — plain independent Math.round() per rating can
+// sum to 99 or 101 (e.g. 1/3 of 3 items → 33+33+33=99), which makes two
+// otherwise-equal-total stacked bars render at visibly different heights.
+// This guarantees the 4 percentages always sum to exactly 100 (when tot > 0).
+function _auditPctBreakdown(counts, tot) {
+  const out = {};
+  if (!tot) { AUDIT_EXECUTION_RATINGS.forEach(r => { out[r] = 0; }); return out; }
+  const raw = AUDIT_EXECUTION_RATINGS.map(r => (counts[r] || 0) / tot * 100);
+  const base = raw.map(Math.floor);
+  const remainder = 100 - base.reduce((a, b) => a + b, 0);
+  const order = raw.map((v, i) => ({ i, frac: v - base[i] })).sort((a, b) => b.frac - a.frac);
+  const result = base.slice();
+  for (let k = 0; k < remainder; k++) result[order[k].i]++;
+  AUDIT_EXECUTION_RATINGS.forEach((r, i) => { out[r] = result[i]; });
+  return out;
 }
 
 // Card 3 "Overall Status" — distinct hex per Plan Status (Planned/Cancelled both
@@ -8363,23 +8395,98 @@ function _computeAuditDashboardVm(data) {
     }
   });
 
-  // Row 2: latest Plan per BU (highest PlanID — 'YYYY-MM-NNNN' sorts lexicographically
-  // = chronologically) that actually has execution rows, then that Plan's rating split.
-  const buLatest = {};
+  // Row 2: Finding/CAR pipeline per BU — counts by Status (Open/Responded/
+  // Approved) + the oldest still-open finding's age in days. Same
+  // Category/Year filter as the rest of this dashboard, via planIds.
+  const buFindingPipeline = {};
+  AUDIT_BUS.forEach(bu => {
+    const buFindings = (data.findings || []).filter(f => f.BU === bu && planIds.has(f.PlanID));
+    const counts = { Open: 0, Responded: 0, Approved: 0 };
+    let oldestAgingDays = null;
+    buFindings.forEach(f => {
+      if (counts[f.Status] !== undefined) counts[f.Status]++;
+      if (f.Status !== 'Approved') {
+        const days = _auditDaysSince(f.OpenedAt);
+        if (days != null && (oldestAgingDays == null || days > oldestAgingDays)) oldestAgingDays = days;
+      }
+    });
+    buFindingPipeline[bu] = { counts, total: buFindings.length, oldestAgingDays };
+  });
+
+  // Row 3: Audit Plan pipeline per BU — counts by Plan Status + completion
+  // rate (Completed / total, all statuses including Cancelled counted in the
+  // denominator, same as Card 1/3's all-BU totals).
+  const buPlanPipeline = {};
+  AUDIT_BUS.forEach(bu => {
+    const buPlans = plans.filter(p => p.BU === bu);
+    const counts = {};
+    AUDIT_PLAN_STATUS_LIST.forEach(s => { counts[s] = 0; });
+    buPlans.forEach(p => { if (counts[p.Status] !== undefined) counts[p.Status]++; });
+    const total = buPlans.length;
+    buPlanPipeline[bu] = { counts, total, completedPct: total ? Math.round((counts['Completed'] || 0) / total * 100) : 0 };
+  });
+
+  // Row 4: top recurring Major NC checklist item per BU — tallies Major
+  // Non-Conformity hits only (by Score, the immutable original rating, same
+  // "what was actually found" semantics buHistory's hasNC uses) grouped by
+  // item text, resolved via each Plan's Category(=AuditTitle)+FormVersion
+  // join into AuditTemplate (same join _computeAuditExecutionVm uses for the
+  // Execution sub-tab).
+  const buTopNC = {};
+  AUDIT_BUS.forEach(bu => {
+    const buPlans = plans.filter(p => p.BU === bu);
+    const tally = {};
+    buPlans.forEach(p => {
+      const itemTextByNo = {};
+      (data.templates || [])
+        .filter(t => t.Category === p.AuditTitle && t.Version === p.FormVersion)
+        .forEach(t => { itemTextByNo[t.ItemNo] = t.ItemText; });
+      executions.filter(e => e.PlanID === p.PlanID).forEach(e => {
+        if (e.Score !== 'Major Non-Conformity') return;
+        const text = itemTextByNo[e.ItemNo];
+        if (!text) return;
+        tally[text] = (tally[text] || 0) + 1;
+      });
+    });
+    buTopNC[bu] = Object.entries(tally)
+      .map(([itemText, count]) => ({ itemText, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+  });
+
+  // Row 5: every Plan per BU (within the same Category/Year filter as the rest
+  // of this dashboard) that has execution rows, oldest → newest by PlanID —
+  // full rating breakdown (% per Conformity/Major NC/Minor NC/OFI), Initial
+  // audit (Score, immutable) vs Re-audit (ActualResult, post-CAR), per audit
+  // occurrence. Feeds the per-BU audit-trend chart; grows on its own as new
+  // Plans get executions, no extra wiring needed. `hasNC` (raw count, not the
+  // rounded %) decides whether a Re-audit bar even exists for that occurrence —
+  // audit logic: a clean Initial audit never produces a CAR/Re-audit.
+  const buHistory = {};
   AUDIT_BUS.forEach(bu => {
     const buPlans = plans
       .filter(p => p.BU === bu)
-      .sort((a, b) => String(b.PlanID || '').localeCompare(String(a.PlanID || '')));
-    const latestWithData = buPlans.find(p =>
-      executions.some(e => e.PlanID === p.PlanID));
-    if (!latestWithData) { buLatest[bu] = null; return; }
-    const counts = _auditEmptyRatingCounts();
-    let total = 0;
-    executions.filter(e => e.PlanID === latestWithData.PlanID).forEach(e => {
-      const result = e.ActualResult || e.Score;
-      if (counts[result] !== undefined) { counts[result]++; total++; }
-    });
-    buLatest[bu] = { planId: latestWithData.PlanID, counts, total };
+      .sort((a, b) => String(a.PlanID || '').localeCompare(String(b.PlanID || '')));
+    buHistory[bu] = buPlans.map(p => {
+      const planExecs = executions.filter(e => e.PlanID === p.PlanID);
+      if (!planExecs.length) return null;
+      const originalCounts = _auditEmptyRatingCounts();
+      const actualCounts = _auditEmptyRatingCounts();
+      let tot = 0;
+      planExecs.forEach(e => {
+        const orig = e.Score;
+        const act = e.ActualResult || e.Score;
+        if (originalCounts[orig] !== undefined) originalCounts[orig]++;
+        if (actualCounts[act] !== undefined) actualCounts[act]++;
+        tot++;
+      });
+      const hasNC = (originalCounts['Major Non-Conformity'] || 0) + (originalCounts['Minor Non-Conformity'] || 0) > 0;
+      return {
+        planId: p.PlanID, total: tot, hasNC,
+        originalPct: _auditPctBreakdown(originalCounts, tot),
+        actualPct: _auditPctBreakdown(actualCounts, tot),
+      };
+    }).filter(Boolean);
   });
 
   return {
@@ -8391,7 +8498,11 @@ function _computeAuditDashboardVm(data) {
     overallRatingTotal,
     originalRatingCounts,
     originalRatingTotal,
-    buLatest,
+    buFindingPipeline,
+    buPlanPipeline,
+    buTopNC,
+    buHistory,
+    kpiTarget: _auditKpiTarget,
   };
 }
 
@@ -8438,7 +8549,7 @@ function _auditDashboardHtml(vm) {
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${bu}</text>
       </g>`;
     }).join('');
-    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:32px;overflow:visible;">
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
       <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
       ${bars}
     </svg>`;
@@ -8501,37 +8612,108 @@ function _auditDashboardHtml(vm) {
     _leaderDonut(counts, tot, AUDIT_PLAN_STATUS_LIST, s => AUDIT_PLAN_STATUS_HEX[s], s => s, opts, _completionCenter);
 
   const bigDonutOpts  = { cx: 145, cy: 102, r: 50, sw: 20, leadOut: 12, leadH: 18, vbW: 300, vbH: 205, fsMain: 9.5, fsSub: 8.5, fsCenterMain: 22, fsCenterSub: 8.5, centerYOff: 8, centerSubYOff: 20 };
-  const smallDonutOpts = { cx: 125, cy: 88,  r: 43, sw: 20, leadOut: 7.5, leadH: 13, vbW: 255, vbH: 172, fsMain: 9,   fsSub: 8.5, fsCenterMain: 20, fsCenterSub: 9,   centerYOff: 6, centerSubYOff: 20 };
 
   // Shared by both faces of the Overall Score flip card — front reads
   // ActualResult (current state), back reads the immutable original Score.
   const ratingFaceHtml = (label, counts, tot) => `
-    <div class="u-between">
-      <div class="stat-card__label">${label}</div>
-      <div style="text-align:right;">
-        ${AUDIT_EXECUTION_RATINGS.map(rating => `
-        <div class="u-between" style="width:108px;margin-left:auto;font-size:0.74rem;">
-          <span class="u-muted">${AUDIT_RATING_SHORT[rating]}</span><strong style="color:${AUDIT_RATING_HEX[rating]};">${counts[rating]}</strong>
-        </div>`).join('')}
-      </div>
-    </div>
+    <div class="stat-card__label">${label}</div>
     ${ratingDonut(counts, tot, bigDonutOpts)}`;
 
-  const buCardsHtml = AUDIT_BUS.map(bu => {
+  // Row 2: Finding/CAR pipeline per BU — segmented bar (Open/Responded/
+  // Approved) + breakdown rows + oldest-still-open aging badge. Gated on
+  // planCountByBu (has this BU ever been audited within the filter), not on
+  // having findings — zero findings with plans present is a real, positive
+  // state ("nothing ever needed a CAR"), not "no data".
+  const findingPipelineCardsHtml = AUDIT_BUS.map(bu => {
     const buColor = GICA_BU_COLORS[bu] || 'var(--text)';
-    const latest = vm.buLatest[bu];
-    if (!latest) {
+    if (!vm.planCountByBu[bu]) {
+      return `<div class="stat-card stat-card--empty" style="min-width:0;">
+        <div class="bu-name u-muted">${bu}</div>
+        <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+      </div>`;
+    }
+    const { counts, total, oldestAgingDays } = vm.buFindingPipeline[bu];
+    const pct = k => total ? Math.round((counts[k] || 0) / total * 100) : 0;
+    return `<div class="stat-card" style="min-width:0;">
+      <div class="bu-head">
+        <span class="bu-name" style="color:${buColor};">${bu}</span>
+        <span class="u-muted" style="font-size:0.7rem;font-weight:600;">${total} Finding${total === 1 ? '' : 's'}</span>
+      </div>
+      ${total ? `<div class="pbar pbar--6" style="display:flex;margin-top:10px;" title="Open: ${counts.Open}, Responded: ${counts.Responded}, Approved: ${counts.Approved}">
+        ${counts.Open > 0 ? `<div class="pbar__fill" style="background:var(--danger);width:${pct('Open')}%;border-radius:0;"></div>` : ''}
+        ${counts.Responded > 0 ? `<div class="pbar__fill" style="background:var(--warn);width:${pct('Responded')}%;border-radius:0;"></div>` : ''}
+        ${counts.Approved > 0 ? `<div class="pbar__fill" style="background:var(--ok);width:${pct('Approved')}%;border-radius:0;"></div>` : ''}
+      </div>` : `<div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— ไม่มี Finding —</div>`}
+      <div class="stat-card__sub">
+        <div class="u-between" style="font-size:0.74rem;"><span class="u-muted">Open</span><strong style="color:var(--danger);">${counts.Open}</strong></div>
+        <div class="u-between" style="font-size:0.74rem;"><span class="u-muted">Responded</span><strong style="color:var(--warn);">${counts.Responded}</strong></div>
+        <div class="u-between" style="font-size:0.74rem;"><span class="u-muted">Approved</span><strong style="color:var(--ok);">${counts.Approved}</strong></div>
+      </div>
+      <div class="stat-card__footer u-between">
+        <span>ค้างนานสุด</span>
+        ${oldestAgingDays == null ? '<strong class="u-muted">—</strong>' : `<strong style="color:var(--danger);">${oldestAgingDays} วัน</strong>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Row 3: Audit Plan pipeline per BU — 5-status breakdown + completion rate bar.
+  const planPipelineCardsHtml = AUDIT_BUS.map(bu => {
+    const buColor = GICA_BU_COLORS[bu] || 'var(--text)';
+    const pp = vm.buPlanPipeline[bu];
+    if (!pp.total) {
       return `<div class="stat-card stat-card--empty" style="min-width:0;">
         <div class="bu-name u-muted">${bu}</div>
         <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
       </div>`;
     }
     return `<div class="stat-card" style="min-width:0;">
-      <div class="u-between">
-        <div class="bu-head"><span class="bu-name" style="color:${buColor};">${bu}</span></div>
-        <span class="u-muted" style="font-size:0.7rem;font-weight:600;">#${escapeHtml(latest.planId)}</span>
+      <div class="bu-head">
+        <span class="bu-name" style="color:${buColor};">${bu}</span>
+        <span class="u-muted" style="font-size:0.7rem;font-weight:600;">${pp.total} Plan${pp.total === 1 ? '' : 's'}</span>
       </div>
-      ${ratingDonut(latest.counts, latest.total, smallDonutOpts)}
+      <div class="stat-card__sub">
+        ${AUDIT_PLAN_STATUS_LIST.map(s => `
+        <div class="u-between" style="font-size:0.74rem;">
+          <span class="u-muted" style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:${AUDIT_PLAN_STATUS_HEX[s]};display:inline-block;"></span>${s}</span>
+          <strong>${pp.counts[s]}</strong>
+        </div>`).join('')}
+      </div>
+      <div class="stat-card__footer">
+        <div class="u-between" style="margin-bottom:4px;"><span>Completion rate</span><strong>${pp.completedPct}%</strong></div>
+        <div class="pbar pbar--6"><div class="pbar__fill" style="background:var(--ok);width:${pp.completedPct}%;"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Row 4: top 3 recurring Major NC checklist items per BU — rank badge +
+  // item text (truncated) + hit count. Gated on planCountByBu like Row 2; an
+  // empty buTopNC with plans present means no Major NC has ever recurred —
+  // good news, shown as a quiet message, not the muted "no data" empty-card state.
+  const RANK_BG = ['var(--badge-danger-bg)', 'var(--badge-warn-bg)', 'var(--badge-muted-bg)'];
+  const RANK_FG = ['var(--danger)', 'var(--warn)', 'var(--text-muted)'];
+  const topNCCardsHtml = AUDIT_BUS.map(bu => {
+    const buColor = GICA_BU_COLORS[bu] || 'var(--text)';
+    if (!vm.planCountByBu[bu]) {
+      return `<div class="stat-card stat-card--empty" style="min-width:0;">
+        <div class="bu-name u-muted">${bu}</div>
+        <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+      </div>`;
+    }
+    const top = vm.buTopNC[bu];
+    return `<div class="stat-card" style="min-width:0;">
+      <div class="bu-head">
+        <span class="bu-name" style="color:${buColor};">${bu}</span>
+      </div>
+      ${top.length ? `<div class="stat-card__sub stat-card__sub--flush">
+        ${top.map((it, i) => `
+        <div class="u-between" style="gap:8px;">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+            <span style="width:18px;height:18px;border-radius:50%;background:${RANK_BG[i]};color:${RANK_FG[i]};font-size:0.65rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</span>
+            <span style="font-size:0.74rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escapeHtml(it.itemText)}</span>
+          </span>
+          <strong style="font-size:0.74rem;color:${RANK_FG[i]};flex-shrink:0;">×${it.count}</strong>
+        </div>`).join('')}
+      </div>` : `<div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— ไม่มี Major NC ที่พบซ้ำ —</div>`}
     </div>`;
   }).join('');
 
@@ -8549,28 +8731,271 @@ function _auditDashboardHtml(vm) {
         ${ratingFaceHtml('Original Score', vm.originalRatingCounts, vm.originalRatingTotal)}
       </div>
       <div class="stat-card">
-        <div class="u-between">
-          <div class="stat-card__label">Overall Status</div>
-          <div style="text-align:right;">
-            ${AUDIT_PLAN_STATUS_LIST.map(status => `
-            <div class="u-between" style="width:120px;margin-left:auto;font-size:0.74rem;">
-              <span class="u-muted">${status}</span><strong style="color:${AUDIT_PLAN_STATUS_HEX[status]};">${vm.planStatusCounts[status]}</strong>
-            </div>`).join('')}
-          </div>
-        </div>
+        <div class="stat-card__label">Overall Status</div>
         ${statusDonut(vm.planStatusCounts, vm.totalAudits, bigDonutOpts)}
       </div>
     </div>
-    <div class="stat-grid stat-grid--6">${buCardsHtml}</div>`;
+    <div class="stat-grid stat-grid--6">${findingPipelineCardsHtml}</div>
+    <div class="stat-grid stat-grid--6">${planPipelineCardsHtml}</div>
+    <div class="stat-grid stat-grid--6">${topNCCardsHtml}</div>
+    <div class="card card--section">
+      <div class="chart-header">
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">Audit Trend — Initial Audit vs Re-audit</h3>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span class="u-muted" style="font-size:0.72rem;display:inline-flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            ${AUDIT_EXECUTION_RATINGS.map(r => `
+            <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${AUDIT_TREND_RATING_HEX[r]};display:inline-block;"></span>${AUDIT_RATING_SHORT[r]}</span>`).join('')}
+            <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;border-bottom:2px dashed #dc2626;"></span>Target ${vm.kpiTarget}%</span>
+          </span>
+          <button id="audit-kpi-setup-btn" class="audit-kpi-setup-btn" type="button" title="กำหนด Target Compliance %">
+            <i class="ti ti-target-arrow" aria-hidden="true"></i> KPI Setup
+          </button>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap" style="height:320px;"><canvas id="audit-trendChart"></canvas></div>
+    </div>
+    <div id="audit-kpi-modal" class="gica-modal hidden">
+      <div class="gica-modal__backdrop" id="audit-kpi-backdrop"></div>
+      <div class="gica-modal__panel audit-kpi-modal__panel">
+        <div class="gica-modal__head">
+          <h4 style="margin:0;font-size:1rem;">KPI Setup</h4>
+          <button class="gica-modal__close" id="audit-kpi-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="audit-kpi-modal__body">
+          <p class="u-muted audit-kpi-modal__desc">Define Target Compliance % (All BU)</p>
+          <div class="audit-kpi-row">
+            <span class="audit-kpi-row__label">Target Compliance</span>
+            <input type="range" class="audit-kpi-slider" min="0" max="100" step="5" value="${vm.kpiTarget}">
+            <span class="audit-kpi-row__val" id="audit-kpi-row-val">${vm.kpiTarget}%</span>
+          </div>
+        </div>
+        <div class="audit-form-modal__footer">
+          <button class="audit-btn audit-btn--cancel" id="audit-kpi-cancel">Cancel</button>
+          <button class="audit-btn audit-btn--confirm" id="audit-kpi-confirm">Confirm</button>
+        </div>
+      </div>
+    </div>`;
 }
 
-function _mountAuditDashboard(html) {
+function _mountAuditDashboard(html, vm) {
   const el = $('audit-dashboard-panel');
-  if (el) el.innerHTML = html;
+  if (!el) return;
+  if (_auditTrendChart) { try { _auditTrendChart.destroy(); } catch (_) {} _auditTrendChart = null; }
+  el.innerHTML = html;
+
+  // Row 5: per-BU audit-occurrence trend — x-axis is "prepared in advance":
+  // round #1 across every BU (GICA's BU_ORDER), then round #2 across every BU,
+  // etc. up to the highest occurrence count any BU has reached. Each category
+  // is ONE bar — "Initial audit" always exists when there's data; "Re-audit"
+  // only exists when that occurrence actually had NC (audit logic: a clean
+  // Initial audit never produces a CAR/Re-audit), so the bar count per
+  // BU+round is 0 ("no data"), 1, or 2.
+  // Native x ticks are hidden — labels are hand-drawn by _auditBarLabels so
+  // the BU-name line can be colored per bar (green/red by KPI met), which
+  // Chart.js's built-in multi-line ticks can't do (one color for the whole
+  // tick). The round number isn't repeated per bar (redundant with the
+  // "รอบ N" header drawn by _auditRoundDividers).
+  // Each bar is a 4-segment stack (Conformity/Major NC/Minor NC/OFI,
+  // AUDIT_RATING_HEX) — same stack-group technique as the Assessment
+  // Schedule Timeline chart, just with a single stack id here.
+  const cvs = $('audit-trendChart');
+  if (cvs && typeof Chart !== 'undefined') {
+    // Pre-reserve 4 rounds by default (all "no data" until audits happen) —
+    // grows past 4 automatically the moment any BU reaches a 5th occurrence.
+    const AUDIT_TREND_MIN_ROUNDS = 4;
+    const maxRounds = Math.max(AUDIT_TREND_MIN_ROUNDS, ...BU_ORDER.map(bu => (vm.buHistory[bu] || []).length));
+
+    const labels = [];      // kept blank — _auditBarLabels draws the real labels
+    const catMeta = [];     // [{ bu, subLabel, met }] — met: true/false/null('no data')
+    const series = {};
+    AUDIT_EXECUTION_RATINGS.forEach(r => { series[r] = []; });
+    const roundStartIdx = [], roundSpan = [];
+    let idx = 0;
+    for (let round = 0; round < maxRounds; round++) {
+      const before = idx;
+      BU_ORDER.forEach(bu => {
+        const h = (vm.buHistory[bu] || [])[round];
+        if (!h) {
+          labels.push('');
+          catMeta.push({ bu, subLabel: 'no data', met: null });
+          AUDIT_EXECUTION_RATINGS.forEach(r => series[r].push(null));
+          idx++;
+          return;
+        }
+        labels.push('');
+        catMeta.push({ bu, subLabel: 'Initial audit', met: (h.originalPct['Conformity'] || 0) >= _auditKpiTarget });
+        AUDIT_EXECUTION_RATINGS.forEach(r => series[r].push(h.originalPct[r]));
+        idx++;
+        if (h.hasNC) {
+          labels.push('');
+          catMeta.push({ bu, subLabel: 'Re-audit', met: (h.actualPct['Conformity'] || 0) >= _auditKpiTarget });
+          AUDIT_EXECUTION_RATINGS.forEach(r => series[r].push(h.actualPct[r]));
+          idx++;
+        }
+      });
+      roundStartIdx.push(before);
+      roundSpan.push(idx - before);
+    }
+
+    // Modern pill-stack look: round only the OUTER corners of each bar (top
+    // of its topmost nonzero segment, bottom of its bottommost) — rounding
+    // every segment's every corner would notch the seams between Conformity/
+    // Major NC/Minor NC/OFI, which looks broken, not modern.
+    // NB: _auditPctBreakdown fills every rating with 0 (not null) when that
+    // rating has no items — only a true "no data" category is all-null — so
+    // "has a segment" must check > 0, not != null, or a 0%-but-present rating
+    // (commonly OFI) gets falsely treated as the top/bottom of the stack and
+    // steals the rounding onto an invisible zero-height segment.
+    const BAR_RADIUS = 8;
+    const datasets = AUDIT_EXECUTION_RATINGS.map((r, ratingIdx) => ({
+      label: AUDIT_RATING_SHORT[r], data: series[r],
+      backgroundColor: AUDIT_TREND_RATING_HEX[r],
+      hoverBackgroundColor: hexToRgba(AUDIT_TREND_RATING_HEX[r], 0.85),
+      stack: 'main',
+      barPercentage: 0.72, categoryPercentage: 0.78,
+      borderSkipped: false,
+      borderRadius: ctx => {
+        const di = ctx.dataIndex;
+        if (!(series[r][di] > 0)) return 0;
+        let firstIdx = -1, lastIdx = -1;
+        AUDIT_EXECUTION_RATINGS.forEach((rr, i) => {
+          if (series[rr][di] > 0) { if (firstIdx === -1) firstIdx = i; lastIdx = i; }
+        });
+        const isBottom = ratingIdx === firstIdx, isTop = ratingIdx === lastIdx;
+        return {
+          topLeft: isTop ? BAR_RADIUS : 0, topRight: isTop ? BAR_RADIUS : 0,
+          bottomLeft: isBottom ? BAR_RADIUS : 0, bottomRight: isBottom ? BAR_RADIUS : 0,
+        };
+      },
+    }));
+
+    const clrMuted = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#94a3b8';
+    const KPI_MET_COLOR = '#16a34a', KPI_MISS_COLOR = '#dc2626';
+
+    // Dashed divider between rounds + a "รอบ N" label centered over each
+    // round's span — span width varies (1 or 2 bars per BU within a round),
+    // hence the precomputed roundStartIdx/roundSpan rather than a fixed stride.
+    const _auditRoundDividers = {
+      id: 'auditRoundDividers',
+      beforeDatasetsDraw(chart) {
+        const { ctx, chartArea, scales: { x } } = chart;
+        if (maxRounds < 2) return;
+        ctx.save();
+        ctx.strokeStyle = hexToRgba(clrMuted, 0.5);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        for (let r = 1; r < maxRounds; r++) {
+          const boundaryIdx = roundStartIdx[r];
+          const dividerX = (x.getPixelForTick(boundaryIdx - 1) + x.getPixelForTick(boundaryIdx)) / 2;
+          ctx.beginPath();
+          ctx.moveTo(dividerX, chartArea.top);
+          ctx.lineTo(dividerX, chartArea.bottom);
+          ctx.stroke();
+        }
+        ctx.restore();
+      },
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea, scales: { x } } = chart;
+        ctx.save();
+        ctx.fillStyle = clrMuted;
+        ctx.font = '600 10px sans-serif';
+        ctx.textAlign = 'center';
+        for (let r = 0; r < maxRounds; r++) {
+          const startIdx = roundStartIdx[r], endIdx = startIdx + roundSpan[r] - 1;
+          const centerX = (x.getPixelForTick(startIdx) + x.getPixelForTick(endIdx)) / 2;
+          ctx.fillText(`รอบ ${r + 1}`, centerX, chartArea.top - 6);
+        }
+        ctx.restore();
+      },
+    };
+
+    // Hand-drawn 2-line tick labels (native x ticks are hidden): line 1 =
+    // "Initial audit"/"Re-audit"/"no data" (muted), line 2 = BU name, colored
+    // green/red by whether that specific bar's Conformity % met the KPI target.
+    const _auditBarLabels = {
+      id: 'auditBarLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea, scales: { x } } = chart;
+        ctx.save();
+        ctx.textAlign = 'center';
+        catMeta.forEach((m, i) => {
+          const cx = x.getPixelForTick(i);
+          ctx.fillStyle = clrMuted;
+          ctx.font = '9px sans-serif';
+          ctx.fillText(m.subLabel, cx, chartArea.bottom + 14);
+          ctx.fillStyle = m.met === null ? clrMuted : (m.met ? KPI_MET_COLOR : KPI_MISS_COLOR);
+          ctx.font = '700 10px sans-serif';
+          ctx.fillText(m.bu, cx, chartArea.bottom + 28);
+        });
+        ctx.restore();
+      },
+    };
+
+    _auditTrendChart = new Chart(cvs, {
+      type: 'bar',
+      plugins: [_auditRoundDividers, _auditBarLabels],
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 18, bottom: 36 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            filter: ctx => ctx.raw !== null,
+            cornerRadius: 8,
+            padding: 10,
+            boxPadding: 4,
+            titleFont: { weight: '600' },
+            callbacks: {
+              title: ctx => { const m = catMeta[ctx[0]?.dataIndex]; return m ? `${m.subLabel} · ${m.bu}` : ''; },
+              label: ctx => `${ctx.dataset.label}: ${ctx.raw}%`,
+            },
+          },
+          annotation: {
+            annotations: {
+              kpiLine: {
+                type: 'line', yMin: _auditKpiTarget, yMax: _auditKpiTarget,
+                borderColor: '#dc2626', borderWidth: 2, borderDash: [6, 4], borderCapStyle: 'round',
+              },
+            },
+          },
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { display: false } },
+          y: { stacked: true, beginAtZero: true, max: 100, grid: { color: hexToRgba(clrMuted, 0.2), drawTicks: false, borderDash: [3, 3] }, border: { display: false }, ticks: { color: clrMuted, padding: 8, callback: v => v + '%' } },
+        },
+      },
+    });
+  }
+
+  // KPI Setup modal — single "Target Compliance %" slider, All BU only,
+  // frontend-only (localStorage), redraws the chart's threshold line on Confirm.
+  const kpiModal = $('audit-kpi-modal');
+  if (kpiModal) {
+    const closeKpiModal = () => kpiModal.classList.add('hidden');
+    el.querySelector('#audit-kpi-setup-btn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      kpiModal.classList.remove('hidden');
+    });
+    kpiModal.querySelector('#audit-kpi-close')?.addEventListener('click', closeKpiModal);
+    kpiModal.querySelector('#audit-kpi-cancel')?.addEventListener('click', closeKpiModal);
+    kpiModal.querySelector('#audit-kpi-backdrop')?.addEventListener('click', closeKpiModal);
+    const slider = kpiModal.querySelector('.audit-kpi-slider');
+    const valEl = $('audit-kpi-row-val');
+    slider?.addEventListener('input', () => { if (valEl) valEl.textContent = slider.value + '%'; });
+    kpiModal.querySelector('#audit-kpi-confirm')?.addEventListener('click', () => {
+      _auditKpiTarget = Number(slider.value);
+      localStorage.setItem('auditKpiTargetCompliance', String(_auditKpiTarget));
+      closeKpiModal();
+      renderAuditDashboard();
+    });
+  }
 }
 
 function renderAuditDashboard() {
-  _mountAuditDashboard(_auditDashboardHtml(_computeAuditDashboardVm(_auditData)));
+  const vm = _computeAuditDashboardVm(_auditData);
+  _mountAuditDashboard(_auditDashboardHtml(vm), vm);
 }
 
 // ── Audit Plan ────────────────────────────────────────────────────────────────

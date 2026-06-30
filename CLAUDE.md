@@ -19,10 +19,10 @@ New Operator Monitoring/
 ├── .env                    # Secrets (ห้าม commit — อยู่ใน .gitignore แล้ว)
 ├── .env.example            # Template สำหรับ .env
 ├── templates/
-│   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab, ~823 บรรทัด)
+│   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab, ~1036 บรรทัด)
 ├── static/
-│   ├── css/styles.css      # Styles ทั้งหมด (~2645 บรรทัด)
-│   └── js/app.js           # Frontend logic ทั้งหมด (~7698 บรรทัด)
+│   ├── css/styles.css      # Styles ทั้งหมด (~2760 บรรทัด)
+│   └── js/app.js           # Frontend logic ทั้งหมด (~9874 บรรทัด)
 └── docs/                   # เอกสาร guide สำหรับ CSA Manager
 ```
 
@@ -57,7 +57,7 @@ New Operator Monitoring/
 - **Force Refresh** (ปุ่มฉุกเฉิน, แสดงเฉพาะ Admin Sign In ใน Admin Settings modal ใต้ "Configure Special Holidays"): ล้าง L1+L2 ของทุก module พร้อมกันในคลิกเดียว สำหรับกรณีแก้ Excel ตรงแล้วไม่อยากรอ TTL — cooldown 300 วินาทีต่อครั้ง เก็บ timestamp ไว้ใน **KV** (`force_refresh_last_at`, ไม่ใช่ in-process) เพื่อให้ cooldown ถูกต้องข้าม serverless instance ด้วย ดู `/api/admin/force-refresh` (POST), `/api/admin/force-refresh-status` (GET) ใน `app.py`
 
 ### Frontend (Vanilla JS)
-- ไม่ใช้ framework — `static/js/app.js` เป็น plain JS ~8900+ บรรทัด
+- ไม่ใช้ framework — `static/js/app.js` เป็น plain JS ~9900+ บรรทัด
 - ใช้ Chart.js v4 (CDN) + `chartjs-plugin-annotation` สำหรับกราฟ
 - ใช้ jsPDF (CDN) สำหรับ export PDF
 - แบ่งเป็น tab หลัก 6 แท็บ: `newOperator`, `jumper`, `trainer`, `sewingOperator`, `gica`, `audit`
@@ -109,9 +109,17 @@ New Operator Monitoring/
 | GICA paired | `.gica-modal--paired-left`, `.gica-modal--paired-right` (side-by-side modal layout) |
 | KPI BU tabs | `.gica-kpi-bu-tabs`, `.gica-kpi-bu-tab`, `.gica-kpi-bu-tab--active` |
 | Audit Create Form modal | `.audit-form-modal__panel`, `.audit-form-modal__body`, `.audit-form-modal__footer`, `.audit-btn`, `.audit-btn--cancel`, `.audit-btn--confirm` — **เจตนาแยกจาก `.gica-kpi-*`** ไม่ใช้ปนกัน แม้หน้าตาคล้าย KPI Setup modal |
+| Audit Trend KPI Setup | `.audit-kpi-setup-btn`, `.audit-kpi-modal__panel`, `.audit-kpi-modal__body`, `.audit-kpi-modal__desc`, `.audit-kpi-row`, `.audit-kpi-row__label`, `.audit-kpi-row__val`, `.audit-kpi-slider` — เหตุผลเดียวกับ Create Form modal (ของตัวเอง ไม่ปนกับ `.gica-kpi-*`) ส่วน modal scaffold (`.gica-modal`, `.gica-modal__backdrop/__panel/__head/__close/__body`) กับปุ่ม footer (`.audit-btn*`) reuse ของเดิมตรงๆ เพราะเป็น generic infra ไม่ใช่ฟีเจอร์เฉพาะ GICA |
+| Stat card sub list modifier | `.stat-card__sub--flush` (ไม่มี border-top/margin-top) — ใช้เมื่อ `.stat-card__sub` เป็น element แรกในการ์ด (ไม่มีอะไรอยู่เหนือมันให้คั่น) |
 | Container | `#gica-summary`, `#jtp-summary`, `#trainer-summary` (layout เป็น CSS ไม่ใช่ JS) |
 
 **Known Issue:** Global unscoped `table { min-width:1050px; } th { background:var(--blue); }` ที่ ~line 1593 leak เข้าไปใน `<table>` ทุกตัว — workaround ด้วย div+grid (เช่น gica-compare) แต่ยังไม่ได้แก้ที่ root
+
+**Trap:** `.stat-card__sub-row strong { font-size:16px }` / `span { font-size:11px }` เป็นค่า hardcode
+ไว้สำหรับ use case เดิมที่ตั้งใจให้ตัวเลขเด่น (เคยใช้ผิด context ในการ์ด Audit Dashboard row 2-4 มาแล้วรอบหนึ่ง
+ตัวเลขเลยใหญ่เกินสัดส่วน) ถ้าต้องการ label+value แบบเล็กเท่ากันทั้งคู่ (เช่น breakdown 3-5 แถวในการ์ดเล็ก) ให้ใช้
+`.u-between` พร้อม inline `font-size:0.74rem` บนตัว row แทน (pattern ของการ์ด "Total employees" ใน GICA,
+`_gicaSummaryHtml`) — ไม่ใช่ `.stat-card__sub-row`
 
 **ห้าม:**
 - ❌ `container.style.cssText = '...'` — layout ต้องอยู่ใน CSS rule (`#xxx-summary { ... }`)
@@ -152,7 +160,7 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 ### 4. Cache-busting (สำคัญ — ลืมบ่อย)
 
 ทุกครั้งที่แก้ `app.js` หรือ `styles.css` ต้อง **bump `?v=` ใน `index.html`**
-(ปัจจุบัน `styles.css?v=158`, `app.js?v=356`) ไม่งั้น browser cache ไฟล์เก่า
+(ปัจจุบัน `styles.css?v=161`, `app.js?v=369`) ไม่งั้น browser cache ไฟล์เก่า
 
 ---
 
@@ -515,9 +523,11 @@ Plan เท่านั้น (`_auditSwitchSubtab('execution')` เรียก
 ใช้เวลาหลายวินาที) ถ้า error จะ re-enable ปุ่มกลับให้กดใหม่ได้ ถ้า success ไม่ต้อง re-enable เพราะ
 `_auditRefetch()` re-render panel ทั้งก้อนใหม่อยู่แล้ว (ปุ่มใหม่จะ enable เองโดย default)
 
-### Dashboard — KPI cards + per-BU donuts (same CSS toolbox as GICA Performance)
-Sub-tab แรกของ Audit คือ Dashboard — ใช้ design system เดียวกับ GICA Performance page เป๊ะ (`stat-grid`,
-`.bu-name`/`.bu-head`, `.mini-bar__*`, leader-line SVG donut) ไม่สร้าง pattern ใหม่ ดูหัวข้อ
+### Dashboard — 5 แถว
+Sub-tab แรกของ Audit คือ Dashboard — แถว 1 ใช้ design system เดียวกับ GICA Performance page เป๊ะ (`stat-grid`,
+`.bu-name`/`.bu-head`, leader-line SVG donut) แถว 2-4 เป็นการ์ด per-BU operational (Finding/CAR pipeline,
+Plan pipeline, Major NC ซ้ำบ่อยสุด) แทนที่ BU rating donut เดิมที่เคยอยู่แถว 2 (ของเดิมข้อมูลซ้ำกับสิ่งที่
+แถว 5 แสดงอยู่แล้ว เลยเปลี่ยนมาโชว์ operational data ที่ไม่ซ้ำใครแทน) ดูหัวข้อ
 [CSS Toolbox](#1-css-toolbox-design-system--เขียน-class-ไม่ใช่-inline) ด้านบน
 
 **แถว 1 — 4 การ์ด (`stat-grid--4`):**
@@ -529,28 +539,84 @@ Sub-tab แรกของ Audit คือ Dashboard — ใช้ design system
 | Original Score | Donut เดียวกัน แต่อ่านจาก `Score` ดิบ (ไม่เปลี่ยนแปลง) — ไม่ใช่ flip card แล้ว (เคยลองทำ flip แต่เปลี่ยนใจ แยกเป็นการ์ดถาวรแทน) | `e.Score` ของทุก execution |
 | Overall Status | Donut สัดส่วน Plan Status ทั้งหมด (Planned/Issued/Pending Approval/Completed/Cancelled) — center text = % Completion Rate | `data.plans` |
 
-**แถว 2 — 6 การ์ด (`stat-grid--6`):** หนึ่งการ์ดต่อ BU แสดง donut เล็กของ rating breakdown จาก
-**Plan ล่าสุดที่มี execution data เท่านั้น** (`PlanID` สูงสุดของ BU นั้นที่มีแถวใน `executions`) — BU ที่ยังไม่มี
-Plan ใดมี execution เลยจะโชว์การ์ดจาง (`.stat-card--empty`) ข้อความ "— no data —" เหมือน pattern ของ GICA
-
-**Donut renderer ใช้ร่วมกัน** — `_leaderDonut(counts, tot, categories, colorOf, labelOf, opts, center)` เป็น
-generic SVG leader-line donut (รับ category list + color/label resolver + center-text callback) ส่วน
+**Donut renderer ใช้ร่วมกัน (แถว 1 เท่านั้น)** — `_leaderDonut(counts, tot, categories, colorOf, labelOf, opts, center)`
+เป็น generic SVG leader-line donut (รับ category list + color/label resolver + center-text callback) ส่วน
 `ratingDonut()` (4 ratings, center = Compliance %) กับ `statusDonut()` (5 plan statuses, center = Completion
 Rate %) เป็น thin wrapper รอบฟังก์ชันนี้ — ขยาย category ใหม่ในอนาคตให้เขียน wrapper ใหม่แบบนี้ ไม่ต้อง
-duplicate SVG logic ทั้งก้อน
+duplicate SVG logic ทั้งก้อน **สี**: `AUDIT_RATING_HEX` (4 ratings, ใช้กับแถว 1) และ `AUDIT_PLAN_STATUS_HEX`
+(5 statuses) เป็น literal hex (ไม่ใช่ CSS var) เพื่อให้ใช้ใน SVG `stroke`/`fill` ได้ตรงๆ — แยกจาก
+`AUDIT_RATING_COLOR`/`AUDIT_STATUS_COLOR` เดิมที่เป็น semantic class name (`ok`/`warn`/`danger`/`muted`)
+สำหรับ badge เท่านั้น (mirror แนวทางเดียวกับ `GICA_GRADE_COLORS` ของ GICA)
 
-**สี:** `AUDIT_RATING_HEX` (4 ratings) และ `AUDIT_PLAN_STATUS_HEX` (5 statuses) เป็น literal hex (ไม่ใช่
-CSS var) เพื่อให้ใช้ใน SVG `stroke`/`fill` ได้ตรงๆ — แยกจาก `AUDIT_RATING_COLOR`/`AUDIT_STATUS_COLOR` เดิม
-ที่เป็น semantic class name (`ok`/`warn`/`danger`/`muted`) สำหรับ badge เท่านั้น (mirror แนวทางเดียวกับ
-`GICA_GRADE_COLORS` ของ GICA)
+**แถว 2 — Finding/CAR Pipeline ต่อ BU (`stat-grid--6`):** segmented bar (`.pbar`, `display:flex`) สัดส่วน
+Open(`var(--danger)`)/Responded(`var(--warn)`)/Approved(`var(--ok)`) ของ `AuditFinding` ทั้งหมดของ BU นั้น
+(`f.BU === bu && planIds.has(f.PlanID)` — กรองด้วย Category/Year filter เดียวกับการ์ดอื่น) + breakdown 3 แถว
++ badge "ค้างนานสุด X วัน" (max ของ `_auditDaysSince(f.OpenedAt)` เฉพาะ finding ที่ยังไม่ `Approved`)
+
+**แถว 3 — Audit Plan Pipeline ต่อ BU (`stat-grid--6`):** breakdown 5 สถานะ Plan ของ BU นั้น
+(`AUDIT_PLAN_STATUS_LIST`, สี dot จาก `AUDIT_PLAN_STATUS_HEX`) + completion rate bar
+(`Completed / total` ทุกสถานะรวม Cancelled)
+
+**แถว 4 — Top 3 Major NC ซ้ำบ่อยสุดต่อ BU (`stat-grid--6`):** rank badge (1/2/3) + item text (truncate
+ellipsis) + จำนวนครั้ง — นับเฉพาะ `e.Score === 'Major Non-Conformity'` (**ไม่รวม** Minor NC) อิงจาก `Score`
+ดิบ (ไม่ใช่ `ActualResult` ที่ถูกแก้แล้ว — เหตุผลเดียวกับการ์ด "Original Score") join item text ผ่าน
+`Plan.AuditTitle`(=Category)+`FormVersion`(=Version) เข้า `AuditTemplate` (join เดียวกับที่
+`_computeAuditExecutionVm()` ใช้สำหรับ Execution sub-tab)
+
+แถว 2/3/4 gate empty-state ด้วย `vm.planCountByBu[bu]` (BU นี้เคยมี Plan ในตัวกรองปัจจุบันไหม) **ไม่ใช่**
+จำนวน finding/NC ที่เจอ — 0 finding หรือ 0 Major NC ซ้ำทั้งที่มี Plan คือข่าวดี (ไม่เคยต้องเปิด CAR / ไม่มี
+NC ซ้ำเลย) แสดงเป็นข้อความเงียบๆ ("— ไม่มี Finding —" / "— ไม่มี Major NC ที่พบซ้ำ —") ไม่ใช่การ์ดจาง
+`.stat-card--empty` แบบ "— no data —" ที่สงวนไว้สำหรับ BU ที่ไม่เคยถูกตรวจเลย
+
+⚠️ **ห้ามใช้ `.stat-card__sub-row`** กับ breakdown list ของแถว 2-4 — class นั้น hardcode
+`strong{font-size:16px}` ไว้สำหรับ use case อื่น (เจอบั๊กตัวเลขใหญ่เกินสัดส่วนการ์ดมาแล้วรอบหนึ่ง) ใช้
+`.u-between` พร้อม inline `font-size:0.74rem` บนตัว row แทนเสมอ (ดู [CSS Toolbox](#1-css-toolbox-design-system--เขียน-class-ไม่ใช่-inline) ด้านบน)
+
+**แถว 5 — Audit Trend chart ("Initial Audit vs Re-audit"):** การ์ดเต็มความกว้าง (`card card--section`)
+มีปุ่ม KPI Setup เหมือน Expectation Matrix ของ GICA แต่ data/logic ต่างกันโดยสิ้นเชิง:
+
+- **Canvas Chart.js stacked bar** (`#audit-trendChart`) — สร้าง/destroy ผ่าน `_auditTrendChart` (module
+  variable เดียว ไม่ใช่ dict แบบ `_gicaCharts`)
+- **แกน X จัดล่วงหน้าตามรอบ** — รอบ #1 ไล่ทุก BU ตาม `BU_ORDER` (`G1,G3,G2,G4,TRM,EA` เดียวกับ GICA) ก่อน
+  แล้วค่อยรอบ #2 ฯลฯ จำนวนรอบ = `Math.max(AUDIT_TREND_MIN_ROUNDS=4, ...จำนวนรอบจริงของแต่ละ BU)` — เตรียม
+  4 รอบไว้เป็นค่าเริ่มต้นเสมอแม้ยังไม่มีข้อมูล ("no data") แล้วขยายเกิน 4 อัตโนมัติเมื่อ BU ไหนตรวจถึงครั้งที่ 5
+- **1 หมวด = 1 แท่ง** (ไม่ใช่คู่) — "Initial audit" (จาก `Score`) มีเสมอเมื่อมีข้อมูล ส่วน "Re-audit" (จาก
+  `ActualResult`) จะมีก็ต่อเมื่อ `h.hasNC === true` เท่านั้น (audit logic: ตรวจครั้งแรกสะอาด = ไม่มี CAR =
+  ไม่มี Re-audit) ดังนั้นแต่ละ BU+รอบมี 0("no data")/1/2 แท่ง ไม่คงที่
+- **แต่ละแท่งเป็น stack 4 ส่วน** (Conformity/Major NC/Minor NC/OFI) — เปอร์เซ็นต์มาจาก `_auditPctBreakdown(counts, tot)`
+  (largest-remainder rounding, **ไม่ใช่** `Math.round()` อิสระทีละตัว — ปัดอิสระทำให้ผลรวมได้ 99 หรือ 101
+  แล้วแท่งสูงไม่เท่ากันทั้งที่ tot เท่ากัน เจอบั๊กนี้มาแล้วรอบหนึ่ง) สีใช้ `AUDIT_TREND_RATING_HEX` (เขียวมินต์/
+  โรสอ่อน/เหลืองอำพัน/เทาฟ้าอ่อน) ซึ่งเป็นเวอร์ชันสว่างกว่า `AUDIT_RATING_HEX` — แยกชุดสีเพราะ `AUDIT_RATING_HEX`
+  (เข้ม) เหมาะกับ accent เล็กๆ (donut/badge) แต่ดูหนักเกินไปตอนเป็นพื้นที่แท่งใหญ่ๆ ของกราฟนี้ legend สีในหัวการ์ด
+  ก็ใช้ `AUDIT_TREND_RATING_HEX` ให้ตรงกับแท่งจริง
+- **มุมโค้งเฉพาะขอบนอกของสแต็ก** — `borderRadius` เป็น callback ต่อ dataset เช็คว่า rating นั้นเป็น segment
+  แรก/สุดท้าย **ที่ค่า `> 0`** ของ index นั้นไหม (⚠️ ต้องเช็ค `> 0` ไม่ใช่ `!= null` — `_auditPctBreakdown` คืน
+  `0` ไม่ใช่ `null` ให้ rating ที่ไม่มีข้อมูล เช่น OFI ที่มักเป็น 0% เกือบทุกแท่ง ถ้าเช็คแค่ `!= null` จะนับ OFI
+  เป็น "บนสุด" เสมอทั้งที่สูง 0px มุมโค้งเลยไปติดอยู่กับ segment ที่มองไม่เห็น เจอบั๊กนี้มาแล้วรอบหนึ่ง)
+- **Label ใต้แท่งวาดเอง ไม่ใช้ native tick** — ปิด `x.ticks.display`/`x.grid.display` แล้ววาด 2 บรรทัดผ่าน
+  plugin `_auditBarLabels`: บรรทัดบน = "Initial audit"/"Re-audit"/"no data" (สีเทา), บรรทัดล่าง = ชื่อ BU
+  (สีเขียว/แดงตาม KPI met, เช็คจาก Conformity % ของแท่งนั้นเทียบ `_auditKpiTarget`) — ต้องวาดเองเพราะ
+  Chart.js native multi-line tick กำหนดสีแยกแต่ละบรรทัดไม่ได้ (สีเดียวทั้ง tick) ต้องเพิ่ม
+  `layout.padding.bottom` เองด้วยเพื่อเผื่อที่ให้ label ที่วาดเอง (ไม่มี native tick มาเผื่อให้แล้ว)
+- **เส้นแบ่งรอบ** — plugin `_auditRoundDividers` วาดเส้นประคั่นระหว่างรอบ + ป้าย "รอบ N" เหนือกลุ่มแท่งของ
+  แต่ละรอบ — คำนวณตำแหน่งจาก `roundStartIdx`/`roundSpan` ที่สะสมระหว่าง loop สร้างข้อมูล (**ไม่ใช่** คูณ
+  `index * buCount` คงที่ เพราะจำนวนแท่งต่อ BU ต่อรอบไม่เท่ากัน — 1 หรือ 2 แท่งแล้วแต่ `hasNC`)
+- **เส้น Target KPI** — `chartjs-plugin-annotation` เส้นประแนวนอนที่ `_auditKpiTarget` (ไม่ใช่ % คงที่)
+
+**KPI Setup** — modal เดียว slider เดียว "Target Compliance %" (**All BU เท่านั้น** ไม่มีแท็บแยก BU แบบ
+GICA) เก็บค่าใน **`localStorage`** (`auditKpiTargetCompliance`, default `80`) **ไม่ใช่ Excel/backend** —
+ตัดสินใจแบบนี้เพราะไม่อยากเพิ่ม kpi table ใหม่ใน `Audit_Monitoring.xlsx` (ต่างจาก GICA ที่มี `kpi_g1`...`kpi_trm`
+table จริง) ค่าเลย sync ข้ามเครื่อง/ข้าม user ไม่ได้ — ถ้าต้องการ sync ในอนาคตต้องเพิ่ม Excel table +
+backend route ใหม่
 
 **Category/Year filters** — อยู่แถวเดียวกับ `.audit-subtab-bar` ชิดขวาสุด (`.audit-dash-filters`,
 `margin-left:auto`) เห็นได้ทุก sub-tab ของ Audit (เพราะอยู่ใน nav row เดียวกัน) แต่มีผลแค่กับการ์ด Dashboard
-เท่านั้น — Category = ตัวเลือกจาก `Plan.AuditTitle` ที่ไม่ซ้ำกัน, Year = ตัวเลือกจาก 4 ตัวแรกของ `PlanID`
-(format `YYYY-MM-NNNN`) ไม่ใช่ column จริง ตัวเลือกถูกสร้างใหม่ทุกครั้งที่ `_auditData` รีเฟรช
-(`_populateAuditDashFilters()`, เก็บค่าที่เลือกไว้ถ้ายังมีอยู่ใน option ใหม่ ไม่งั้น reset เป็น "All")
-`_computeAuditDashboardVm()` filter `plans` ก่อนตามทั้งสองตัวกรอง แล้ว derive `executions` จาก `PlanID`
-ที่เหลือ ดังนั้นทุกการ์ดในแถบ Dashboard (รวม BU donut แถว 2) สอดคล้องกับตัวกรองเดียวกันเสมอ
+เท่านั้น (ทั้ง 5 แถว รวม Audit Trend chart) — Category = ตัวเลือกจาก `Plan.AuditTitle` ที่ไม่ซ้ำกัน, Year =
+ตัวเลือกจาก 4 ตัวแรกของ `PlanID` (format `YYYY-MM-NNNN`) ไม่ใช่ column จริง ตัวเลือกถูกสร้างใหม่ทุกครั้งที่
+`_auditData` รีเฟรช (`_populateAuditDashFilters()`, เก็บค่าที่เลือกไว้ถ้ายังมีอยู่ใน option ใหม่ ไม่งั้น reset
+เป็น "All") `_computeAuditDashboardVm()` filter `plans` ก่อนตามทั้งสองตัวกรอง แล้ว derive `executions`/
+`findings` จาก `PlanID` ที่เหลือ ดังนั้นทุกการ์ดในแถบ Dashboard (รวม Audit Trend chart แถว 5) สอดคล้องกับ
+ตัวกรองเดียวกันเสมอ
 
 ### Data Model — `Audit_Monitoring.xlsx`
 Workbook เดียว 4 table **ไม่แบ่งตาม BU** (ต่างจาก GICA ที่แบ่ง table ต่อ BU) — BU เป็นแค่ column value
@@ -751,8 +817,10 @@ column ของ Audit ห้ามใช้ `_gica_to_iso()` ตรงๆ
 | `_auditOpenPlanApprovalModal(planId)` / `_wireAuditPlanApprovalModal()` | Modal รวมทุก Responded finding ของ Plan — Auditor ใส่ comment + Approve ทีละข้อ → `PATCH /api/audit/findings/<id>/approve`, อัปเดต card in-place |
 | `_wireAuditApproveModal()` | Modal approve finding เดียวจากตาราง Finding/CAR โดยตรง (`#audit-approve-modal`) — ใช้ endpoint เดียวกับ Approval modal ข้างบน |
 | `_auditOpenCancelPlanModal(planId)` / `_wireAuditCancelPlanModal()` | Modal ยืนยัน Cancel Plan — เปิดจากการคลิกทั้งแถวของ Plan ที่ `Status==='Planned'` (`.audit-plan-row--cancellable`, เช็ค `e.target.closest('button')` ก่อนกัน conflict กับปุ่ม "เปิด Execution" ในแถวเดียวกัน) ยืนยันแล้วยิง `PATCH /api/audit/plans/<id>` ตรงๆ ด้วย `{Status:'Cancelled'}` รองรับ Esc ปิด |
-| `_computeAuditDashboardVm(data)` / `_auditDashboardHtml(vm)` | Dashboard compute→html — ดูหัวข้อ [Dashboard](#dashboard--kpi-cards--per-bu-donuts-same-css-toolbox-as-gica-performance) ด้านบนสำหรับรายละเอียดการ์ดและ filter |
-| `_leaderDonut(...)` / `ratingDonut(...)` / `statusDonut(...)` | Generic leader-line SVG donut renderer + 2 thin wrapper สำหรับ rating (Card 2/3 + BU row 2) และ plan status (Card 4) |
+| `_computeAuditDashboardVm(data)` / `_auditDashboardHtml(vm)` | Dashboard compute→html — ดูหัวข้อ [Dashboard](#dashboard--5-แถว) ด้านบนสำหรับรายละเอียดการ์ดและ filter ทั้ง 5 แถว |
+| `_leaderDonut(...)` / `ratingDonut(...)` / `statusDonut(...)` | Generic leader-line SVG donut renderer + 2 thin wrapper สำหรับ rating กับ plan status — ใช้แค่แถว 1 (`Overall Score`/`Original Score`/`Overall Status`) เท่านั้น ตั้งแต่แถว 2 เปลี่ยนไปเป็น Finding/Plan pipeline cards แล้ว |
+| `_auditPctBreakdown(counts, tot)` | Largest-remainder rounding — แปลง counts เป็น % ต่อ rating ที่รวมกันได้ 100 เป๊ะเสมอ (ไม่ใช้ `Math.round()` อิสระทีละตัว) ใช้ทั้งใน `buHistory` (แถว 5 chart) |
+| `_mountAuditDashboard(html, vm)` | นอกจาก `innerHTML` แล้วยัง build/destroy Chart.js instance ของแถว 5 (`_auditTrendChart`) + wire ปุ่ม/modal KPI Setup — มี inline plugin `_auditRoundDividers` (เส้นแบ่งรอบ) และ `_auditBarLabels` (วาด tick label เอง 2 บรรทัด สี/text แยกตามแท่ง) ดูรายละเอียด logic ทั้งหมดในหัวข้อ [Dashboard](#dashboard--5-แถว) แถว 5 ด้านบน |
 | `_populateAuditDashFilters()` / `_wireAuditDashFilters()` | สร้าง option ของ Category/Year filter จาก `_auditData` สดทุกครั้ง (เก็บค่าที่เลือกไว้ถ้ายังมีอยู่) + wire `change` listener → `renderAuditDashboard()` ตรงๆ ไม่ refetch |
 | `_gicaDaysBadge(iso)` | reuse ของ GICA ตรงๆ สำหรับ Days Remaining badge ใน Plan table (สีตาม threshold) — Plan ที่ `Status` เป็น `Completed`/`Cancelled` แสดง `—` แทนเสมอ (ไม่นับวันต่อแล้ว) |
 
