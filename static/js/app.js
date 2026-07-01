@@ -2803,15 +2803,14 @@ const ADMIN_LOCK_SECS  = 60;
 
 function _showLoginDoor(door) {
   $('loginDoors').classList.add('hidden');
-  ['csa', 'qe', 'admin'].forEach(d => {
+  ['csa', 'qe', 'qe-audit', 'admin'].forEach(d => {
     const panel = $('loginDoor-' + d);
     if (panel) panel.classList.toggle('hidden', d !== door);
   });
 }
 function _showLoginDoorPicker() {
   $('loginDoors').classList.remove('hidden');
-  ['csa', 'qe', 'admin'].forEach(d => $('loginDoor-' + d)?.classList.add('hidden'));
-  $('loginDoor-qe-audit')?.classList.add('hidden');
+  ['csa', 'qe', 'qe-audit', 'admin'].forEach(d => $('loginDoor-' + d)?.classList.add('hidden'));
 }
 
 async function _openViewOnlySession(route, btn, errEl) {
@@ -2920,17 +2919,9 @@ function initLoginDoors() {
   $('csaViewBtn')?.addEventListener('click', () => _openViewOnlySession('/manager-login', $('csaViewBtn'), $('csaViewError')));
   $('qeViewBtn')?.addEventListener('click', () => _openViewOnlySession('/qe-view-login', $('qeViewBtn'), $('qeViewError')));
 
-  // Audit Mode is its own nested picker (QE door → Audit Mode → Auditor/Auditee)
-  // rather than a direct password-gated button — Auditor still needs the door
-  // password, but Auditee (the person being audited, not QE staff) does not.
-  $('qeAuditModeBtn')?.addEventListener('click', () => {
-    $('loginDoor-qe')?.classList.add('hidden');
-    $('loginDoor-qe-audit')?.classList.remove('hidden');
-  });
-  $('qeAuditBack')?.addEventListener('click', () => {
-    $('loginDoor-qe-audit')?.classList.add('hidden');
-    $('loginDoor-qe')?.classList.remove('hidden');
-  });
+  // Audit Sign In — top-level door (Auditor still needs QE password via data-door="qe")
+  $('auditDoorBtn')?.addEventListener('click', () => _showLoginDoor('qe-audit'));
+  $('loginAdminBtn')?.addEventListener('click', () => _showLoginDoor('admin'));
   $('qeAuditeeBtn')?.addEventListener('click', () => _openViewOnlySession('/qe-auditee-login', $('qeAuditeeBtn'), $('qeAuditeeError')));
 
   // QE / Admin "Sign in with Microsoft" — must pass the door password first.
@@ -2951,12 +2942,7 @@ function initLoginDoors() {
       _hideDoorPasswordPanel();
       return;
     }
-    if (!$('loginDoor-qe-audit')?.classList.contains('hidden')) {
-      $('loginDoor-qe-audit').classList.add('hidden');
-      $('loginDoor-qe')?.classList.remove('hidden');
-      return;
-    }
-    const openDoor = ['csa', 'qe', 'admin'].find(d => !$('loginDoor-' + d)?.classList.contains('hidden'));
+    const openDoor = ['csa', 'qe', 'qe-audit', 'admin'].find(d => !$('loginDoor-' + d)?.classList.contains('hidden'));
     if (openDoor) _showLoginDoorPicker();
   });
 
@@ -8082,6 +8068,9 @@ const AUDIT_RATING_COLOR = {
   'Conformity': 'ok', 'Major Non-Conformity': 'danger',
   'Minor Non-Conformity': 'warn', 'OFI': 'muted',
 };
+// Plan statuses where Execution has actually produced a result — gates the
+// Report column icon in the Plan table (see _auditReportBtnHtml).
+const AUDIT_REPORT_STATUSES = ['Issued', 'Pending Approval', 'Completed'];
 
 let _auditData = { templates: [], plans: [], executions: [], findings: [] };
 let _auditLoaded = false;
@@ -8203,11 +8192,13 @@ async function initAuditTab() {
     _wireAuditPlanApprovalModal();
     _wireAuditPlanCreateModal();
     _wireAuditCancelPlanModal();
+    _wireAuditReportModal();
     _wireAuditFormModal();
     _wireAuditFormDetailModal();
     _wireAuditDashFilters();
     document.addEventListener('keydown', _auditExecutionEscHandler);
     document.addEventListener('keydown', _auditFormDetailEscHandler);
+    document.addEventListener('keydown', _auditTopNcEscHandler);
 
     _populateAuditDashFilters();
     renderAuditDashboard();
@@ -8435,7 +8426,7 @@ function _computeAuditDashboardVm(data) {
   const buTopNC = {};
   AUDIT_BUS.forEach(bu => {
     const buPlans = plans.filter(p => p.BU === bu);
-    const tally = {};
+    const tally = {}; // itemText → { count, occurrences: [{planId, description}] }
     buPlans.forEach(p => {
       const itemTextByNo = {};
       (data.templates || [])
@@ -8445,11 +8436,14 @@ function _computeAuditDashboardVm(data) {
         if (e.Score !== 'Major Non-Conformity') return;
         const text = itemTextByNo[e.ItemNo];
         if (!text) return;
-        tally[text] = (tally[text] || 0) + 1;
+        if (!tally[text]) tally[text] = { count: 0, occurrences: [] };
+        tally[text].count++;
+        const finding = (data.findings || []).find(f => f.ExecutionID === e.ExecutionID);
+        tally[text].occurrences.push({ planId: p.PlanID, description: finding?.Description || '' });
       });
     });
     buTopNC[bu] = Object.entries(tally)
-      .map(([itemText, count]) => ({ itemText, count }))
+      .map(([itemText, d]) => ({ itemText, count: d.count, occurrences: d.occurrences }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
   });
@@ -8482,7 +8476,7 @@ function _computeAuditDashboardVm(data) {
       });
       const hasNC = (originalCounts['Major Non-Conformity'] || 0) + (originalCounts['Minor Non-Conformity'] || 0) > 0;
       return {
-        planId: p.PlanID, total: tot, hasNC,
+        planId: p.PlanID, total: tot, hasNC, planStatus: p.Status,
         originalPct: _auditPctBreakdown(originalCounts, tot),
         actualPct: _auditPctBreakdown(actualCounts, tot),
       };
@@ -8706,7 +8700,7 @@ function _auditDashboardHtml(vm) {
       </div>
       ${top.length ? `<div class="stat-card__sub stat-card__sub--flush">
         ${top.map((it, i) => `
-        <div class="u-between" style="gap:8px;">
+        <div class="u-between audit-topnc-item" data-bu="${bu}" data-nc-idx="${i}" style="gap:8px;cursor:pointer;border-radius:4px;padding:2px 4px;margin:0 -4px;">
           <span style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
             <span style="width:18px;height:18px;border-radius:50%;background:${RANK_BG[i]};color:${RANK_FG[i]};font-size:0.65rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i + 1}</span>
             <span style="font-size:0.74rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escapeHtml(it.itemText)}</span>
@@ -8725,10 +8719,10 @@ function _auditDashboardHtml(vm) {
         ${buBarChart()}
       </div>
       <div class="stat-card">
-        ${ratingFaceHtml('Overall Score', vm.overallRatingCounts, vm.overallRatingTotal)}
+        ${ratingFaceHtml('Re-audit Score', vm.overallRatingCounts, vm.overallRatingTotal)}
       </div>
       <div class="stat-card">
-        ${ratingFaceHtml('Original Score', vm.originalRatingCounts, vm.originalRatingTotal)}
+        ${ratingFaceHtml('Initial Audit Score', vm.originalRatingCounts, vm.originalRatingTotal)}
       </div>
       <div class="stat-card">
         <div class="stat-card__label">Overall Status</div>
@@ -8826,7 +8820,7 @@ function _mountAuditDashboard(html, vm) {
         catMeta.push({ bu, subLabel: 'Initial audit', met: (h.originalPct['Conformity'] || 0) >= _auditKpiTarget });
         AUDIT_EXECUTION_RATINGS.forEach(r => series[r].push(h.originalPct[r]));
         idx++;
-        if (h.hasNC) {
+        if (h.hasNC && h.planStatus === 'Completed') {
           labels.push('');
           catMeta.push({ bu, subLabel: 'Re-audit', met: (h.actualPct['Conformity'] || 0) >= _auditKpiTarget });
           AUDIT_EXECUTION_RATINGS.forEach(r => series[r].push(h.actualPct[r]));
@@ -8991,6 +8985,31 @@ function _mountAuditDashboard(html, vm) {
       renderAuditDashboard();
     });
   }
+
+  // Row 4: Top Major NC — click row → modal with descriptions per occurrence
+  const topNcModal = $('audit-topnc-modal');
+  if (topNcModal) {
+    el.querySelectorAll('.audit-topnc-item').forEach(row => {
+      row.addEventListener('click', () => {
+        const bu = row.dataset.bu;
+        const idx = Number(row.dataset.ncIdx);
+        const item = (vm.buTopNC[bu] || [])[idx];
+        if (!item) return;
+        const bodyEl = topNcModal.querySelector('#audit-topnc-body');
+        if (bodyEl) {
+          bodyEl.innerHTML = item.occurrences.map((o, n) => `
+            <div class="audit-topnc-occurrence">
+              <div class="audit-topnc-occurrence__plan">Plan: ${escapeHtml(o.planId)}</div>
+              <div class="audit-topnc-occurrence__desc">${o.description ? escapeHtml(o.description) : '<span class="u-muted">— ไม่มี Description —</span>'}</div>
+            </div>`).join('');
+        }
+        topNcModal.classList.remove('hidden');
+      });
+    });
+    const closeTopNc = () => topNcModal.classList.add('hidden');
+    topNcModal.querySelector('#audit-topnc-close')?.addEventListener('click', closeTopNc);
+    topNcModal.querySelector('#audit-topnc-backdrop')?.addEventListener('click', closeTopNc);
+  }
 }
 
 function renderAuditDashboard() {
@@ -9036,6 +9055,15 @@ function _auditPlanActionBtn(p, canManage, canRespond) {
   }
 }
 
+// Report column: becomes available once Execution has actually produced a
+// result (Status left 'Planned') — Issued (NC found) and Completed (clean or
+// fully closed-out) both qualify, per AUDIT_REPORT_STATUSES. 'Planned' (not
+// executed yet) and 'Cancelled' (never executed) never show the icon.
+function _auditReportBtnHtml(p) {
+  if (!AUDIT_REPORT_STATUSES.includes(p.Status)) return '—';
+  return `<button class="audit-report-btn" data-plan-id="${escapeHtml(p.PlanID)}" title="View Audit Report">📄</button>`;
+}
+
 function _auditPlanHtml(vm) {
   const canManage = ['qe_audit', 'admin'].includes(currentRole);
   const canRespond = ['qe_audit', 'qe_auditee', 'admin'].includes(currentRole);
@@ -9054,9 +9082,7 @@ function _auditPlanHtml(vm) {
       <td class="drill-td" style="text-align:center;">${_auditPlanAuditorsHtml(p)}</td>
       <td class="drill-td" style="text-align:center;">${_auditBadge(p.Status, AUDIT_STATUS_COLOR[p.Status])}</td>
       <td class="drill-td" style="text-align:center;">${actionBtn}</td>
-      <td class="drill-td" style="max-width:220px;">
-        <div style="max-height:60px;overflow-y:auto;white-space:normal;word-break:break-word;">${escapeHtml(p.Notes || '—')}</div>
-      </td>
+      <td class="drill-td" style="text-align:center;">${_auditReportBtnHtml(p)}</td>
     </tr>`;
   }).join('') || `<tr><td class="drill-td" colspan="11">No audit plans yet</td></tr>`;
 
@@ -9079,7 +9105,7 @@ function _auditPlanHtml(vm) {
             <th class="drill-th" style="text-align:center;">Auditor</th>
             <th class="drill-th" style="text-align:center;">Status</th>
             <th class="drill-th" style="text-align:center;">Execution</th>
-            <th class="drill-th">Notes</th>
+            <th class="drill-th" style="text-align:center;">Report</th>
           </tr></thead><tbody>${rows}</tbody></table>
         </div>
       </div>
@@ -9107,6 +9133,10 @@ function _mountAuditPlan(html) {
 
   el.querySelectorAll('.audit-plan-approval-btn').forEach(btn => {
     btn.addEventListener('click', () => _auditOpenPlanApprovalModal(btn.dataset.planId));
+  });
+
+  el.querySelectorAll('.audit-report-btn').forEach(btn => {
+    btn.addEventListener('click', () => _auditOpenReportModal(btn.dataset.planId));
   });
 
   el.querySelectorAll('.audit-plan-row--cancellable').forEach(tr => {
@@ -9156,6 +9186,233 @@ function _wireAuditCancelPlanModal() {
     } catch (err) {
       if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
     }
+  });
+}
+
+// ── Audit Report (ISO 19011-style formal document, printable) ────────────────
+// Read-only — built entirely from the already-fetched _auditData (no new API
+// call). Score (immutable, recorded at audit time) drives the Checklist
+// Results/Executive Summary — same rationale as the Dashboard's "Original
+// Score" card (see CLAUDE.md) — while the CAR table shows live Finding status
+// since that legitimately evolves after the report is first generated.
+function _computeAuditReportVm(data, planId) {
+  const plan = (data.plans || []).find(p => p.PlanID === planId) || null;
+  if (!plan) return { plan: null };
+
+  const tg = _auditTemplateGroups(data.templates || [])
+    .find(t => t.category === plan.AuditTitle && t.version === plan.FormVersion) || null;
+  const templateItems = (data.templates || [])
+    .filter(t => t.Category === plan.AuditTitle && t.Version === plan.FormVersion)
+    .sort((a, b) => (a.ItemNo ?? 0) - (b.ItemNo ?? 0));
+
+  const execByItem = {};
+  (data.executions || []).filter(e => e.PlanID === planId).forEach(e => { execByItem[e.ItemNo] = e; });
+
+  const items = templateItems.map(t => {
+    const e = execByItem[t.ItemNo] || null;
+    return {
+      itemNo: t.ItemNo,
+      itemText: t.ItemText,
+      section: String(t.Section || '').trim(),
+      score: e ? e.Score : '',
+      comment: e ? e.Comment : '',
+    };
+  });
+
+  const counts = _auditEmptyRatingCounts();
+  let total = 0;
+  items.forEach(it => { if (it.score && counts.hasOwnProperty(it.score)) { counts[it.score]++; total++; } });
+  const pct = _auditPctBreakdown(counts, total);
+  const compliancePct = total ? Math.round((counts['Conformity'] / total) * 100) : null;
+
+  const findings = (data.findings || [])
+    .filter(f => f.PlanID === planId)
+    .sort((a, b) => (a.FindingID ?? 0) - (b.FindingID ?? 0));
+  const ofiItems = items.filter(it => it.score === 'OFI');
+
+  return { plan, tg, items, counts, pct, total, compliancePct, findings, ofiItems };
+}
+
+function _auditReportHtml(vm) {
+  if (!vm.plan) return '<p class="u-muted">ไม่พบข้อมูล Audit Plan นี้</p>';
+  const p = vm.plan;
+  const auditors = [p.Auditor1, p.Auditor2, p.Auditor3].map(a => String(a || '').trim()).filter(Boolean);
+  // Signature line always signs as Auditor1 (primary auditor of record), even
+  // when a Plan has 2-3 auditors — the "Auditor(s)" meta row above still lists
+  // everyone, but only one person signs the report.
+  const primaryAuditor = String(p.Auditor1 || '').trim();
+  const todayStr = _auditFmtDate(new Date().toISOString().slice(0, 10));
+  const meetsTarget = vm.compliancePct != null && vm.compliancePct >= _auditKpiTarget;
+
+  const metaRow = (label, value) => `
+    <div class="audit-report-meta-row"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value || '—')}</dd></div>`;
+
+  let _rptSection = null;
+  const checklistRows = (vm.items.length ? vm.items.map((it, i) => {
+    let out = '';
+    if (it.section && it.section !== _rptSection) {
+      _rptSection = it.section;
+      out = `<tr class="audit-report-section-row"><td class="audit-report-section-title" colspan="3">${escapeHtml(it.section)}</td></tr>`;
+    }
+    return out + `<tr>
+      <td class="audit-report-num">${i + 1}</td>
+      <td>${escapeHtml(it.itemText)}</td>
+      <td class="audit-report-result-cell">${escapeHtml(it.score || '—')}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="3">This Form has no checklist items</td></tr>`);
+
+  const carSection = vm.findings.length ? vm.findings.map((f, i) => `
+    <div class="audit-report-finding">
+      <div class="audit-report-finding__head">
+        <span class="audit-report-finding__num">Finding #${i + 1}</span>
+        <span class="audit-report-finding__badge">${escapeHtml(f.Severity)}</span>
+        <span class="audit-report-finding__badge">${escapeHtml(f.Status)}</span>
+      </div>
+      <div class="audit-report-finding__row"><strong>Description:</strong>${escapeHtml(f.Description || '—')}</div>
+      <div class="audit-report-finding__row"><strong>Root Cause:</strong>${escapeHtml(f.RootCause || '—')}</div>
+      <div class="audit-report-finding__row"><strong>Corrective Action:</strong>${escapeHtml(f.CorrectiveAction || '—')}</div>
+      <div class="audit-report-finding__row"><strong>Preventive Action:</strong>${escapeHtml(f.PreventiveAction || '—')}</div>
+      <div class="audit-report-finding__row"><strong>Responsible Person:</strong>${escapeHtml(f.ResponsiblePerson || '—')}</div>
+      <div class="audit-report-finding__row"><strong>Due Date:</strong>${_auditFmtDate(f.DueDate)}</div>
+    </div>`).join('') : `<p>No nonconformities were identified during this audit.</p>`;
+
+  const ofiSection = vm.ofiItems.length ? `
+    <div class="audit-report-section">
+      <h4>Opportunities for Improvement (OFI)</h4>
+      <table class="audit-report-table">
+        <colgroup><col style="width:26px;"><col style="width:55%;"><col></colgroup>
+        <thead><tr><th class="audit-report-num">#</th><th>Audit Item</th><th>Auditor Comment</th></tr></thead>
+        <tbody>${vm.ofiItems.map((it, i) => `
+          <tr>
+            <td class="audit-report-num">${i + 1}</td>
+            <td>${escapeHtml(it.itemText)}</td>
+            <td>${escapeHtml(it.comment || '—')}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '';
+
+  return `
+    <div class="audit-report-doc" id="audit-report-doc-content">
+      <div class="audit-report-header">
+        <div class="audit-report-header__company">Nan Yang Textile</div>
+        <div class="audit-report-header__title">Internal Audit Report</div>
+        <div class="audit-report-header__plan">Plan ID: ${escapeHtml(p.PlanID)} &nbsp;·&nbsp; Report Generated: ${todayStr}</div>
+      </div>
+
+      <div class="audit-report-section">
+        <h4>Audit Information</h4>
+        <div class="audit-report-meta-grid">
+          ${metaRow('Business Unit', p.BU)}
+          ${metaRow('Department', p.Department)}
+          ${metaRow('Audit Category', p.AuditTitle)}
+          ${metaRow('Audit Form / Version', vm.tg ? `${vm.tg.templateName} (v${vm.tg.version})` : '—')}
+          ${metaRow('Scheduled Date', _auditFmtDate(p.ScheduledDate))}
+          ${metaRow('Auditor(s)', auditors.join(', '))}
+          ${metaRow('Plan Status', p.Status)}
+          ${metaRow('Plan ID', p.PlanID)}
+        </div>
+      </div>
+
+      <div class="audit-report-section">
+        <h4>Objective, Scope &amp; Criteria</h4>
+        <p><strong>Objective:</strong> To determine the conformity of the audited area/process against the applicable audit criteria, and to identify opportunities for improvement.</p>
+        <p><strong>Scope:</strong> ${escapeHtml(p.BU)} — ${escapeHtml(p.Department)} (${escapeHtml(p.AuditTitle)})</p>
+        <p><strong>Criteria:</strong> ${vm.tg ? escapeHtml(vm.tg.templateName) + ' checklist, Version ' + escapeHtml(vm.tg.version) : '—'}</p>
+      </div>
+
+      <div class="audit-report-section">
+        <h4>Executive Summary</h4>
+        <div class="audit-report-summary-grid">
+          ${AUDIT_EXECUTION_RATINGS.map(r => `
+            <div class="audit-report-summary-cell"><strong>${vm.counts[r]}</strong><span>${AUDIT_RATING_SHORT[r]} (${vm.pct[r]}%)</span></div>`).join('')}
+          <div class="audit-report-summary-cell"><strong>${vm.compliancePct != null ? vm.compliancePct + '%' : '—'}</strong><span>Overall Compliance</span></div>
+        </div>
+        <p>Total checklist items audited: <strong>${vm.total}</strong>. Target compliance: <strong>${_auditKpiTarget}%</strong> — <strong>${vm.compliancePct != null ? (meetsTarget ? 'Target Achieved' : 'Target Not Achieved') : 'N/A'}</strong>.</p>
+      </div>
+
+      <div class="audit-report-section audit-report-pagebreak">
+        <h4>Checklist Results</h4>
+        <table class="audit-report-table audit-report-table--checklist">
+          <colgroup><col style="width:32px;"><col style="width:75%;"><col></colgroup>
+          <thead><tr><th class="audit-report-num">#</th><th>Audit Item</th><th style="text-align:center;">Result</th></tr></thead>
+          <tbody>${checklistRows}</tbody>
+        </table>
+      </div>
+
+      ${ofiSection}
+
+      <div class="audit-report-section audit-report-pagebreak">
+        <h4>Nonconformity &amp; Corrective Action (CAR)</h4>
+        ${carSection}
+      </div>
+
+      <div class="audit-report-sign-grid">
+        <div class="audit-report-sign-block">
+          <div class="audit-report-sign-line"></div>
+          <div class="audit-report-sign-name">${escapeHtml(primaryAuditor || '—')}</div>
+          <div class="audit-report-sign-role">Auditor</div>
+        </div>
+        <div class="audit-report-sign-block">
+          <div class="audit-report-sign-line"></div>
+          <div class="audit-report-sign-name">&nbsp;</div>
+          <div class="audit-report-sign-role">Auditee / Department Representative</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+let _auditReportCurrentPlan = null; // set on open — _auditPrintReport reads BU/PlanID from this for the filename
+
+function _auditOpenReportModal(planId) {
+  const vm = _computeAuditReportVm(_auditData, planId);
+  if (!vm.plan) return;
+  _auditReportCurrentPlan = vm.plan;
+  const bodyEl = $('audit-report-modal-body');
+  if (bodyEl) bodyEl.innerHTML = _auditReportHtml(vm);
+  $('audit-report-modal')?.classList.remove('hidden');
+}
+
+function _auditCloseReportModal() {
+  $('audit-report-modal')?.classList.add('hidden');
+  _auditReportCurrentPlan = null;
+}
+
+// Own print pipeline (separate overlay/body-class from the GICA schedule
+// drill-down print above) so this document's own @page (A4 portrait) never
+// clashes with GICA's (A4 landscape) — both can't share one @page rule.
+function _auditPrintReport() {
+  const doc = $('audit-report-doc-content');
+  if (!doc) return;
+  let overlay = document.getElementById('audit-report-print-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'audit-report-print-overlay';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = doc.outerHTML;
+
+  // Browser "Save as PDF" in the print dialog suggests document.title as the
+  // filename — there is no other hook for this with window.print(). Swap it
+  // in for the duration of the print job only, then restore it.
+  const originalTitle = document.title;
+  const p = _auditReportCurrentPlan;
+  if (p) document.title = `Audit Report_${p.BU}_${p.PlanID}`;
+
+  document.body.classList.add('audit-report-print-mode');
+  window.print();
+  document.body.classList.remove('audit-report-print-mode');
+  overlay.innerHTML = '';
+  document.title = originalTitle;
+}
+
+function _wireAuditReportModal() {
+  $('audit-report-modal-close')?.addEventListener('click', _auditCloseReportModal);
+  $('audit-report-modal-backdrop')?.addEventListener('click', _auditCloseReportModal);
+  $('audit-report-modal-done')?.addEventListener('click', _auditCloseReportModal);
+  $('audit-report-modal-print')?.addEventListener('click', _auditPrintReport);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('audit-report-modal')?.classList.contains('hidden')) _auditCloseReportModal();
   });
 }
 
@@ -9217,32 +9474,71 @@ function renderAuditTemplate() {
 }
 
 // ── Template: Form builder modal (Create / Edit-as-new-version) ───────────────
-// Static modal in index.html, wired once (like the other Audit modals).
+// Sections work like Google Forms: items live inside section blocks. The first
+// block is the "default" section (no title, cannot be removed). Named sections
+// can be added with "+ Add Section" and removed individually.
 
-function _auditAddFormItemRow(itemText) {
-  const container = $('audit-form-items-container');
-  if (!container) return;
+function _auditAddFormItemRow(itemText, sectionItemsEl) {
+  if (!sectionItemsEl) return;
   const row = document.createElement('div');
   row.className = 'audit-form-item-row';
-  row.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;';
   row.innerHTML = `
-    <span class="audit-form-item-no" style="padding-top:8px;font-size:0.8rem;color:var(--text-muted);min-width:22px;"></span>
-    <textarea class="gica-form-input audit-form-item-text" rows="1" style="flex:1;">${escapeHtml(itemText || '')}</textarea>
+    <span class="audit-form-item-no"></span>
+    <textarea class="gica-form-input audit-form-item-text" rows="1">${escapeHtml(itemText || '')}</textarea>
     <button type="button" class="audit-form-item-remove audit-btn audit-btn--cancel" style="padding:6px 10px;">✕</button>
   `;
   row.querySelector('.audit-form-item-remove').addEventListener('click', () => {
     row.remove();
     _auditRenumberFormItems();
   });
-  container.appendChild(row);
+  sectionItemsEl.appendChild(row);
   _auditRenumberFormItems();
 }
 
+// Numbers items globally across all section blocks (1, 2, 3, …).
 function _auditRenumberFormItems() {
-  $('audit-form-items-container')?.querySelectorAll('.audit-form-item-row').forEach((row, i) => {
-    const numEl = row.querySelector('.audit-form-item-no');
-    if (numEl) numEl.textContent = (i + 1) + '.';
+  let num = 1;
+  $('audit-form-items-container')?.querySelectorAll('.audit-form-item-row').forEach(row => {
+    const el = row.querySelector('.audit-form-item-no');
+    if (el) el.textContent = (num++) + '.';
   });
+}
+
+// Creates one section block. isDefault=true → no title input, no remove button.
+// existingItems is an array of item text strings to pre-populate.
+function _auditAddSectionBlock(sectionName, existingItems, isDefault) {
+  const container = $('audit-form-items-container');
+  if (!container) return;
+
+  const block = document.createElement('div');
+  block.className = 'audit-section-block' + (isDefault ? ' audit-section-block--default' : '');
+
+  block.innerHTML = isDefault ? `
+    <div class="audit-section-items"></div>
+    <button type="button" class="audit-add-item-to-section audit-btn audit-btn--cancel">+ Add Item</button>
+  ` : `
+    <div class="audit-section-header">
+      <input type="text" class="gica-form-input audit-section-name-input"
+             placeholder="ชื่อ Section (เช่น เอกสาร, กระบวนการ)" value="${escapeHtml(sectionName || '')}">
+      <button type="button" class="audit-section-remove-btn" title="ลบ Section">✕</button>
+    </div>
+    <div class="audit-section-items"></div>
+    <button type="button" class="audit-add-item-to-section audit-btn audit-btn--cancel">+ Add Item</button>
+  `;
+
+  block.querySelector('.audit-section-remove-btn')?.addEventListener('click', () => {
+    block.remove();
+    _auditRenumberFormItems();
+  });
+  block.querySelector('.audit-add-item-to-section').addEventListener('click', () => {
+    _auditAddFormItemRow('', block.querySelector('.audit-section-items'));
+  });
+
+  container.appendChild(block);
+
+  const itemsEl = block.querySelector('.audit-section-items');
+  (existingItems || []).forEach(text => _auditAddFormItemRow(text, itemsEl));
+  _auditRenumberFormItems();
 }
 
 function _auditOpenFormModal(existingForm) {
@@ -9251,17 +9547,30 @@ function _auditOpenFormModal(existingForm) {
     : 'Create New Form';
   $('audit-form-name').value = existingForm ? existingForm.templateName : '';
   $('audit-form-category').value = existingForm ? existingForm.category : '';
-
   const codeInput = $('audit-form-code');
   codeInput.value = existingForm ? existingForm.code : '';
   codeInput.disabled = !!existingForm;
 
   const container = $('audit-form-items-container');
   if (container) container.innerHTML = '';
+
   if (existingForm) {
-    existingForm.latestItems.forEach(it => _auditAddFormItemRow(it.ItemText));
+    // Group items by Section, preserving order of first appearance.
+    // Empty/null Section → belongs to the default (top) block.
+    const sectionOrder = [];
+    const sectionItems = {};
+    existingForm.latestItems.forEach(it => {
+      const sec = String(it.Section || '').trim();
+      if (!sectionItems.hasOwnProperty(sec)) { sectionOrder.push(sec); sectionItems[sec] = []; }
+      sectionItems[sec].push(it.ItemText);
+    });
+    // Default section always first (might be empty if all items have named sections).
+    _auditAddSectionBlock('', sectionItems[''] || [], true);
+    sectionOrder.filter(s => s !== '').forEach(name => {
+      _auditAddSectionBlock(name, sectionItems[name], false);
+    });
   } else {
-    _auditAddFormItemRow('');
+    _auditAddSectionBlock('', [], true);
   }
 
   $('audit-form-error')?.classList.add('hidden');
@@ -9273,7 +9582,9 @@ function _wireAuditFormModal() {
   $('audit-form-modal-close')?.addEventListener('click', close);
   $('audit-form-modal-cancel')?.addEventListener('click', close);
   $('audit-form-modal-backdrop')?.addEventListener('click', close);
-  $('audit-form-add-item-btn')?.addEventListener('click', () => _auditAddFormItemRow(''));
+
+  // "+ Add Section" adds a new named section block below the last one.
+  $('audit-form-add-section-btn')?.addEventListener('click', () => _auditAddSectionBlock('', [], false));
 
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
@@ -9288,9 +9599,16 @@ function _wireAuditFormModal() {
     const templateName = $('audit-form-name')?.value.trim();
     const category = $('audit-form-category')?.value.trim();
     const code = $('audit-form-code')?.value.trim();
-    const items = Array.from($('audit-form-items-container')?.querySelectorAll('.audit-form-item-text') || [])
-      .map(ta => ({ ItemText: ta.value.trim() }))
-      .filter(it => it.ItemText);
+
+    // Collect items with their section names from the DOM hierarchy.
+    const items = [];
+    $('audit-form-items-container')?.querySelectorAll('.audit-section-block').forEach(block => {
+      const sectionName = block.querySelector('.audit-section-name-input')?.value.trim() || '';
+      block.querySelectorAll('.audit-form-item-text').forEach(ta => {
+        const text = ta.value.trim();
+        if (text) items.push({ ItemText: text, Section: sectionName });
+      });
+    });
 
     if (!templateName || !category || !code) {
       if (errEl) { errEl.textContent = 'Form Name, Category และ Code จำเป็นต้องกรอก'; errEl.classList.remove('hidden'); }
@@ -9301,12 +9619,7 @@ function _wireAuditFormModal() {
       return;
     }
 
-    const record = {
-      TemplateName: templateName,
-      Category: category,
-      Code: code,
-      items,
-    };
+    const record = { TemplateName: templateName, Category: category, Code: code, items };
     try {
       await api('/api/audit/templates/forms', { method: 'POST', body: JSON.stringify(record) });
       close();
@@ -9328,10 +9641,38 @@ function _auditOpenFormDetailModal(form) {
     <span class="badge muted">${escapeHtml(form.category)}</span>
     ${form.isActive ? '<span class="badge ok">Active</span>' : '<span class="badge muted">Inactive</span>'}
   `;
-  $('audit-detail-items').innerHTML = form.latestItems.map((it, i) => `
-    <div style="padding:8px 0;border-bottom:1px solid var(--border-light);">
-      <strong>${i + 1}.</strong> ${escapeHtml(it.ItemText)}
-    </div>`).join('') || '<p class="u-muted">No items</p>';
+
+  // Group items by Section, preserving the order they appear.
+  // Items with no Section belong to the default (top) group (key = '').
+  const sectionOrder = [];
+  const sectionItems = {};
+  form.latestItems.forEach(it => {
+    const sec = String(it.Section || '').trim();
+    if (!sectionItems.hasOwnProperty(sec)) { sectionOrder.push(sec); sectionItems[sec] = []; }
+    sectionItems[sec].push(it);
+  });
+
+  let globalIdx = 0;
+  let detailHtml = sectionOrder.map(sec => {
+    const items = sectionItems[sec];
+    const rowsHtml = items.map(it => {
+      globalIdx++;
+      return `<div class="audit-detail-item">
+        <span class="audit-detail-item-num">${globalIdx}.</span>
+        <span>${escapeHtml(it.ItemText)}</span>
+      </div>`;
+    }).join('');
+
+    if (sec) {
+      return `<div class="audit-detail-section-block">
+        <div class="audit-detail-section-hdr">${escapeHtml(sec)}</div>
+        <div class="audit-detail-section-body">${rowsHtml}</div>
+      </div>`;
+    }
+    return `<div class="audit-detail-nosection">${rowsHtml}</div>`;
+  }).join('');
+
+  $('audit-detail-items').innerHTML = detailHtml || '<p class="u-muted">No items</p>';
 
   const editBtn = $('audit-detail-edit-btn');
   if (editBtn) {
@@ -9374,6 +9715,7 @@ function _computeAuditExecutionVm(data, planId) {
   const items = templateItems.map(t => ({
     itemNo: t.ItemNo,
     itemText: t.ItemText,
+    section: String(t.Section || '').trim(),
     existing: existingByItem[t.ItemNo] || null,
   }));
 
@@ -9407,8 +9749,14 @@ function _auditExecutionHtml(vm) {
       </div>`;
   }
 
-  const rows = vm.items.map((it, i) => `
-    <tr data-item-no="${it.itemNo}">
+  let _execSection = null;
+  const rows = (vm.items.length ? vm.items.map((it, i) => {
+    let out = '';
+    if (it.section && it.section !== _execSection) {
+      _execSection = it.section;
+      out = `<tr class="audit-exec-section-row"><td class="audit-exec-section-title" colspan="4">${escapeHtml(it.section)}</td></tr>`;
+    }
+    return out + `<tr data-item-no="${it.itemNo}">
       <td class="drill-td" style="text-align:center;">${i + 1}</td>
       <td class="drill-td" style="white-space:normal;word-break:break-word;">${escapeHtml(it.itemText)}</td>
       <td class="drill-td">
@@ -9421,7 +9769,8 @@ function _auditExecutionHtml(vm) {
           ? `<textarea class="gica-form-input audit-exec-comment-input" rows="1" style="width:100%;resize:vertical;min-height:30px;">${it.existing ? escapeHtml(it.existing.Comment) : ''}</textarea>`
           : `<div style="max-height:36px;overflow-y:auto;white-space:normal;word-break:break-word;">${escapeHtml(it.existing ? it.existing.Comment : '—')}</div>`}
       </td>
-    </tr>`).join('') || `<tr><td class="drill-td" colspan="4">This Form has no checklist items</td></tr>`;
+    </tr>`;
+  }).join('') : `<tr><td class="drill-td" colspan="4">This Form has no checklist items</td></tr>`);
 
   return `
     <div class="card card--section">
@@ -9450,6 +9799,10 @@ function _auditExecutionHtml(vm) {
 // — wired once in initAuditTab, not re-wired on every render.
 function _auditExecutionEscHandler(e) {
   if (e.key === 'Escape' && _auditActiveSubtab === 'execution') _auditCloseExecution();
+}
+
+function _auditTopNcEscHandler(e) {
+  if (e.key === 'Escape') $('audit-topnc-modal')?.classList.add('hidden');
 }
 
 function _auditCloseExecution() {
@@ -9496,9 +9849,8 @@ function _mountAuditExecution(html, vm) {
     try {
       await api('/api/audit/executions', { method: 'POST', body: JSON.stringify(payload) });
       await _auditRefetch();
+      _auditCloseExecution();
       showMessage('Execution results saved');
-      // _auditRefetch() re-renders this panel from scratch (new button, fresh
-      // listener) — nothing left to re-enable here on the success path.
     } catch (err) {
       if (errEl) { errEl.textContent = err.message; errEl.classList.remove('hidden'); }
       saveBtn.disabled = false;
@@ -9804,7 +10156,7 @@ function _auditOpenPlanCreateModal() {
       activeForms.map(f => `<option value="${escapeHtml(f.category)}" data-form-version="${f.latestVersion}">${escapeHtml(f.category)}</option>`).join('');
   }
 
-  ['audit-plan-dept', 'audit-plan-date', 'audit-plan-notes',
+  ['audit-plan-dept', 'audit-plan-date',
    'audit-plan-auditor1', 'audit-plan-auditor2', 'audit-plan-auditor3'].forEach(id => {
     const el = $(id);
     if (el) el.value = '';
@@ -9859,7 +10211,6 @@ function _wireAuditPlanCreateModal() {
       Auditor1: $('audit-plan-auditor1')?.value || '',
       Auditor2: $('audit-plan-auditor2')?.value || '',
       Auditor3: $('audit-plan-auditor3')?.value || '',
-      Notes: $('audit-plan-notes')?.value || '',
     };
     try {
       await api('/api/audit/plans', { method: 'POST', body: JSON.stringify(record) });

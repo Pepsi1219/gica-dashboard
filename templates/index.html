@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=161" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=172" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -167,6 +167,9 @@
         <p class="login-app-sub"> · CSA · GICA ·</p>
         <p class="login-version">v1.0.0</p>
 
+        <!-- Admin gear — top-right corner of login card -->
+        <button class="login-admin-gear" id="loginAdminBtn" title="Admin Sign In">⚙</button>
+
         <!-- Door selection -->
         <div id="loginDoors" class="login-doors">
           <button class="login-door-btn" data-door="csa">
@@ -177,9 +180,9 @@
             <span class="login-door-btn__title">QE Sign In</span>
             <span class="login-door-btn__sub">GICA</span>
           </button>
-          <button class="login-door-btn" data-door="admin">
-            <span class="login-door-btn__title">Admin Sign In</span>
-            <span class="login-door-btn__sub">Setup Mode</span>
+          <button class="login-door-btn" id="auditDoorBtn">
+            <span class="login-door-btn__title">Audit Sign In</span>
+            <span class="login-door-btn__sub">Internal Process Audit</span>
           </button>
         </div>
 
@@ -192,27 +195,25 @@
           <p id="csaViewError" class="login-error hidden"></p>
         </div>
 
-        <!-- QE sub-panel -->
+        <!-- QE sub-panel (View + Edit only, no Audit Mode button) -->
         <div id="loginDoor-qe" class="login-door-panel hidden">
           <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">QE Sign In</h3>
           <button id="qeViewBtn" class="login-btn">View Mode</button>
           <button id="qeEditBtn" class="login-btn" data-door="qe" data-login-route="/qe-edit-login">Edit Mode</button>
-          <button id="qeAuditModeBtn" class="login-btn">Audit Mode</button>
           <p id="qeViewError" class="login-error hidden"></p>
         </div>
 
-        <!-- QE Audit Mode sub-panel: Auditor (password-gated, full access) vs
-             Auditee (no password, Dashboard/Audit Plan/Finding-CAR only) -->
+        <!-- Audit Sign In sub-panel: Auditor (password-gated) vs Auditee (no password) -->
         <div id="loginDoor-qe-audit" class="login-door-panel hidden">
-          <button class="login-door-back" id="qeAuditBack">← back</button>
-          <h3 class="login-door-panel__title">Audit Mode</h3>
+          <button class="login-door-back" data-back="1">← back</button>
+          <h3 class="login-door-panel__title">Audit Sign In</h3>
           <button id="qeAuditorBtn" class="login-btn" data-door="qe" data-login-route="/qe-audit-login">Auditor</button>
           <button id="qeAuditeeBtn" class="login-btn">Auditee</button>
           <p id="qeAuditeeError" class="login-error hidden"></p>
         </div>
 
-        <!-- Admin sub-panel -->
+        <!-- Admin sub-panel (accessible via gear button) -->
         <div id="loginDoor-admin" class="login-door-panel hidden">
           <button class="login-door-back" data-back="1">← back</button>
           <h3 class="login-door-panel__title">Admin Sign In</h3>
@@ -942,10 +943,6 @@
                 <input type="text" id="audit-plan-auditor3" class="gica-form-input">
               </div>
               <button type="button" id="audit-plan-add-auditor-btn" class="audit-btn audit-btn--cancel" style="margin-bottom:14px;">+ Add Auditor</button>
-              <div class="gica-form-row">
-                <label class="gica-form-label">Notes</label>
-                <textarea id="audit-plan-notes" class="gica-form-input" rows="2"></textarea>
-              </div>
               <p id="audit-plan-error" class="login-error hidden"></p>
             </div>
             <div class="audit-form-modal__footer">
@@ -978,7 +975,7 @@
               </div>
               <label class="gica-form-label">Checklist Items</label>
               <div id="audit-form-items-container" style="margin-bottom:10px;"></div>
-              <button type="button" id="audit-form-add-item-btn" class="audit-btn audit-btn--cancel" style="margin-bottom:14px;">+ Add Item</button>
+              <button type="button" id="audit-form-add-section-btn" class="audit-btn audit-btn--cancel" style="margin-bottom:14px;">+ Add Section</button>
               <p id="audit-form-error" class="login-error hidden"></p>
             </div>
             <div class="audit-form-modal__footer">
@@ -991,12 +988,12 @@
         <!-- Template: Form detail (view all items of one form/version) -->
         <div id="audit-template-detail-modal" class="gica-modal hidden">
           <div class="gica-modal__backdrop" id="audit-detail-backdrop"></div>
-          <div class="gica-modal__panel audit-form-modal__panel">
+          <div class="gica-modal__panel audit-detail-modal__panel">
             <div class="gica-modal__head">
               <h4 id="audit-detail-title" style="margin:0;font-size:1rem;"></h4>
               <button class="gica-modal__close" id="audit-detail-close" aria-label="ปิด">✕</button>
             </div>
-            <div class="audit-form-modal__body">
+            <div class="audit-detail-modal__body">
               <div id="audit-detail-meta" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
               <div id="audit-detail-items"></div>
             </div>
@@ -1004,6 +1001,18 @@
               <button class="audit-btn audit-btn--cancel" id="audit-detail-close-btn">Close</button>
               <button class="audit-btn audit-btn--confirm hidden" id="audit-detail-edit-btn">Edit (New Version)</button>
             </div>
+          </div>
+        </div>
+
+        <!-- Audit Dashboard Row 4: Top Major NC detail modal -->
+        <div id="audit-topnc-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-topnc-backdrop"></div>
+          <div class="gica-modal__panel audit-topnc-modal__panel">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:0.95rem;color:var(--danger);">Major NC</h4>
+              <button class="gica-modal__close" id="audit-topnc-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="gica-modal__body audit-topnc-modal__body" id="audit-topnc-body"></div>
           </div>
         </div>
 
@@ -1027,10 +1036,26 @@
           </div>
         </div>
 
+        <!-- Audit Plan: Report modal (ISO 19011-style formal document, printable) -->
+        <div id="audit-report-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="audit-report-modal-backdrop"></div>
+          <div class="gica-modal__panel audit-report-modal__panel">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:1rem;">Audit Report</h4>
+              <button class="gica-modal__close" id="audit-report-modal-close" aria-label="ปิด">✕</button>
+            </div>
+            <div id="audit-report-modal-body" class="audit-report-modal__body"></div>
+            <div class="gica-kpi-modal__footer">
+              <button class="gica-kpi-btn gica-kpi-btn--cancel" id="audit-report-modal-done">Close</button>
+              <button class="gica-kpi-btn gica-kpi-btn--confirm" id="audit-report-modal-print">Print / Save as PDF</button>
+            </div>
+          </div>
+        </div>
+
       </div><!-- /#audit-dashboard -->
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=369"></script>
+  <script src="/static/js/app.js?v=385"></script>
 </body>
 </html>

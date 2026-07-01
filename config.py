@@ -217,9 +217,9 @@ AUDIT_TEMPLATE_TABLE = "AuditTemplate"
 # already enough to resolve "all items of this exact Form version" (joined
 # from AuditPlan.AuditTitle/FormVersion) without a synthetic ID column.
 AUDIT_TEMPLATE_COLS = [
-    "Template Name", "Category",
+    "Template Name", "Category", "Section",
     "Item No.", "Item Text", "Code", "Version", "Active",
-    "Created By", "Created At",
+    "Created By", "CreatedDate",
 ]
 
 # Fixed rating scale applied to every checklist item during Execution — no
@@ -236,8 +236,9 @@ AUDIT_PLAN_TABLE = "AuditPlan"
 # edited (new version) afterward.
 AUDIT_PLAN_COLS = [
     "PlanID", "BU", "Department", "FormVersion", "AuditTitle",
-    "ScheduledDate", "Auditor1", "Auditor2", "Auditor3", "Status", "CreatedBy", "Notes",
+    "ScheduledDate", "Auditor1", "Auditor2", "Auditor3", "Status", "CreatedBy",
 ]  # no CreatedAt column in the actual table; up to 3 auditors instead of 1 AuditorName
+# Notes column removed from AuditPlan (both Excel and here) — was unused.
 
 AUDIT_EXECUTION_TABLE = "AuditExecution"
 # ItemNo (replaces the old TemplateItemID FK) identifies the checklist item
@@ -303,8 +304,9 @@ AUDIT_FIELD_MAPS = {
         "Code":           "Code",
         "Version":        "Version",
         "Active":         "Active",
+        "Section":        "Section",
         "CreatedBy":      "Created By",
-        "CreatedAt":      "Created At",
+        "CreatedAt":      "CreatedDate",
     },
     "plan": {
         "PlanID":        "PlanID",
@@ -318,7 +320,6 @@ AUDIT_FIELD_MAPS = {
         "Auditor3":      "Auditor3",
         "Status":        "Status",
         "CreatedBy":     "CreatedBy",
-        "Notes":         "Notes",
     },
     "execution": {
         "ExecutionID":   "ExecutionID",

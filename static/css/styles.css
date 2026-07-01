@@ -484,7 +484,23 @@ body {
   text-align: left;
 }
 
-/* — 3-door selection (CSA / QE / Admin) — */
+/* — Admin gear button (top-right corner of login card) — */
+.login-admin-gear {
+  position: absolute;
+  top: 12px; right: 14px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,.45);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: color .15s, background .15s;
+}
+.login-admin-gear:hover { color: rgba(255,255,255,.9); background: rgba(255,255,255,.1); }
+
+/* — 3-door selection (CSA / QE / Audit) — */
 .login-doors { display: flex; flex-direction: column; gap: 12px; }
 .login-door-btn {
   display: flex;
@@ -2703,9 +2719,158 @@ tbody tr:hover { filter: brightness(.97); }
 .audit-plan-row--cancellable { cursor: pointer; transition: background .12s; }
 .audit-plan-row--cancellable:hover { background: var(--btn-bg); }
 
+/* ── Form builder: Section blocks (Google-Forms-style grouping) ── */
+.audit-section-block { margin-bottom: 12px; }
+.audit-section-block--default { /* no visual border — top items feel like a plain list */ }
+.audit-section-block:not(.audit-section-block--default) {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary, #6366f1);
+  border-radius: 6px;
+  padding: 10px 12px 8px;
+  background: var(--surface2);
+}
+.audit-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.audit-section-name-input { flex: 1; font-weight: 600; }
+.audit-section-remove-btn {
+  background: transparent; border: none; color: var(--text-muted);
+  font-size: 1rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; flex-shrink: 0;
+}
+.audit-section-remove-btn:hover { background: var(--border-light); color: var(--danger, #dc2626); }
+.audit-section-items { display: flex; flex-direction: column; gap: 6px; }
+.audit-form-item-row { display: flex; gap: 8px; align-items: flex-start; }
+.audit-form-item-no { padding-top: 8px; font-size: 0.8rem; color: var(--text-muted); min-width: 22px; flex-shrink: 0; }
+.audit-form-item-row .gica-form-input { flex: 1; }
+.audit-add-item-to-section { margin-top: 6px; font-size: 0.78rem; padding: 5px 12px; }
+
+/* Section header row in the Execution checklist table */
+.audit-exec-section-row { background: var(--surface2); }
+.audit-exec-section-title { font-weight: 700; font-size: 0.8rem; color: var(--primary, #6366f1); padding: 8px 10px !important; border-top: 1px solid var(--border) !important; letter-spacing: .02em; }
+
+/* Form detail modal — wider panel + scrollable body */
+.audit-detail-modal__panel { width: 640px; max-width: 96vw; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+.audit-detail-modal__body  { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 20px; }
+
+/* Section grouping in Form detail (Google-Forms-style cards) */
+.audit-detail-nosection { margin-bottom: 10px; }
+.audit-detail-section-block { border: 1px solid var(--border); border-left: 3px solid var(--primary, #6366f1); border-radius: 6px; background: var(--surface2); margin-bottom: 10px; overflow: hidden; }
+.audit-detail-section-hdr { font-weight: 700; font-size: 0.82rem; color: var(--primary, #6366f1); padding: 10px 14px 8px; border-bottom: 1px solid var(--border-light); letter-spacing: .02em; }
+.audit-detail-section-body { padding: 4px 0; }
+.audit-detail-item { display: flex; gap: 8px; padding: 7px 14px; border-bottom: 1px solid var(--border-light); }
+.audit-detail-item:last-child { border-bottom: none; }
+.audit-detail-item-num { color: var(--text-muted); font-size: 0.78rem; min-width: 22px; flex-shrink: 0; padding-top: 1px; }
+
+/* Top Major NC modal (Dashboard Row 4) */
+.audit-topnc-modal__panel { width: 560px; max-width: 96vw; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.audit-topnc-modal__body  { flex: 1; min-width: 0; overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+.audit-topnc-occurrence { border: 1px solid var(--border); border-left: 3px solid var(--danger); border-radius: 6px; background: var(--surface2); padding: 10px 14px; }
+.audit-topnc-occurrence__plan { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 5px; }
+.audit-topnc-occurrence__desc { font-size: 0.82rem; color: var(--text); white-space: pre-wrap; }
+.audit-topnc-item:hover { background: var(--surface2); }
+
+/* Section header row in the Audit Report (print document) */
+.audit-report-section-row { background: #f1f5f9; }
+.audit-report-section-title { font-weight: 700; font-size: 0.75rem; color: #334155; padding: 6px 8px !important; letter-spacing: .03em; text-transform: uppercase; }
+
 /* Respond / Approval plan-level modals (wider, scrollable body) */
 .audit-wide-modal__panel { width: 680px; max-width: 96vw; max-height: 90vh; display: flex; flex-direction: column; }
 .audit-wide-modal__body  { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Audit Report modal (ISO 19011-style formal document) — own classes,
+   deliberately NOT reusing .drill-th/.drill-td (that global table styling is
+   tuned for on-screen dashboards — heavy header color, forced min-width —
+   which looks wrong on a document meant to be printed on paper). ── */
+/* Override the base .gica-modal__panel's overflow:auto so the PANEL itself
+   never scrolls — only the body inside does. Without this, Chrome lets the
+   panel grow wider than 860 px and shows a panel-level horizontal scrollbar. */
+.audit-report-modal__panel { width: 860px; max-width: 96vw; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+/* min-width:0 is the critical fix: flex items default to min-width:auto, which
+   means they refuse to shrink below their content's intrinsic width. Without it,
+   a wide table inside the body forces the body wider than the panel, which is
+   the root cause of the horizontal overflow seen in production. overflow-x:hidden
+   clips any remaining overflow so no horizontal scrollbar ever appears here. */
+.audit-report-modal__body  { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 14px; background: var(--surface2); border-radius: 8px; }
+.audit-report-btn { padding: 5px 9px; font-size: 0.95rem; line-height: 1; }
+
+/* The document itself — fixed white/black "paper" look regardless of the
+   app's light/dark theme, since this is meant to be printed. */
+.audit-report-doc { background: #fff; color: #1a1a1a; padding: 28px 32px; border-radius: 6px; font-size: 0.8rem; line-height: 1.5; box-sizing: border-box; width: 100%; }
+.audit-report-header { text-align: center; border-bottom: 2px solid #1a1a1a; padding-bottom: 12px; margin-bottom: 16px; }
+.audit-report-header__company { font-size: 0.75rem; letter-spacing: .04em; text-transform: uppercase; color: #555; }
+.audit-report-header__title { font-size: 1.15rem; font-weight: 800; margin: 4px 0; }
+.audit-report-header__plan { font-size: 0.85rem; color: #444; }
+
+.audit-report-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-bottom: 16px; }
+.audit-report-meta-row { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dotted #ccc; padding: 3px 0; margin: 0; }
+.audit-report-meta-row dt { color: #555; font-weight: 600; }
+.audit-report-meta-row dd { margin: 0; text-align: right; }
+
+.audit-report-section { margin-bottom: 18px; }
+.audit-report-section h4 { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; border-bottom: 1px solid #1a1a1a; padding-bottom: 4px; margin: 0 0 8px; }
+.audit-report-section p { margin: 4px 0; }
+
+/* table-layout:fixed + word-break — without these, table-layout:auto lets
+   long unbroken cell content (long words, no wrap points) push column widths
+   past the table's own 100%, which overflows the printed A4 page's right
+   edge. Column widths themselves come from each table's own <colgroup> in
+   app.js (percentages relative to the table, not the page), which is what
+   actually keeps 9-column tables like the CAR one inside the page. */
+/* min-width:0 overrides the global unscoped `table { min-width:1050px }` rule
+   (~line 1593) that leaks into every <table>. Without it the table is forced
+   to 1050px, overflowing the 728px modal content area on-screen even though
+   print looks fine (printer DPI makes the canvas far wider than 1050px). */
+.audit-report-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 0.74rem; }
+.audit-report-table th, .audit-report-table td { border: 1px solid #ccc; padding: 5px 7px; text-align: left; vertical-align: top; overflow-wrap: break-word; word-break: break-word; }
+.audit-report-table th { background: #f1f5f9; color: #334155; font-weight: 700; }
+.audit-report-table .audit-report-num { text-align: center; }
+/* Checklist: Item column takes all remaining width and wraps freely;
+   Result column is fixed-width and centred. */
+.audit-report-table--checklist td { white-space: normal; }
+.audit-report-result-cell { text-align: center; white-space: nowrap; }
+
+.audit-report-summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 10px; }
+.audit-report-summary-cell { border: 1px solid #ccc; border-radius: 4px; padding: 8px; text-align: center; }
+.audit-report-summary-cell strong { display: block; font-size: 1.1rem; }
+.audit-report-summary-cell span { font-size: 0.68rem; color: #555; }
+
+/* CAR: one card per Finding, each field stacked on its own line (not a table
+   column) — Root Cause/Corrective/Preventive Action text is often long
+   free-form prose that reads far better full-width than squeezed into a
+   narrow table cell, and this sidesteps column-width tuning entirely. */
+.audit-report-finding { border: 1px solid #ccc; border-radius: 5px; padding: 8px 12px; margin-bottom: 10px; }
+.audit-report-finding__head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #ddd; }
+.audit-report-finding__num { font-weight: 800; }
+.audit-report-finding__badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 0.66rem; font-weight: 700; border: 1px solid #999; background: #f1f5f9; color: #334155; }
+.audit-report-finding__row { margin: 4px 0; overflow-wrap: break-word; word-break: break-word; }
+.audit-report-finding__row strong { margin-right: 4px; }
+
+.audit-report-sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 26px; }
+.audit-report-sign-block { text-align: center; }
+.audit-report-sign-line { border-top: 1px solid #1a1a1a; margin: 40px 10px 4px; }
+.audit-report-sign-name { font-weight: 600; }
+.audit-report-sign-role { font-size: 0.68rem; color: #555; }
+
+/* ===== PRINT (Audit Report) — own overlay/body-class/@page, kept separate
+   from the GICA schedule drill-down print pipeline above (which is A4
+   landscape) since a single @page rule can't serve two different
+   orientations; named page + `page` property scopes it to this overlay only
+   (Chromium-based browsers — degrades gracefully to the other @page's size
+   on engines without named-page support, not a hard failure). ===== */
+#audit-report-print-overlay { display: none; page: audit-report-page; }
+@media print {
+  @page audit-report-page { size: A4 portrait; margin: 15mm; }
+  body.audit-report-print-mode > *:not(#audit-report-print-overlay) { display: none !important; }
+  #audit-report-print-overlay { display: block !important; }
+  #audit-report-print-overlay .audit-report-doc { padding: 0; }
+  /* Page 1 = header + Audit Information + Objective/Scope/Criteria +
+     Executive Summary (natural flow, no break needed). Checklist Results
+     forces page 2; CAR always forces its own fresh page after that,
+     regardless of how many pages Checklist Results/OFI took. */
+  #audit-report-print-overlay .audit-report-pagebreak { break-before: page; page-break-before: always; }
+  /* Keep each table row / finding card from being cut mid-content across a
+     page boundary. */
+  #audit-report-print-overlay .audit-report-table tr { break-inside: avoid; page-break-inside: avoid; }
+  #audit-report-print-overlay .audit-report-finding { break-inside: avoid; page-break-inside: avoid; }
+}
 
 /* Finding card inside Respond / Approval modals */
 .audit-finding-card { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; background: var(--surface); }

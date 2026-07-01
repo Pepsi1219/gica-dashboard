@@ -1854,7 +1854,7 @@ def _auto_create_findings_for_plan(token, plan_id, nc_exec_rows, actor):
             'Description': item_text,
             'Status':      'Open',
             'OpenedBy':    actor,
-            'OpenedAt':    _datetime.utcnow().isoformat(),
+            'OpenedAt':    _datetime.utcnow().strftime('%Y-%m-%d'),
         }
         excel_rec = _audit_map_in('finding', new_finding)
         create_row(token, drive_id, item_id, f_table, f_cols, f_pk, excel_rec)
@@ -1953,7 +1953,7 @@ def _audit_write_create_form(token, form):
                 update_row_by_index(token, drive_id, item_id, table_name, cols, headers, r, {'Active': False})
 
     actor = _audit_actor_name()
-    now_iso = _datetime.utcnow().isoformat()
+    now_iso = _datetime.utcnow().strftime('%Y-%m-%d')
     created = []
     for idx, raw_item in enumerate(form.get('items') or [], start=1):
         item_text = str(raw_item.get('ItemText', '')).strip()
@@ -1962,6 +1962,7 @@ def _audit_write_create_form(token, form):
         record = {
             'TemplateName': form.get('TemplateName', ''),
             'Category':     form.get('Category', ''),
+            'Section':      str(raw_item.get('Section', '')).strip(),
             'ItemNo':       idx,
             'ItemText':     item_text,
             'Code':         code,
@@ -2036,7 +2037,7 @@ def api_audit_create_plan():
 
     record = {k: payload.get(k, '') for k in [
         'BU', 'Department', 'FormVersion', 'AuditTitle',
-        'ScheduledDate', 'Auditor1', 'Auditor2', 'Auditor3', 'Notes',
+        'ScheduledDate', 'Auditor1', 'Auditor2', 'Auditor3',
     ]}
     record['BU']     = bu
     record['Status'] = 'Planned'
@@ -2068,7 +2069,7 @@ def api_audit_update_plan(plan_id):
     payload = request.json or {}
     patch = {k: payload[k] for k in [
         'BU', 'Department', 'FormVersion', 'AuditTitle',
-        'ScheduledDate', 'Auditor1', 'Auditor2', 'Auditor3', 'Status', 'Notes',
+        'ScheduledDate', 'Auditor1', 'Auditor2', 'Auditor3', 'Status',
     ] if k in payload}
 
     try:
@@ -2167,7 +2168,7 @@ def api_audit_create_finding():
     record['BU']       = bu
     record['Status']   = 'Open'
     record['OpenedBy'] = _audit_actor_name()
-    record['OpenedAt'] = _datetime.utcnow().isoformat()
+    record['OpenedAt'] = _datetime.utcnow().strftime('%Y-%m-%d')
 
     try:
         created = call_graph(_audit_write_create, 'finding', record)
@@ -2291,7 +2292,7 @@ def _do_audit_finding_approve(token, finding_id, approver_comment):
     patch = {
         'Status':          'Approved',
         'ApprovedBy':      _audit_actor_name(),
-        'ApprovedAt':      _datetime.utcnow().isoformat(),
+        'ApprovedAt':      _datetime.utcnow().strftime('%Y-%m-%d'),
         'ApproverComment': str(approver_comment or '').strip(),
     }
     updated = call_graph(_audit_write_update, 'finding', finding_id, patch)

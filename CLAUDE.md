@@ -155,12 +155,60 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 ### 3. ตัดสินใจไว้แล้ว — ไม่ทำ
 
 - **ไม่ทำ State Management (Redux-style)** — module variable ที่มีอยู่ใช้เป็น state container ได้เลย
-- **GICA ยังใช้ Excel/OneDrive** — แผนย้ายไป Supabase หลัง Assessment Schedule phase เสร็จ
+- **กำลังจะย้าย Audit/CSA/GICA ไป Supabase** — ดู [Supabase Migration Plan](#supabase-migration-plan-planned)
+  ด้านล่าง (แทนที่แผนเดิมที่เขียนว่า "ย้าย GICA หลัง Assessment Schedule")
 
 ### 4. Cache-busting (สำคัญ — ลืมบ่อย)
 
 ทุกครั้งที่แก้ `app.js` หรือ `styles.css` ต้อง **bump `?v=` ใน `index.html`**
-(ปัจจุบัน `styles.css?v=161`, `app.js?v=369`) ไม่งั้น browser cache ไฟล์เก่า
+(ปัจจุบัน `styles.css?v=172`, `app.js?v=385`) ไม่งั้น browser cache ไฟล์เก่า
+
+---
+
+## Supabase Migration Plan (Planned)
+
+⚠️ **ยังไม่เริ่มลงมือ** — นี่คือทิศทางที่ตกลงกันแล้ว รอคำสั่งเริ่มจากผู้ใช้ทีละ Phase
+ถ้ากำลังจะแก้ Audit/CSA/GICA ให้อ่านส่วนนี้ก่อนเพื่อไม่ทำงานสวนทางแผน
+
+### เป้าหมาย
+ย้าย data ของ **Audit → CSA → GICA** (ตามลำดับนี้) จาก Excel/OneDrive ไป **Supabase PostgreSQL**
+และแทนที่ **auth ผู้ใช้ทั้งหมด** (Microsoft OAuth + 3-Door password + `MANAGER_REFRESH_TOKEN` ในฐานะ
+login) ด้วย **Supabase Auth (email/password)**
+
+**Jumper / Trainer ยังไม่ย้าย** — data ต้นทางมาจากระบบ NiSE ผ่านโปรเจ็ค `CSA co NiSE` (คนละ repo)
+ที่ push ขึ้น Excel แอปนี้อ่านอย่างเดียว การย้ายต้องแก้ repo นั้นด้วย เลยเลื่อนเป็น Phase สุดท้าย (ตัดสินใจทีหลัง)
+→ `MANAGER_REFRESH_TOKEN` **ยังต้องเก็บไว้** เป็น service credential อ่าน Jumper/Trainer Excel (ไม่ใช่ auth ผู้ใช้แล้ว)
+
+### การตัดสินใจที่ล็อกไว้แล้ว (ผู้ใช้เลือกเอง)
+1. **Auth: แทน Microsoft OAuth ทั้งหมด** ด้วย Supabase email/password — ตัด MSAL/`/login`/`/auth/callback`,
+   door password, `_AT_CACHE`, token rotation ทิ้ง Admin เลิกพึ่ง `ADMIN_EMAIL` env → ใช้ `role='admin'` ใน `profiles`
+2. **Authorization ทำที่ Flask backend** — frontend ส่ง Supabase JWT มากับ write request (`Authorization: Bearer`),
+   Flask verify ด้วย `SUPABASE_JWT_SECRET` → ดึง role จาก `profiles` → เช็คใน `require_writable` (เขียนใหม่)
+   Flask คุย Supabase ด้วย **service key** (bypass RLS) — RLS เป็นแค่ defense-in-depth (anon อ่านได้/เขียนไม่ได้)
+   Read request ไม่ต้องมี JWT ก็ได้ (anonymous อ่านปกติ)
+3. **แยก role ตามโมดูล** — `csa_user` (CSA), `qe_user` (GICA), `qe_audit`/`qe_auditee` (Audit), `admin` (ทุกโมดูล)
+   เก็บใน `profiles.role` (FK `auth.users`) ไม่มี account/ไม่ส่ง JWT = อ่านทุกโมดูลได้
+
+### ลำดับ Phase
+```
+Phase 0 — Supabase project + profiles table + supabase_client.py + supabase_auth.py
+Phase 1 — Audit (data → Supabase + auth cutover, เป็น proof-of-concept)
+Phase 2 — CSA   (data → Supabase, role csa_user/admin)
+Phase 3 — GICA  (data → Supabase, role qe_user/admin)
+Phase 4 — Jumper/Trainer (ตัดสินใจทีหลัง — ต้องแก้ repo CSA co NiSE ด้วย)
+```
+
+### สิ่งที่เปลี่ยนต่อโมดูลตอนย้าย
+- ลบ Graph API / Excel calls ของโมดูลนั้น + ลบ L2 KV cache ของโมดูลนั้น (L1 เบาๆ พอ, Supabase เร็ว)
+- **Audit เฉพาะ:** ลบ translation layer ทั้งชุด (`_audit_map_in`/`_audit_map_out`, `AUDIT_FIELD_MAPS`,
+  `AUDIT_*_COLS` ที่เป็นชื่อ Excel) — column ใน Supabase ตั้งชื่อสะอาด (snake_case) ตั้งแต่แรก
+- **GICA เฉพาะ:** test history 60 columns แบน → เก็บใน `tests JSONB` array แทน
+- **CSA เฉพาะ:** 6 workbook แยก dept → 1 table `csa_employees` มี column `bu` (query ข้าม BU ได้ทันที)
+- ต้องเขียน `migrate_<module>.py` อ่าน Excel ผ่าน Graph API → insert Supabase (รันครั้งเดียวตอน cutover)
+- computed fields ของ CSA (`business_rules.py`) ยังคำนวณฝั่ง backend เหมือนเดิม ไม่เก็บใน DB
+
+### env var ใหม่
+`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` (frontend)
 
 ---
 
@@ -168,31 +216,40 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 
 ### 3-Door Login System
 
-หน้า login มี 3 ประตู ผู้ใช้เลือกก่อนเข้าระบบ — QE Sign In มี 3 ปุ่มย่อย (View / Edit / **Audit**) และปุ่ม
-**Audit Mode เป็น nested picker อีกชั้น**: Auditor (ต้อง password) / Auditee (ไม่ต้อง password):
+> ⚠️ **จะถูกแทนที่ทั้งหมดด้วย Supabase Auth** — ดู [Supabase Migration Plan](#supabase-migration-plan-planned)
+> ด้านล่าง ส่วนนี้อธิบาย auth ปัจจุบัน (Microsoft OAuth) ที่ยังใช้อยู่จนกว่าจะ cutover
+
+หน้า login มี **3 ประตูหลัก** (CSA / QE / **Audit**) เรียงเป็นปุ่มในหน้าแรก + **ปุ่มเฟือง ⚙ มุมขวาบน
+ของ login card สำหรับ Admin** (`loginAdminBtn`, เข้า `_showLoginDoor('admin')`) — layout นี้เปลี่ยนแล้ว
+จากเดิมที่ Audit เคยซ่อนเป็น nested picker ใต้ QE และ Admin เคยเป็นปุ่มที่ 3 ในแถว:
 
 | Door | ประตู | ต้องรหัสผ่าน? | ต้อง Microsoft Login? | Roles |
 |---|---|---|---|---|
 | CSA Sign In | CSA Dashboard | ไม่ | View Mode: ไม่ / Edit Mode: ใช่ (OAuth) | `csa_view`, `csa_user` |
-| QE Sign In | GICA Dashboard / **Audit Dashboard** | View/Edit/Auditor: ใช่ (`QE_DOOR_PASSWORD`) / **Auditee: ไม่** | ไม่ทุกปุ่ม (shared token) | `qe_view`, `qe_user`, `qe_audit`, `qe_auditee` |
-| Admin Sign In | ทุกระบบ (CSA / GICA / Audit) | ใช่ (`ADMIN_DOOR_PASSWORD`) | ใช่ (OAuth + email check) | `admin` |
+| QE Sign In | GICA Dashboard | View: ไม่ / Edit: ใช่ (`QE_DOOR_PASSWORD`) | ไม่ (shared token) | `qe_view`, `qe_user` |
+| **Audit Sign In** (top-level door) | Audit Dashboard | Auditor: ใช่ (`QE_DOOR_PASSWORD`, `data-door="qe"`) / **Auditee: ไม่** | ไม่ (shared token) | `qe_audit`, `qe_auditee` |
+| Admin (ปุ่มเฟือง ⚙) | ทุกระบบ (CSA / GICA / Audit) | ใช่ (`ADMIN_DOOR_PASSWORD`) | ใช่ (OAuth + email check) | `admin` |
 
 ```
-User → เลือก Door → ใส่ password (ถ้ามี)
+User → เลือก Door (CSA/QE/Audit) หรือกดเฟือง ⚙ (Admin) → ใส่ password (ถ้ามี)
      → POST /api/door-unlock → session["door_unlocked_{door}"] = True
      → View Mode: POST /manager-login หรือ /qe-view-login → shared token session
      → Edit Mode (CSA): GET /login?door=csa → Azure AD OAuth
      → Edit Mode (QE): POST /qe-edit-login → shared token + qe_user role
-     → Audit Mode (QE) → เลือก Auditor/Auditee:
-         → Auditor: ใส่ password เหมือนเดิม → POST /qe-audit-login → shared token + qe_audit role
+     → Audit Sign In → เลือก Auditor/Auditee:
+         → Auditor: ใส่ password (data-door="qe") → POST /qe-audit-login → shared token + qe_audit role
          → Auditee: ไม่มี password gate → POST /qe-auditee-login → shared token + qe_auditee role
-     → Admin: GET /login?door=admin → Azure AD OAuth + ADMIN_EMAIL check
+     → Admin (เฟือง): GET /login?door=admin → Azure AD OAuth + ADMIN_EMAIL check
 ```
 
 ⚠️ **`qeEditBtn`/`qeAuditorBtn` ใช้ `data-door="qe"` ตัวเดียวกัน** (password gate เดียวกัน) แต่ login คนละ route —
 แยกด้วย `data-login-route` attribute บนปุ่ม (`/qe-edit-login` vs `/qe-audit-login`) ที่ `_submitDoorPassword()`
 อ่านจากปุ่มที่ถูกกด (`app.js`) — ถ้าเพิ่มปุ่มใหม่ใต้ door เดิมในอนาคต **ต้องตั้ง `data-login-route` ทุกครั้ง**
 ไม่งั้นจะ fallback ไป `/qe-edit-login` เงียบๆ (ของเดิมเคยมี bug แบบนี้มาก่อน)
+
+⚠️ **Audit Sign In เป็น top-level door แล้ว** (`auditDoorBtn` → `_showLoginDoor('qe-audit')`) ไม่ใช่ nested
+picker ใต้ QE อีกต่อไป — panel `loginDoor-qe-audit` ถูกเพิ่มเข้า loop ของ `_showLoginDoor`/`_showLoginDoorPicker`
+(`['csa','qe','qe-audit','admin']`) และ back/Esc กลับไป main picker ตรงๆ (ไม่ใช่กลับ QE panel แบบเดิม)
 
 ⚠️ **Auditee ไม่มี `data-door`** — ปุ่ม `qeAuditeeBtn` ไม่ผ่าน password gate เลย เรียก
 `_openViewOnlySession('/qe-auditee-login', ...)` ตรงๆ เหมือน `csaViewBtn`/`qeViewBtn` (ปุ่ม View Mode อื่นๆ)
