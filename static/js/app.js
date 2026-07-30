@@ -1,7 +1,7 @@
 // ===== TRANSLATIONS =====
 const TRANSLATIONS = {
   th: {
-    appTitle:               'CSA & GICA Dashboard',
+    appTitle:               'CSA Dashboard',
     appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'เข้าสู่ระบบด้วย Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
@@ -139,9 +139,188 @@ const TRANSLATIONS = {
     tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'อยู่ระหว่างพัฒนา กรุณารอสักครู่...',
+
+    // ── GICA Phase 1a ────────────────────────────────────────────────
+    // Sub-tab bar
+    gicaSubPerf:            'ภาพรวมประสิทธิภาพ',
+    gicaSubSched:           'ตารางการประเมิน',
+    gicaSubEmp:             'รายชื่อพนักงาน',
+    // KPI row 1
+    gicaTotalEmp:           'จำนวนพนักงานทั้งหมด',
+    pass:                   'ผ่าน',
+    fail:                   'ไม่ผ่าน',
+    pending:                'รอประเมิน',
+    gicaOverallMeas:        'คะแนนรวม (การวัด)',
+    gicaOverallInsp:        'คะแนนรวม (การตรวจ)',
+    gicaOverallAvg:         'คะแนนเฉลี่ยรวม',
+    gicaFlipCriteria:       '↩ เกณฑ์ให้เกรด',
+    gicaFlipBack:           '↩ กลับ',
+    gicaCriteria:           'เกณฑ์',
+    gicaGradingCriteria:    'เกณฑ์การให้เกรด',
+    // BU flip cards row 2
+    gicaScoreMeas:          'คะแนน (การวัด)',
+    gicaScoreInsp:          'คะแนน (การตรวจ)',
+    gicaPeople:             'คน',
+    gicaNoData:             '— ไม่มีข้อมูล —',
+    gicaNoTrend:            'ไม่มีข้อมูล trend',
+    // Employee List toolbar
+    gicaEmpListTitle:       'รายชื่อพนักงาน',
+    gicaCreateOp:           '+ เพิ่มพนักงานใหม่',
+    gicaPrint:              '🖨 พิมพ์',
+    gicaAllBu:              'ทุก BU',
+    gicaAllGrades:          'ทุกเกรด',
+    gicaAllDepts:           'ทุกแผนก',
+    gicaAllLevels:          'ทุกระดับ',
+    gicaSearchPh:           'ค้นหาด้วยชื่อ / รหัส',
+    gicaShowPerPage:        'แสดงต่อหน้า',
+    // Table columns
+    gicaColBu:              'BU',
+    gicaColEmpId:           'รหัสพนักงาน',
+    gicaColName:            'ชื่อ',
+    gicaColDept:            'แผนก',
+    gicaColLevel:           'ระดับ',
+    gicaColMeas:            'การวัด',
+    gicaColInsp:            'การตรวจ',
+    gicaColAttempt:         'ครั้งที่',
+    gicaColLastDate:        'วันสอบล่าสุด',
+    gicaColHistory:         'ประวัติ',
+    gicaColNextDate:        'วันสอบถัดไป',
+    gicaColDaysLeft:        'วันคงเหลือ',
+    gicaColStatus:          'สถานะ',
+    gicaColAction:          'จัดการ',
+    gicaTableEmpty:         'ไม่พบข้อมูล',
+    gicaEmpNameTip:         'คลิกเพื่อบันทึกผลสอบ',
+    gicaDeleteEmpTip:       'ลบพนักงาน',
+
+    // ── GICA Phase 1b: Matrix / Quadrant / Modals ────────────────────
+    gicaExpMatrix:          'Expectation Matrix',
+    gicaKpiSetup:           'KPI Setup',
+    gicaKpiSetupTip:        'กำหนด KPI target สำหรับแต่ละระดับ',
+    gicaKpiAchieved:        'ผ่าน KPI',
+    gicaKpiNotAchieved:     'ไม่ผ่าน KPI',
+    gicaKpiModalDesc:       'กำหนด KPI target (%) สำหรับแต่ละระดับ',
+    gicaClickToView:        'คลิกดูรายชื่อ',
+    gicaClickToViewDept:    'คลิกดูรายชื่อทั้งแผนก',
+    gicaExpectedMeas:       'การวัด — เกรดที่คาดหวัง',
+    gicaExpectedInsp:       'การตรวจ — เกรดที่คาดหวัง',
+    gicaMatrixEmpty:        'ไม่มีข้อมูล',
+    gicaFreqInfoTip:        'เกณฑ์ความถี่การประเมิน (Table_freq)',
+    gicaFreqModalTitle:     'ความถี่และเกณฑ์การประเมิน',
+    gicaFreqDeptLevel:      'แผนก / ระดับ',
+    gicaFreqRole:           'หน้าที่',
+    gicaFreqFreq:           'ความถี่',
+    gicaFreqEveryNMos:      'ทุก {n} เดือน',
+    gicaFreqEmpty:          'ไม่มีข้อมูล Table_freq',
+    cancel:                 'ยกเลิก',
+    confirm:                'ยืนยัน',
+    gicaQuadTitle:          'Quadrant Analysis',
+    gicaQuadPassBoth:       'ผ่านทั้งคู่',
+    gicaQuadMFailIPass:     'การวัด: ไม่ผ่าน / การตรวจ: ผ่าน',
+    gicaQuadMPassIFail:     'การวัด: ผ่าน / การตรวจ: ไม่ผ่าน',
+    gicaQuadFailBoth:       'ไม่ผ่านทั้งคู่',
+    gicaFlipViewTrend:      'ดู Trend',
+    gicaFlipViewScore:      'ดู Score',
+
+    // ── GICA Phase 2: Add Result / Create / Delete confirm / Toasts ──
+    gicaMeasResultPct:      'ผลการวัด (%)',
+    gicaInspResultPct:      'ผลการตรวจ (%)',
+    gicaAssessmentDate:     'วันที่ประเมิน',
+    gicaSelectDate:         'เลือกวันที่',
+    gicaDelete:             'ลบ',
+    gicaResultCancelPrompt: 'ยกเลิกการกรอกครั้งนี้?',
+    gicaResultSavePrompt:   'บันทึกข้อมูลนี้?',
+    gicaFormFillAll:        'กรุณากรอกข้อมูลให้ครบทุกช่อง',
+    gicaSaving:             'กำลังบันทึกข้อมูล...',
+    gicaSaved:              'บันทึกข้อมูลแล้ว',
+    gicaSaveFail:           'บันทึกไม่สำเร็จ',
+    gicaDeleteEmpSaved:     'ลบพนักงานแล้ว',
+    gicaErrPrefix:          'เกิดข้อผิดพลาด',
+    gicaCreateTitle:        'เพิ่มพนักงานใหม่',
+    gicaEmpId:              'รหัสพนักงาน',
+    gicaEmpName:            'ชื่อพนักงาน',
+    gicaPosition:           'ตำแหน่ง',
+    gicaStartDate:          'วันที่เริ่มงาน',
+    gicaNumericOnly:        'ตัวเลขเท่านั้น',
+    gicaDeleteConfirmPrompt:'ลบพนักงาน "{name}" ({empid}) ออกจากระบบ GICA?\nการลบไม่สามารถย้อนกลับได้',
+    yes:                    'ใช่',
+    no:                     'ไม่',
+    gicaUnknownErr:         'Unknown error',
+    gicaDeletingEmp:        'กำลังลบพนักงาน...',
+    gicaDeleteFail:         'ลบไม่สำเร็จ',
+    gicaAddResultTitle:     'บันทึกผลประเมิน',
+
+    // ── GICA Phase 3: Assessment History modal ────────────────────────
+    gicaAssessmentHistory:  'ประวัติการประเมิน',
+    gicaMeasResult:         'ผลการวัด',
+    gicaInspResult:         'ผลการตรวจ',
+    gicaTotalAvgScore:      'คะแนนเฉลี่ยรวม',
+    gicaTotalAssessments:   'จำนวนการประเมินทั้งหมด',
+    gicaPassRate:           'อัตราการผ่าน',
+    gicaCurrentFailStreak:  'จำนวนครั้งไม่ผ่านติดต่อกัน',
+    gicaPrev:               'ก่อนหน้า',
+    gicaLast:               'ล่าสุด',
+    gicaDiff:               'ต่าง',
+    gicaAvg:                'เฉลี่ย',
+    gicaAvgMeas:            'ค่าเฉลี่ยการวัด',
+    gicaAvgInsp:            'ค่าเฉลี่ยการตรวจ',
+    gicaMeasRange:          'ช่วงการวัด',
+    gicaInspRange:          'ช่วงการตรวจ',
+    gicaFail1:              'ไม่ผ่าน 1 ครั้ง',
+    gicaFail2:              'ไม่ผ่าน 2 ครั้ง',
+    gicaFail3:              'ไม่ผ่าน 3+ ครั้ง',
+
+    // ── GICA Phase 4: Assessment Schedule tab ─────────────────────────
+    gicaSchedTimeline:      'ตารางเวลาการประเมิน',
+    gicaSchedCalendar:      'ตารางการประเมิน (มุมมองปฏิทิน)',
+    gicaUpcoming:           'การประเมินที่กำลังจะมาถึง',
+    gicaWeek:               'สัปดาห์',
+    gicaMonth:              'เดือน',
+    gicaAll:                'ทั้งหมด',
+    gicaRetest:             'สอบซ้ำ',
+    gicaReview:             'ทบทวน',
+    gicaLegendTotal:        'รวม',
+    gicaLegendOnTimePass:   'ตรงเวลา (ผ่าน)',
+    gicaLegendOnTimeFail:   'ตรงเวลา (ไม่ผ่าน)',
+    gicaLegendOverdue:      'เกินกำหนด',
+    gicaAssessmentRequired: 'ต้องประเมิน',
+    gicaFailStatusStreak:   'สถานะการไม่ผ่านต่อเนื่อง',
+    gicaDueThisWeek:        'ครบกำหนดสัปดาห์นี้',
+    gicaEarlyAssessment:    'ประเมินก่อนกำหนด',
+    gicaOverallOnTime:      'อัตราการประเมินตรงเวลา',
+    gicaAssessmentStatus:   'สถานะการประเมิน',
+    gicaAttended:           'มาสอบ',
+    gicaNotYetAttended:     'ยังไม่มาสอบ',
+    gicaClickBuCohort:      'คลิกดูรายชื่อ',
+    gicaFailCases:          'ไม่ผ่าน',
+    gicaNoBuData:           'ไม่มีข้อมูล BU',
+    gicaClose:              'ปิด',
+    gicaCalToday:           'วันนี้',
+    gicaCalFilters:         'ตัวกรอง',
+    gicaCalStatus:          'สถานะ',
+    gicaCalType:            'ประเภท',
+    gicaCalTypeInitial:     'ประเมินครั้งแรก',
+    gicaCalTypeRetest:      'ประเมินซ้ำ',
+    gicaCalTypeReview:      'ทบทวน',
+    gicaCalOverdue:         'เกินกำหนด (ยังไม่มาสอบ)',
+    gicaCalWeekPrefix:      'สัปดาห์',
+    gicaWeekMon:            'จันทร์',
+    gicaWeekTue:            'อังคาร',
+    gicaWeekWed:            'พุธ',
+    gicaWeekThu:            'พฤหัสบดี',
+    gicaWeekFri:            'ศุกร์',
+    gicaWeekSat:            'เสาร์',
+    gicaWeekSun:            'อาทิตย์',
+    gicaEmpListForAssessment:         'รายชื่อพนักงานสำหรับการประเมิน GICA',
+    gicaEmpListForAssessmentSchedule: 'รายชื่อพนักงานสำหรับตารางการประเมิน GICA',
+    gicaAssessmentDateLbl:  'วันที่ประเมิน',
+    gicaTotalWord:          'รวม',
+    gicaEmpsWord:           'คน',
+    gicaReportDate:         'วันที่รายงาน',
+    gicaParticipants:       'ผู้เข้าประเมิน',
+    gicaPrintPdf:           '🖨 พิมพ์ PDF',
   },
   en: {
-    appTitle:               'CSA & GICA Dashboard',
+    appTitle:               'GICA Dashboard',
     appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'Sign in with Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
@@ -279,9 +458,183 @@ const TRANSLATIONS = {
     tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'Under development, please wait...',
+
+    // ── GICA Phase 1a ────────────────────────────────────────────────
+    gicaSubPerf:            'Performance',
+    gicaSubSched:           'Assessment Schedule',
+    gicaSubEmp:             'Employee List',
+    gicaTotalEmp:           'Total employees',
+    pass:                   'Pass',
+    fail:                   'Fail',
+    pending:                'Pending',
+    gicaOverallMeas:        'Overall Score (Measurement)',
+    gicaOverallInsp:        'Overall Score (Inspection)',
+    gicaOverallAvg:         'Overall Average Score',
+    gicaFlipCriteria:       '↩ Grading criteria',
+    gicaFlipBack:           '↩ Back',
+    gicaCriteria:           'Criteria',
+    gicaGradingCriteria:    'Grading Criteria',
+    gicaScoreMeas:          'Score (Measurement)',
+    gicaScoreInsp:          'Score (Inspection)',
+    gicaPeople:             'People',
+    gicaNoData:             '— no data —',
+    gicaNoTrend:            'No trend data',
+    gicaEmpListTitle:       'Employee List',
+    gicaCreateOp:           '+ Create new operator',
+    gicaPrint:              '🖨 Print',
+    gicaAllBu:              'All BU',
+    gicaAllGrades:          'All Grades',
+    gicaAllDepts:           'All Departments',
+    gicaAllLevels:          'All Levels',
+    gicaSearchPh:           'Search by name / ID',
+    gicaShowPerPage:        'Show per page',
+    gicaColBu:              'BU',
+    gicaColEmpId:           'Emp ID',
+    gicaColName:            'Name',
+    gicaColDept:            'Department',
+    gicaColLevel:           'Level',
+    gicaColMeas:            'Measurement',
+    gicaColInsp:            'Inspection',
+    gicaColAttempt:         'Attempt',
+    gicaColLastDate:        'Last Date',
+    gicaColHistory:         'History',
+    gicaColNextDate:        'Next Date',
+    gicaColDaysLeft:        'Days Left',
+    gicaColStatus:          'Status',
+    gicaColAction:          'Action',
+    gicaTableEmpty:         'No data found',
+    gicaEmpNameTip:         'Click to record assessment result',
+    gicaDeleteEmpTip:       'Delete employee',
+
+    // ── GICA Phase 1b: Matrix / Quadrant / Modals ────────────────────
+    gicaExpMatrix:          'Expectation Matrix',
+    gicaKpiSetup:           'KPI Setup',
+    gicaKpiSetupTip:        'Set KPI target for each Level',
+    gicaKpiAchieved:        'KPI Achieved',
+    gicaKpiNotAchieved:     'KPI Not Achieved',
+    gicaKpiModalDesc:       'Define KPI target (%) for each level',
+    gicaClickToView:        'Click to see names',
+    gicaClickToViewDept:    'Click to see all names in this department',
+    gicaExpectedMeas:       'Measurement — Expected grade',
+    gicaExpectedInsp:       'Inspection — Expected grade',
+    gicaMatrixEmpty:        'No data',
+    gicaFreqInfoTip:        'Assessment frequency criteria (Table_freq)',
+    gicaFreqModalTitle:     'Assessment Frequency & Expectation',
+    gicaFreqDeptLevel:      'Dept / Level',
+    gicaFreqRole:           'Role',
+    gicaFreqFreq:           'Frequency',
+    gicaFreqEveryNMos:      'Every {n} mos',
+    gicaFreqEmpty:          'No Table_freq data',
+    cancel:                 'Cancel',
+    confirm:                'Confirm',
+    gicaQuadTitle:          'Quadrant Analysis',
+    gicaQuadPassBoth:       'Pass Both',
+    gicaQuadMFailIPass:     'Meas. Fail / Insp. Pass',
+    gicaQuadMPassIFail:     'Meas. Pass / Insp. Fail',
+    gicaQuadFailBoth:       'Fail Both',
+    gicaFlipViewTrend:      'View Trend',
+    gicaFlipViewScore:      'View Score',
+
+    // ── GICA Phase 2: Add Result / Create / Delete confirm / Toasts ──
+    gicaMeasResultPct:      'Measurement Result (%)',
+    gicaInspResultPct:      'Inspection Result (%)',
+    gicaAssessmentDate:     'Assessment Date',
+    gicaSelectDate:         'Select date',
+    gicaDelete:             'Delete',
+    gicaResultCancelPrompt: 'Cancel this entry?',
+    gicaResultSavePrompt:   'Save this record?',
+    gicaFormFillAll:        'Please complete all required fields',
+    gicaSaving:             'Saving...',
+    gicaSaved:              'Saved',
+    gicaSaveFail:           'Save failed',
+    gicaDeleteEmpSaved:     'Employee deleted',
+    gicaErrPrefix:          'Error',
+    gicaCreateTitle:        'Create new operator',
+    gicaEmpId:              'Employee ID',
+    gicaEmpName:            'Employee Name',
+    gicaPosition:           'Position',
+    gicaStartDate:          'Start Date',
+    gicaNumericOnly:        'Numeric characters only',
+    gicaDeleteConfirmPrompt:'Delete employee "{name}" ({empid}) from GICA?\nThis action cannot be undone',
+    yes:                    'Yes',
+    no:                     'No',
+    gicaUnknownErr:         'Unknown error',
+    gicaDeletingEmp:        'Deleting employee...',
+    gicaDeleteFail:         'Delete failed',
+    gicaAddResultTitle:     'Add Assessment Result',
+
+    // ── GICA Phase 3: Assessment History modal ────────────────────────
+    gicaAssessmentHistory:  'Assessment History',
+    gicaMeasResult:         'Measurement Result',
+    gicaInspResult:         'Inspection Result',
+    gicaTotalAvgScore:      'Total average score',
+    gicaTotalAssessments:   'Total Assessments',
+    gicaPassRate:           'Pass Rate',
+    gicaCurrentFailStreak:  'Current Fail Streak',
+    gicaPrev:               'Prev',
+    gicaLast:               'Last',
+    gicaDiff:               'Diff',
+    gicaAvg:                'Avg',
+    gicaAvgMeas:            'Avg Measurement',
+    gicaAvgInsp:            'Avg Inspection',
+    gicaMeasRange:          'Measurement Range',
+    gicaInspRange:          'Inspection Range',
+    gicaFail1:              'Fail 1',
+    gicaFail2:              'Fail 2',
+    gicaFail3:              'Fail 3+',
+
+    // ── GICA Phase 4: Assessment Schedule tab ─────────────────────────
+    gicaSchedTimeline:      'Assessment Schedule Timeline',
+    gicaSchedCalendar:      'Assessment Schedule (Calendar View)',
+    gicaUpcoming:           'Upcoming Assessments',
+    gicaWeek:               'Week',
+    gicaMonth:              'Month',
+    gicaAll:                'All',
+    gicaRetest:             'Retest',
+    gicaReview:             'Review',
+    gicaLegendTotal:        'Total',
+    gicaLegendOnTimePass:   'On-time (Pass)',
+    gicaLegendOnTimeFail:   'On-time (Fail)',
+    gicaLegendOverdue:      'Overdue',
+    gicaAssessmentRequired: 'Assessment Required',
+    gicaFailStatusStreak:   'Failure Status by Consecutive Attempts',
+    gicaDueThisWeek:        'Due this week',
+    gicaEarlyAssessment:    'Early Assessment',
+    gicaOverallOnTime:      'Overall On-time Rate',
+    gicaAssessmentStatus:   'Assessment Status',
+    gicaAttended:           'Attended',
+    gicaNotYetAttended:     'Not yet attended',
+    gicaClickBuCohort:      'Click to view the name list',
+    gicaFailCases:          'Fail Cases',
+    gicaNoBuData:           'No BU data',
+    gicaClose:              'Close',
+    gicaCalToday:           'Today',
+    gicaCalFilters:         'Filters',
+    gicaCalStatus:          'Status',
+    gicaCalType:            'Type',
+    gicaCalTypeInitial:     'Initial assessment',
+    gicaCalTypeRetest:      'Re-assessment',
+    gicaCalTypeReview:      'Review assessment',
+    gicaCalOverdue:         'Overdue (Not yet tested)',
+    gicaCalWeekPrefix:      'WEEK',
+    gicaWeekMon:            'Monday',
+    gicaWeekTue:            'Tuesday',
+    gicaWeekWed:            'Wednesday',
+    gicaWeekThu:            'Thursday',
+    gicaWeekFri:            'Friday',
+    gicaWeekSat:            'Saturday',
+    gicaWeekSun:            'Sunday',
+    gicaEmpListForAssessment:         'Employee List for GICA Assessment',
+    gicaEmpListForAssessmentSchedule: 'Employee List for GICA Assessment Schedule',
+    gicaAssessmentDateLbl:  'Assessment Date',
+    gicaTotalWord:          'Total',
+    gicaEmpsWord:           'employees',
+    gicaReportDate:         'Report Date',
+    gicaParticipants:       'Participants',
+    gicaPrintPdf:           '🖨 Print PDF',
   },
   lo: {
-    appTitle:               'CSA & GICA Dashboard',
+    appTitle:               'GICA Dashboard',
     appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'ເຂົ້າສູ່ລະບົບດ້ວຍ Microsoft Account',
     loginBtn:               'Sign in with Microsoft',
@@ -419,9 +772,184 @@ const TRANSLATIONS = {
     tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'ກຳລັງພັດທະນາ ກະລຸນາລໍຖ້າ...',
+
+    // ── GICA Phase 1a ────────────────────────────────────────────────
+    // Note: Lao translations are best-effort; please review with a Lao speaker.
+    gicaSubPerf:            'ປະສິດທິພາບ',
+    gicaSubSched:           'ຕາຕະລາງການປະເມີນ',
+    gicaSubEmp:             'ລາຍຊື່ພະນັກງານ',
+    gicaTotalEmp:           'ພະນັກງານທັງໝົດ',
+    pass:                   'ຜ່ານ',
+    fail:                   'ບໍ່ຜ່ານ',
+    pending:                'ລໍຖ້າປະເມີນ',
+    gicaOverallMeas:        'ຄະແນນລວມ (ການວັດແທກ)',
+    gicaOverallInsp:        'ຄະແນນລວມ (ການກວດກາ)',
+    gicaOverallAvg:         'ຄະແນນສະເລ່ຍລວມ',
+    gicaFlipCriteria:       '↩ ເກນການໃຫ້ເກຣດ',
+    gicaFlipBack:           '↩ ກັບຄືນ',
+    gicaCriteria:           'ເກນ',
+    gicaGradingCriteria:    'ເກນການໃຫ້ເກຣດ',
+    gicaScoreMeas:          'ຄະແນນ (ການວັດແທກ)',
+    gicaScoreInsp:          'ຄະແນນ (ການກວດກາ)',
+    gicaPeople:             'ຄົນ',
+    gicaNoData:             '— ບໍ່ມີຂໍ້ມູນ —',
+    gicaNoTrend:            'ບໍ່ມີຂໍ້ມູນ trend',
+    gicaEmpListTitle:       'ລາຍຊື່ພະນັກງານ',
+    gicaCreateOp:           '+ ເພີ່ມພະນັກງານໃໝ່',
+    gicaPrint:              '🖨 ພິມ',
+    gicaAllBu:              'ທຸກ BU',
+    gicaAllGrades:          'ທຸກເກຣດ',
+    gicaAllDepts:           'ທຸກພະແນກ',
+    gicaAllLevels:          'ທຸກລະດັບ',
+    gicaSearchPh:           'ຄົ້ນຫາຊື່ / ລະຫັດ',
+    gicaShowPerPage:        'ສະແດງຕໍ່ໜ້າ',
+    gicaColBu:              'BU',
+    gicaColEmpId:           'ລະຫັດພະນັກງານ',
+    gicaColName:            'ຊື່',
+    gicaColDept:            'ພະແນກ',
+    gicaColLevel:           'ລະດັບ',
+    gicaColMeas:            'ການວັດແທກ',
+    gicaColInsp:            'ການກວດກາ',
+    gicaColAttempt:         'ຄັ້ງທີ',
+    gicaColLastDate:        'ວັນສອບລ່າສຸດ',
+    gicaColHistory:         'ປະຫວັດ',
+    gicaColNextDate:        'ວັນສອບຕໍ່ໄປ',
+    gicaColDaysLeft:        'ວັນທີ່ເຫຼືອ',
+    gicaColStatus:          'ສະຖານະ',
+    gicaColAction:          'ຈັດການ',
+    gicaTableEmpty:         'ບໍ່ພົບຂໍ້ມູນ',
+    gicaEmpNameTip:         'ຄລິກເພື່ອບັນທຶກຜົນສອບ',
+    gicaDeleteEmpTip:       'ລຶບພະນັກງານ',
+
+    // ── GICA Phase 1b (best-effort Lao, please review) ────────────────
+    gicaExpMatrix:          'ຕາຕະລາງເປົ້າໝາຍ',
+    gicaKpiSetup:           'ຕັ້ງຄ່າ KPI',
+    gicaKpiSetupTip:        'ຕັ້ງ KPI target ສຳລັບແຕ່ລະລະດັບ',
+    gicaKpiAchieved:        'ຜ່ານ KPI',
+    gicaKpiNotAchieved:     'ບໍ່ຜ່ານ KPI',
+    gicaKpiModalDesc:       'ກຳນົດ KPI target (%) ສຳລັບແຕ່ລະລະດັບ',
+    gicaClickToView:        'ຄລິກເບິ່ງລາຍຊື່',
+    gicaClickToViewDept:    'ຄລິກເບິ່ງລາຍຊື່ທັງພະແນກ',
+    gicaExpectedMeas:       'ການວັດແທກ — ເກຣດທີ່ຄາດຫວັງ',
+    gicaExpectedInsp:       'ການກວດກາ — ເກຣດທີ່ຄາດຫວັງ',
+    gicaMatrixEmpty:        'ບໍ່ມີຂໍ້ມູນ',
+    gicaFreqInfoTip:        'ເກນຄວາມຖີ່ການປະເມີນ (Table_freq)',
+    gicaFreqModalTitle:     'ຄວາມຖີ່ ແລະ ເກນການປະເມີນ',
+    gicaFreqDeptLevel:      'ພະແນກ / ລະດັບ',
+    gicaFreqRole:           'ໜ້າທີ່',
+    gicaFreqFreq:           'ຄວາມຖີ່',
+    gicaFreqEveryNMos:      'ທຸກ {n} ເດືອນ',
+    gicaFreqEmpty:          'ບໍ່ມີຂໍ້ມູນ Table_freq',
+    cancel:                 'ຍົກເລີກ',
+    confirm:                'ຢືນຢັນ',
+    gicaQuadTitle:          'Quadrant Analysis',
+    gicaQuadPassBoth:       'ຜ່ານທັງສອງ',
+    gicaQuadMFailIPass:     'ການວັດແທກ: ບໍ່ຜ່ານ / ການກວດກາ: ຜ່ານ',
+    gicaQuadMPassIFail:     'ການວັດແທກ: ຜ່ານ / ການກວດກາ: ບໍ່ຜ່ານ',
+    gicaQuadFailBoth:       'ບໍ່ຜ່ານທັງສອງ',
+    gicaFlipViewTrend:      'ເບິ່ງ Trend',
+    gicaFlipViewScore:      'ເບິ່ງຄະແນນ',
+
+    // ── GICA Phase 2 (best-effort Lao, please review) ─────────────────
+    gicaMeasResultPct:      'ຜົນການວັດແທກ (%)',
+    gicaInspResultPct:      'ຜົນການກວດກາ (%)',
+    gicaAssessmentDate:     'ວັນທີປະເມີນ',
+    gicaSelectDate:         'ເລືອກວັນທີ',
+    gicaDelete:             'ລຶບ',
+    gicaResultCancelPrompt: 'ຍົກເລີກການປ້ອນຄັ້ງນີ້?',
+    gicaResultSavePrompt:   'ບັນທຶກຂໍ້ມູນນີ້?',
+    gicaFormFillAll:        'ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບທຸກຊ່ອງ',
+    gicaSaving:             'ກຳລັງບັນທຶກ...',
+    gicaSaved:              'ບັນທຶກແລ້ວ',
+    gicaSaveFail:           'ບັນທຶກບໍ່ສຳເລັດ',
+    gicaDeleteEmpSaved:     'ລຶບພະນັກງານແລ້ວ',
+    gicaErrPrefix:          'ເກີດຂໍ້ຜິດພາດ',
+    gicaCreateTitle:        'ເພີ່ມພະນັກງານໃໝ່',
+    gicaEmpId:              'ລະຫັດພະນັກງານ',
+    gicaEmpName:            'ຊື່ພະນັກງານ',
+    gicaPosition:           'ຕຳແໜ່ງ',
+    gicaStartDate:          'ວັນເລີ່ມງານ',
+    gicaNumericOnly:        'ໃສ່ຕົວເລກເທົ່ານັ້ນ',
+    gicaDeleteConfirmPrompt:'ລຶບພະນັກງານ "{name}" ({empid}) ອອກຈາກລະບົບ GICA?\nການລຶບບໍ່ສາມາດຍ້ອນກັບໄດ້',
+    yes:                    'ແມ່ນ',
+    no:                     'ບໍ່',
+    gicaUnknownErr:         'Unknown error',
+    gicaDeletingEmp:        'ກຳລັງລຶບພະນັກງານ...',
+    gicaDeleteFail:         'ລຶບບໍ່ສຳເລັດ',
+    gicaAddResultTitle:     'ບັນທຶກຜົນປະເມີນ',
+
+    // ── GICA Phase 3 (best-effort Lao) ────────────────────────────────
+    gicaAssessmentHistory:  'ປະຫວັດການປະເມີນ',
+    gicaMeasResult:         'ຜົນການວັດແທກ',
+    gicaInspResult:         'ຜົນການກວດກາ',
+    gicaTotalAvgScore:      'ຄະແນນສະເລ່ຍລວມ',
+    gicaTotalAssessments:   'ຈຳນວນການປະເມີນທັງໝົດ',
+    gicaPassRate:           'ອັດຕາການຜ່ານ',
+    gicaCurrentFailStreak:  'ຈຳນວນຄັ້ງບໍ່ຜ່ານຕິດຕໍ່ກັນ',
+    gicaPrev:               'ກ່ອນໜ້າ',
+    gicaLast:               'ລ່າສຸດ',
+    gicaDiff:               'ຕ່າງ',
+    gicaAvg:                'ສະເລ່ຍ',
+    gicaAvgMeas:            'ຄ່າສະເລ່ຍການວັດແທກ',
+    gicaAvgInsp:            'ຄ່າສະເລ່ຍການກວດກາ',
+    gicaMeasRange:          'ຊ່ວງການວັດແທກ',
+    gicaInspRange:          'ຊ່ວງການກວດກາ',
+    gicaFail1:              'ບໍ່ຜ່ານ 1 ຄັ້ງ',
+    gicaFail2:              'ບໍ່ຜ່ານ 2 ຄັ້ງ',
+    gicaFail3:              'ບໍ່ຜ່ານ 3+ ຄັ້ງ',
+
+    // ── GICA Phase 4 (best-effort Lao) ────────────────────────────────
+    gicaSchedTimeline:      'ຕາຕະລາງເວລາການປະເມີນ',
+    gicaSchedCalendar:      'ຕາຕະລາງການປະເມີນ (ມຸມມອງປະຕິທິນ)',
+    gicaUpcoming:           'ການປະເມີນທີ່ຈະມາເຖິງ',
+    gicaWeek:               'ອາທິດ',
+    gicaMonth:              'ເດືອນ',
+    gicaAll:                'ທັງໝົດ',
+    gicaRetest:             'ສອບຄືນ',
+    gicaReview:             'ທົບທວນ',
+    gicaLegendTotal:        'ລວມ',
+    gicaLegendOnTimePass:   'ຕົງເວລາ (ຜ່ານ)',
+    gicaLegendOnTimeFail:   'ຕົງເວລາ (ບໍ່ຜ່ານ)',
+    gicaLegendOverdue:      'ເກີນກຳນົດ',
+    gicaAssessmentRequired: 'ຕ້ອງປະເມີນ',
+    gicaFailStatusStreak:   'ສະຖານະການບໍ່ຜ່ານຕໍ່ເນື່ອງ',
+    gicaDueThisWeek:        'ຄົບກຳນົດອາທິດນີ້',
+    gicaEarlyAssessment:    'ປະເມີນກ່ອນກຳນົດ',
+    gicaOverallOnTime:      'ອັດຕາການປະເມີນຕົງເວລາ',
+    gicaAssessmentStatus:   'ສະຖານະການປະເມີນ',
+    gicaAttended:           'ມາສອບ',
+    gicaNotYetAttended:     'ຍັງບໍ່ມາສອບ',
+    gicaClickBuCohort:      'ຄລິກເບິ່ງລາຍຊື່',
+    gicaFailCases:          'ບໍ່ຜ່ານ',
+    gicaNoBuData:           'ບໍ່ມີຂໍ້ມູນ BU',
+    gicaClose:              'ປິດ',
+    gicaCalToday:           'ມື້ນີ້',
+    gicaCalFilters:         'ຕົວກັ່ນຕອງ',
+    gicaCalStatus:          'ສະຖານະ',
+    gicaCalType:            'ປະເພດ',
+    gicaCalTypeInitial:     'ປະເມີນຄັ້ງທຳອິດ',
+    gicaCalTypeRetest:      'ປະເມີນຄືນ',
+    gicaCalTypeReview:      'ທົບທວນ',
+    gicaCalOverdue:         'ເກີນກຳນົດ (ຍັງບໍ່ມາສອບ)',
+    gicaCalWeekPrefix:      'ອາທິດ',
+    gicaWeekMon:            'ຈັນ',
+    gicaWeekTue:            'ອັງຄານ',
+    gicaWeekWed:            'ພຸດ',
+    gicaWeekThu:            'ພະຫັດ',
+    gicaWeekFri:            'ສຸກ',
+    gicaWeekSat:            'ເສົາ',
+    gicaWeekSun:            'ອາທິດ',
+    gicaEmpListForAssessment:         'ລາຍຊື່ພະນັກງານສຳລັບການປະເມີນ GICA',
+    gicaEmpListForAssessmentSchedule: 'ລາຍຊື່ພະນັກງານສຳລັບຕາຕະລາງການປະເມີນ GICA',
+    gicaAssessmentDateLbl:  'ວັນທີປະເມີນ',
+    gicaTotalWord:          'ລວມ',
+    gicaEmpsWord:           'ຄົນ',
+    gicaReportDate:         'ວັນທີລາຍງານ',
+    gicaParticipants:       'ຜູ້ເຂົ້າປະເມີນ',
+    gicaPrintPdf:           '🖨 ພິມ PDF',
   },
   vi: {
-    appTitle:               'CSA & GICA Dashboard',
+    appTitle:               'GICA Dashboard',
     appSubtitle:            'Center of Skill Acquisition · Garment Inspection Competency Assessment',
     loginTitle:             'Đăng nhập bằng tài khoản Microsoft',
     loginBtn:               'Sign in with Microsoft',
@@ -559,6 +1087,181 @@ const TRANSLATIONS = {
     tabTrainer:             'CSA Trainer',
     tabSewingOperator:      'Sewing Operator',
     tabComingSoon:          'Đang phát triển, vui lòng chờ...',
+
+    // ── GICA Phase 1a ────────────────────────────────────────────────
+    // Note: Vietnamese translations are best-effort; please review with a Vietnamese speaker.
+    gicaSubPerf:            'Hiệu suất',
+    gicaSubSched:           'Lịch đánh giá',
+    gicaSubEmp:             'Danh sách nhân viên',
+    gicaTotalEmp:           'Tổng số nhân viên',
+    pass:                   'Đạt',
+    fail:                   'Không đạt',
+    pending:                'Chờ đánh giá',
+    gicaOverallMeas:        'Điểm tổng (Đo lường)',
+    gicaOverallInsp:        'Điểm tổng (Kiểm tra)',
+    gicaOverallAvg:         'Điểm trung bình tổng',
+    gicaFlipCriteria:       '↩ Tiêu chí chấm điểm',
+    gicaFlipBack:           '↩ Quay lại',
+    gicaCriteria:           'Tiêu chí',
+    gicaGradingCriteria:    'Tiêu chí chấm điểm',
+    gicaScoreMeas:          'Điểm (Đo lường)',
+    gicaScoreInsp:          'Điểm (Kiểm tra)',
+    gicaPeople:             'Người',
+    gicaNoData:             '— không có dữ liệu —',
+    gicaNoTrend:            'Không có dữ liệu trend',
+    gicaEmpListTitle:       'Danh sách nhân viên',
+    gicaCreateOp:           '+ Thêm nhân viên mới',
+    gicaPrint:              '🖨 In',
+    gicaAllBu:              'Tất cả BU',
+    gicaAllGrades:          'Tất cả cấp bậc',
+    gicaAllDepts:           'Tất cả phòng ban',
+    gicaAllLevels:          'Tất cả trình độ',
+    gicaSearchPh:           'Tìm theo tên / mã',
+    gicaShowPerPage:        'Hiển thị mỗi trang',
+    gicaColBu:              'BU',
+    gicaColEmpId:           'Mã NV',
+    gicaColName:            'Tên',
+    gicaColDept:            'Phòng ban',
+    gicaColLevel:           'Trình độ',
+    gicaColMeas:            'Đo lường',
+    gicaColInsp:            'Kiểm tra',
+    gicaColAttempt:         'Lần',
+    gicaColLastDate:        'Ngày sát hạch gần nhất',
+    gicaColHistory:         'Lịch sử',
+    gicaColNextDate:        'Ngày sát hạch tiếp',
+    gicaColDaysLeft:        'Ngày còn lại',
+    gicaColStatus:          'Trạng thái',
+    gicaColAction:          'Thao tác',
+    gicaTableEmpty:         'Không tìm thấy dữ liệu',
+    gicaEmpNameTip:         'Nhấp để ghi kết quả đánh giá',
+    gicaDeleteEmpTip:       'Xóa nhân viên',
+
+    // ── GICA Phase 1b (best-effort Vietnamese, please review) ─────────
+    gicaExpMatrix:          'Ma trận kỳ vọng',
+    gicaKpiSetup:           'Thiết lập KPI',
+    gicaKpiSetupTip:        'Đặt mục tiêu KPI cho từng cấp',
+    gicaKpiAchieved:        'Đạt KPI',
+    gicaKpiNotAchieved:     'Không đạt KPI',
+    gicaKpiModalDesc:       'Định nghĩa mục tiêu KPI (%) cho từng cấp',
+    gicaClickToView:        'Nhấp để xem danh sách',
+    gicaClickToViewDept:    'Nhấp để xem danh sách cả phòng ban',
+    gicaExpectedMeas:       'Đo lường — Cấp bậc kỳ vọng',
+    gicaExpectedInsp:       'Kiểm tra — Cấp bậc kỳ vọng',
+    gicaMatrixEmpty:        'Không có dữ liệu',
+    gicaFreqInfoTip:        'Tiêu chí tần suất đánh giá (Table_freq)',
+    gicaFreqModalTitle:     'Tần suất & Kỳ vọng đánh giá',
+    gicaFreqDeptLevel:      'Phòng ban / Cấp',
+    gicaFreqRole:           'Vai trò',
+    gicaFreqFreq:           'Tần suất',
+    gicaFreqEveryNMos:      'Mỗi {n} tháng',
+    gicaFreqEmpty:          'Không có dữ liệu Table_freq',
+    cancel:                 'Hủy',
+    confirm:                'Xác nhận',
+    gicaQuadTitle:          'Quadrant Analysis',
+    gicaQuadPassBoth:       'Đạt cả hai',
+    gicaQuadMFailIPass:     'Đo: Không đạt / Kiểm: Đạt',
+    gicaQuadMPassIFail:     'Đo: Đạt / Kiểm: Không đạt',
+    gicaQuadFailBoth:       'Không đạt cả hai',
+    gicaFlipViewTrend:      'Xem Trend',
+    gicaFlipViewScore:      'Xem điểm',
+
+    // ── GICA Phase 2 (best-effort Vietnamese, please review) ──────────
+    gicaMeasResultPct:      'Kết quả Đo lường (%)',
+    gicaInspResultPct:      'Kết quả Kiểm tra (%)',
+    gicaAssessmentDate:     'Ngày đánh giá',
+    gicaSelectDate:         'Chọn ngày',
+    gicaDelete:             'Xóa',
+    gicaResultCancelPrompt: 'Hủy nhập lần này?',
+    gicaResultSavePrompt:   'Lưu bản ghi này?',
+    gicaFormFillAll:        'Vui lòng điền đầy đủ các trường',
+    gicaSaving:             'Đang lưu...',
+    gicaSaved:              'Đã lưu',
+    gicaSaveFail:           'Lưu thất bại',
+    gicaDeleteEmpSaved:     'Đã xóa nhân viên',
+    gicaErrPrefix:          'Lỗi',
+    gicaCreateTitle:        'Thêm nhân viên mới',
+    gicaEmpId:              'Mã nhân viên',
+    gicaEmpName:            'Tên nhân viên',
+    gicaPosition:           'Vị trí',
+    gicaStartDate:          'Ngày bắt đầu',
+    gicaNumericOnly:        'Chỉ số',
+    gicaDeleteConfirmPrompt:'Xóa nhân viên "{name}" ({empid}) khỏi GICA?\nThao tác này không thể hoàn tác',
+    yes:                    'Có',
+    no:                     'Không',
+    gicaUnknownErr:         'Unknown error',
+    gicaDeletingEmp:        'Đang xóa nhân viên...',
+    gicaDeleteFail:         'Xóa thất bại',
+    gicaAddResultTitle:     'Ghi kết quả đánh giá',
+
+    // ── GICA Phase 3 (best-effort Vietnamese) ─────────────────────────
+    gicaAssessmentHistory:  'Lịch sử đánh giá',
+    gicaMeasResult:         'Kết quả đo lường',
+    gicaInspResult:         'Kết quả kiểm tra',
+    gicaTotalAvgScore:      'Điểm trung bình tổng',
+    gicaTotalAssessments:   'Tổng số lần đánh giá',
+    gicaPassRate:           'Tỷ lệ đạt',
+    gicaCurrentFailStreak:  'Số lần không đạt liên tiếp',
+    gicaPrev:               'Trước',
+    gicaLast:               'Gần nhất',
+    gicaDiff:               'Chênh',
+    gicaAvg:                'TB',
+    gicaAvgMeas:            'TB Đo lường',
+    gicaAvgInsp:            'TB Kiểm tra',
+    gicaMeasRange:          'Khoảng Đo lường',
+    gicaInspRange:          'Khoảng Kiểm tra',
+    gicaFail1:              'Không đạt 1',
+    gicaFail2:              'Không đạt 2',
+    gicaFail3:              'Không đạt 3+',
+
+    // ── GICA Phase 4 (best-effort Vietnamese) ─────────────────────────
+    gicaSchedTimeline:      'Lịch trình đánh giá',
+    gicaSchedCalendar:      'Lịch đánh giá (Dạng lịch)',
+    gicaUpcoming:           'Đánh giá sắp tới',
+    gicaWeek:               'Tuần',
+    gicaMonth:              'Tháng',
+    gicaAll:                'Tất cả',
+    gicaRetest:             'Đánh giá lại',
+    gicaReview:             'Xem xét',
+    gicaLegendTotal:        'Tổng',
+    gicaLegendOnTimePass:   'Đúng hạn (Đạt)',
+    gicaLegendOnTimeFail:   'Đúng hạn (Không đạt)',
+    gicaLegendOverdue:      'Quá hạn',
+    gicaAssessmentRequired: 'Cần đánh giá',
+    gicaFailStatusStreak:   'Trạng thái không đạt liên tiếp',
+    gicaDueThisWeek:        'Đến hạn tuần này',
+    gicaEarlyAssessment:    'Đánh giá sớm',
+    gicaOverallOnTime:      'Tỷ lệ đúng hạn tổng',
+    gicaAssessmentStatus:   'Trạng thái đánh giá',
+    gicaAttended:           'Đã tham gia',
+    gicaNotYetAttended:     'Chưa tham gia',
+    gicaClickBuCohort:      'Nhấp để xem danh sách',
+    gicaFailCases:          'Không đạt',
+    gicaNoBuData:           'Không có dữ liệu BU',
+    gicaClose:              'Đóng',
+    gicaCalToday:           'Hôm nay',
+    gicaCalFilters:         'Bộ lọc',
+    gicaCalStatus:          'Trạng thái',
+    gicaCalType:            'Loại',
+    gicaCalTypeInitial:     'Đánh giá lần đầu',
+    gicaCalTypeRetest:      'Đánh giá lại',
+    gicaCalTypeReview:      'Xem xét',
+    gicaCalOverdue:         'Quá hạn (Chưa sát hạch)',
+    gicaCalWeekPrefix:      'TUẦN',
+    gicaWeekMon:            'Thứ Hai',
+    gicaWeekTue:            'Thứ Ba',
+    gicaWeekWed:            'Thứ Tư',
+    gicaWeekThu:            'Thứ Năm',
+    gicaWeekFri:            'Thứ Sáu',
+    gicaWeekSat:            'Thứ Bảy',
+    gicaWeekSun:            'Chủ Nhật',
+    gicaEmpListForAssessment:         'Danh sách nhân viên cho đánh giá GICA',
+    gicaEmpListForAssessmentSchedule: 'Danh sách nhân viên cho lịch đánh giá GICA',
+    gicaAssessmentDateLbl:  'Ngày đánh giá',
+    gicaTotalWord:          'Tổng',
+    gicaEmpsWord:           'nhân viên',
+    gicaReportDate:         'Ngày báo cáo',
+    gicaParticipants:       'Người tham gia',
+    gicaPrintPdf:           '🖨 In PDF',
   },
 };
 
@@ -613,8 +1316,10 @@ function _filterByNewOpType(employees) {
 function t(key, vars = {}) {
   const lang = TRANSLATIONS[currentLang] || TRANSLATIONS.en;
   let val = lang[key] ?? TRANSLATIONS.en[key] ?? key;
-  if (typeof val === 'string' && vars.n !== undefined) {
-    val = val.replace('{n}', vars.n);
+  if (typeof val === 'string' && vars) {
+    for (const k of Object.keys(vars)) {
+      val = val.split(`{${k}}`).join(String(vars[k]));
+    }
   }
   return String(val);
 }
@@ -710,6 +1415,16 @@ function initLang() {
       tabBar.querySelectorAll('.tab-btn[data-i18n]').forEach(btn => {
         btn.textContent = t(btn.dataset.i18n);
       });
+    }
+    // Dynamic GICA content (KPI cards / BU flip / Employee table / Schedule /
+    // Calendar) is built by template strings, not [data-i18n] nodes —
+    // applyTranslations() can't reach it. Re-render every GICA surface that
+    // has already been rendered at least once so the new language shows
+    // immediately without needing a refresh or tab switch.
+    if (_gicaData && _gicaData.employees) {
+      try { renderGicaSummary();  } catch (_) {}
+      try { renderGicaTable();    } catch (_) {}
+      try { if (typeof _gicaScheduleRendered !== 'undefined' && _gicaScheduleRendered) renderGicaSchedule(); } catch (_) {}
     }
   };
 }
@@ -4895,8 +5610,8 @@ async function initGicaTab() {
     const closeAttemptDotsModal = () => {
       if (!attemptDotsModal) return;
       attemptDotsModal.classList.add('hidden');
-      attemptDotsModal.classList.remove('gica-modal--paired-left');
-      $('gica-result-modal')?.classList.remove('gica-modal--paired-right');
+      attemptDotsModal.classList.remove('gica-modal--paired-right');
+      $('gica-result-modal')?.classList.remove('gica-modal--paired-left');
     };
     $('gica-attempt-dots-close')?.addEventListener('click', closeAttemptDotsModal);
     $('gica-attempt-dots-backdrop')?.addEventListener('click', closeAttemptDotsModal);
@@ -4973,10 +5688,18 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
   });
   const _sum = o => o.A + o.B + o.C + o.D;
 
+  // Avg score denominator excludes untested employees so a BU with many
+  // uninitiated rows isn't dragged toward zero. "Has a score" = the latest
+  // attempt carries BOTH Measurement (score1) and Inspection (score2).
+  const hasBothScores = e =>
+    Number.isFinite(e.score1) && Number.isFinite(e.score2) && e.score1 > 0 && e.score2 > 0;
+  const scoredEmps    = emps.filter(hasBothScores);
+  const scoredCount   = scoredEmps.length;
+
   const totMeasure = _sum(byGradeMeasure), totInspect = _sum(byGradeInspect);
-  const avgScore   = total ? emps.reduce((s, e) => s + (e.score  || 0), 0) / total : 0;
-  const avgMeasure = total ? emps.reduce((s, e) => s + (e.score1 || 0), 0) / total : 0;
-  const avgInspect = total ? emps.reduce((s, e) => s + (e.score2 || 0), 0) / total : 0;
+  const avgScore   = scoredCount ? scoredEmps.reduce((s, e) => s + (e.score  || 0), 0) / scoredCount : 0;
+  const avgMeasure = scoredCount ? scoredEmps.reduce((s, e) => s + (e.score1 || 0), 0) / scoredCount : 0;
+  const avgInspect = scoredCount ? scoredEmps.reduce((s, e) => s + (e.score2 || 0), 0) / scoredCount : 0;
 
   const bus = sortBus(busRaw);
   const retestBuRows = bus.map(bu => ({
@@ -4995,9 +5718,12 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
       if (cntMeasure[e.grade1] != null) cntMeasure[e.grade1]++;
       if (cntInspect[e.grade2] != null) cntInspect[e.grade2]++;
     });
-    const avg        = inBu.reduce((s, e) => s + (e.score  || 0), 0) / inBu.length;
-    const avgMeasure = inBu.reduce((s, e) => s + (e.score1 || 0), 0) / inBu.length;
-    const avgInspect = inBu.reduce((s, e) => s + (e.score2 || 0), 0) / inBu.length;
+    // Same "has-a-score" denominator as the top-row KPI (see hasBothScores above).
+    const scoredInBu  = inBu.filter(hasBothScores);
+    const scoredNBu   = scoredInBu.length;
+    const avg        = scoredNBu ? scoredInBu.reduce((s, e) => s + (e.score  || 0), 0) / scoredNBu : 0;
+    const avgMeasure = scoredNBu ? scoredInBu.reduce((s, e) => s + (e.score1 || 0), 0) / scoredNBu : 0;
+    const avgInspect = scoredNBu ? scoredInBu.reduce((s, e) => s + (e.score2 || 0), 0) / scoredNBu : 0;
     const totM = _sum(cntMeasure), totI = _sum(cntInspect);
     const deptMap = {}, levelMap = {};
     inBu.forEach(e => {
@@ -5137,7 +5863,11 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
     if (!inBu.length) { trendByBu[bu] = null; return; }
     const measAcc = Array.from({length: GICA_TREND_MAX}, () => ({ s: 0, n: 0 }));
     const inspAcc = Array.from({length: GICA_TREND_MAX}, () => ({ s: 0, n: 0 }));
-    let testedCount = 0;
+    // Denominator matches KPI + BU cards: only employees whose latest attempt carries
+    // BOTH Measurement and Inspection count. Someone with a half-recorded attempt
+    // (only Meas or only Insp) contributes to the numerator via their history rows
+    // but not to the count — consistent with the "has a score" rule above.
+    const eligibleCount = inBu.filter(hasBothScores).length;
     // Carry-forward only goes as far as the BU's actual highest attempt count — if
     // nobody in the BU has tested past attempt 3, slots 4-12 must stay null (no data)
     // rather than flat-lining everyone's attempt-3 score out to slot 12.
@@ -5145,7 +5875,6 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
     inBu.forEach(e => {
       const hist = e.history || [];
       if (!hist.length) return; // never tested — no "latest" score to carry forward
-      testedCount++;
       // Carry-forward: every attempt slot (up to maxLen) uses this person's LATEST
       // recorded score as of that point (their actual attempt k if they've taken it,
       // otherwise their most recent prior attempt) — same "always everyone's latest
@@ -5157,11 +5886,9 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
         if (h.score2 != null) { inspAcc[k].s += h.score2; inspAcc[k].n++; }
       }
     });
-    // Divide by the count of people who have ever tested at least once — not the BU's
-    // full headcount (people with zero attempts have no "latest" score to contribute).
     trendByBu[bu] = {
-      meas: measAcc.map(x => x.n ? Math.round(x.s / testedCount * 100) : null),
-      insp: inspAcc.map(x => x.n ? Math.round(x.s / testedCount * 100) : null),
+      meas: measAcc.map(x => (eligibleCount && x.n) ? Math.round(x.s / eligibleCount * 100) : null),
+      insp: inspAcc.map(x => (eligibleCount && x.n) ? Math.round(x.s / eligibleCount * 100) : null),
     };
   });
 
@@ -5326,7 +6053,7 @@ function _gicaSummaryHtml(vm) {
       const x  = Math.round(PAD + i * slot + bo);
       const cx = Math.round(x + bw / 2);
       if (c.empty) {
-        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">no data</text>
+        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">${escapeHtml(t('gicaNoData'))}</text>
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
       }
       const totalH = Math.max(Math.round(c.count / maxN * CH), 3);
@@ -5365,19 +6092,19 @@ function _gicaSummaryHtml(vm) {
       <div class="stat-card">
         <div class="u-between">
           <div>
-            <div class="stat-card__label">Total employees</div>
+            <div class="stat-card__label">${t('gicaTotalEmp')}</div>
             <div class="stat-card__value">${vm.total}</div>
           </div>
           <div style="text-align:right;">
-            
+
             <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
-              <span class="u-muted">Pass</span><strong style="color:#16a34a;">${vm.totalPass}</strong>
+              <span class="u-muted">${t('pass')}</span><strong style="color:#16a34a;">${vm.totalPass}</strong>
             </div>
             <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
-              <span class="u-muted">Fail</span><strong style="color:#dc2626;">${vm.totalFail}</strong>
+              <span class="u-muted">${t('fail')}</span><strong style="color:#dc2626;">${vm.totalFail}</strong>
             </div>
             <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
-              <span class="u-muted">Pending</span><strong class="u-muted">${vm.totalAwaiting}</strong>
+              <span class="u-muted">${t('pending')}</span><strong class="u-muted">${vm.totalAwaiting}</strong>
             </div>
           </div>
         </div>
@@ -5386,13 +6113,13 @@ function _gicaSummaryHtml(vm) {
 
       <!-- Overall Score (Measurement) -->
       <div class="stat-card">
-        <div class="stat-card__label">Overall Score (Measurement)</div>
+        <div class="stat-card__label">${t('gicaOverallMeas')}</div>
         ${donutLabeled(vm.byGradeMeasure, vm.totMeasure, vm.avgMeasurePct)}
       </div>
 
       <!-- Overall Score (Inspection) -->
       <div class="stat-card">
-        <div class="stat-card__label">Overall Score (Inspection)</div>
+        <div class="stat-card__label">${t('gicaOverallInsp')}</div>
         ${donutLabeled(vm.byGradeInspect, vm.totInspect, vm.avgInspectPct)}
       </div>
 
@@ -5401,23 +6128,23 @@ function _gicaSummaryHtml(vm) {
         <div class="flip-card-inner">
           <div class="flip-card-front stat-card">
             <div class="u-between">
-              <div class="stat-card__label">Overall Average Score</div>
-              <div class="flip-indicator" style="margin-top:0;">↩ Grading criteria</div>
+              <div class="stat-card__label">${t('gicaOverallAvg')}</div>
+              <div class="flip-indicator" style="margin-top:0;">${t('gicaFlipCriteria')}</div>
             </div>
             ${donutLabeled(avgCounts, avgTot, avgOverallPct)}
           </div>
           <div class="flip-card-back stat-card">
-            <div class="stat-card__label">Criteria</div>
+            <div class="stat-card__label">${t('gicaCriteria')}</div>
             <div class="criteria-list">
-              <span class="u-muted criteria-list__head">Grading Criteria</span>
+              <span class="u-muted criteria-list__head">${t('gicaGradingCriteria')}</span>
               ${[{g:'A',r:'85 – 100%'},{g:'B',r:'65 – 84%'},{g:'C',r:'50 – 64%'},{g:'D',r:'≤ 49%'}]
                 .map(c => `<div class="criteria-list__row">
                   <span class="donut-legend__dot" style="background:${GICA_GRADE_COLORS[c.g]};"></span>
-                  <span class="u-muted">Grade ${c.g}</span>
+                  <span class="u-muted">${t('grade')} ${c.g}</span>
                   <span class="criteria-list__range">${c.r}</span>
                 </div>`).join('')}
             </div>
-            <div class="flip-indicator">↩ Back</div>
+            <div class="flip-indicator">${t('gicaFlipBack')}</div>
           </div>
         </div>
       </div>
@@ -5428,7 +6155,7 @@ function _gicaSummaryHtml(vm) {
     <div class="flip-card-half">
       <div class="u-between">
         <div class="flip-card-type">${label}</div>
-        ${tot != null ? `<span class="u-muted" style="font-size:0.7rem;font-weight:600;">${tot} People</span>` : ''}
+        ${tot != null ? `<span class="u-muted" style="font-size:0.7rem;font-weight:600;">${tot} ${t('gicaPeople')}</span>` : ''}
       </div>
       ${visualHtml}
     </div>`;
@@ -5438,22 +6165,22 @@ function _gicaSummaryHtml(vm) {
       <div class="bu-head">
         <span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span>
       </div>
-      ${faceHalfHtml('Score (Measurement)', isFront ? c.totMeasureBu : null, topHtml)}
+      ${faceHalfHtml(t('gicaScoreMeas'), isFront ? c.totMeasureBu : null, topHtml)}
       <div class="flip-card-divider"></div>
-      ${faceHalfHtml('Score (Inspection)', null, bottomHtml)}
+      ${faceHalfHtml(t('gicaScoreInsp'), null, bottomHtml)}
     </div>`;
 
   const renderFlipCard = c => {
     if (c.empty) return `<div class="stat-card stat-card--empty" style="min-width:0;">
       <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
-      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">${t('gicaNoData')}</div>
     </div>`;
     const buColor = GICA_BU_COLORS[c.bu] || 'var(--text)';
-    const t = vm.trendByBu && vm.trendByBu[c.bu];
-    const hasTrend = !!t;
+    const tr = vm.trendByBu && vm.trendByBu[c.bu];
+    const hasTrend = !!tr;
     const trendWrap = id => hasTrend
       ? `<div class="gica-trend-canvas-wrap"><canvas id="${id}"></canvas></div>`
-      : `<div class="u-muted" style="font-size:0.72rem;text-align:center;padding:30px 0;">ไม่มีข้อมูล trend</div>`;
+      : `<div class="u-muted" style="font-size:0.72rem;text-align:center;padding:30px 0;">${t('gicaNoTrend')}</div>`;
     return `<div class="flip-card-wrap" data-bu="${escapeHtml(c.bu)}">
       <div class="flip-card-inner">
         ${dualFaceHtml(true,  c, buColor, donutLabeledSm(c.cntMeasure, c.totMeasureBu, c.avgMeasurePct), donutLabeledSm(c.cntInspect, c.totInspectBu, c.avgInspectPct))}
@@ -5472,9 +6199,9 @@ function _gicaSummaryHtml(vm) {
   const _mkExpCell = (c, rowAttr, kpiPct) => {
     if (!c || c.empty) return `<td class="exp-cell exp-cell--empty">—</td>`;
     const cls = passClass(c.passBothPct, kpiPct);
-    return `<td class="exp-cell" ${rowAttr} title="คลิกดูรายชื่อ">
+    return `<td class="exp-cell" ${rowAttr} title="${escapeHtml(t('gicaClickToView'))}">
       <div class="exp-cell__top">
-        <span class="exp-cell__count">${c.passBothCount}/${c.count} คน</span>
+        <span class="exp-cell__count">${c.passBothCount}/${c.count} ${t('gicaPeople')}</span>
         <span class="exp-cell__pct pass-pct--${cls}">${c.passBothPct}%</span>
       </div>
       <div class="pbar pbar--6${kpiPct != null ? ' pbar--kpi' : ''}" style="margin:2px 0 0;">
@@ -5509,16 +6236,16 @@ function _gicaSummaryHtml(vm) {
       <td class="exp-td--expect exp-td--expect-last">${expBadge(row.expI)}</td>
       ${cells}
     </tr>`;
-  }).join('') : `<tr><td colspan="${expMatrixColspan}" style="text-align:center;color:var(--text-muted);padding:20px;">ไม่มีข้อมูล</td></tr>`;
+  }).join('') : `<tr><td colspan="${expMatrixColspan}" style="text-align:center;color:var(--text-muted);padding:20px;">${t('gicaMatrixEmpty')}</td></tr>`;
 
   const matrixDeptRows = vm.expMatrixDept.length ? vm.expMatrixDept.map(({ dept, deptAgg, levelRows }, idx) => {
     const aggCells = vm.expMatrixBus.map(bu => {
       const c = deptAgg[bu];
       if (!c || c.empty) return `<td class="exp-cell exp-cell--empty exp-cell--dept-agg">—</td>`;
       const cls = passClass(c.passBothPct);
-      return `<td class="exp-cell exp-cell--dept-agg" data-dept="${escapeHtml(dept)}" data-bu="${escapeHtml(bu)}" title="คลิกดูรายชื่อทั้งแผนก">
+      return `<td class="exp-cell exp-cell--dept-agg" data-dept="${escapeHtml(dept)}" data-bu="${escapeHtml(bu)}" title="${escapeHtml(t('gicaClickToViewDept'))}">
         <div class="exp-cell__top">
-          <span class="exp-cell__count">${c.passBothCount}/${c.count} คน</span>
+          <span class="exp-cell__count">${c.passBothCount}/${c.count} ${t('gicaPeople')}</span>
           <span class="exp-cell__pct pass-pct--${cls}">${c.passBothPct}%</span>
         </div>
         <div class="pbar pbar--6" style="margin:2px 0 0;">
@@ -5543,14 +6270,14 @@ function _gicaSummaryHtml(vm) {
         <td class="exp-row__dept-head" colspan="3">${escapeHtml(dept)}</td>
         ${aggCells}
       </tr>${subRows}`;
-  }).join('') : `<tr><td colspan="${expMatrixColspan}" style="text-align:center;color:var(--text-muted);padding:20px;">ไม่มีข้อมูล</td></tr>`;
+  }).join('') : `<tr><td colspan="${expMatrixColspan}" style="text-align:center;color:var(--text-muted);padding:20px;">${t('gicaMatrixEmpty')}</td></tr>`;
 
   // Table_freq reference modal: per (department, level, role) — how often someone is
   // tested and the minimum grade each sub-test must reach. Grouped by department for
   // readability, sorted by GICA_LEVEL_ORDER within each department.
   const freqModalBody = (() => {
     const rows = vm.freqTable || [];
-    if (!rows.length) return `<p class="u-muted" style="text-align:center;padding:24px 0;">ไม่มีข้อมูล Table_freq</p>`;
+    if (!rows.length) return `<p class="u-muted" style="text-align:center;padding:24px 0;">${t('gicaFreqEmpty')}</p>`;
     const byDept = {};
     rows.forEach(r => { (byDept[r.department || '—'] = byDept[r.department || '—'] || []).push(r); });
     const depts = Object.keys(byDept).sort((a, b) => a.localeCompare(b));
@@ -5572,11 +6299,11 @@ function _gicaSummaryHtml(vm) {
       <table class="gica-freq-table" style="table-layout: fixed; width: 100%; border-collapse: collapse;">
         ${cols}
         <thead><tr>
-          <th>Dept / Level</th>
-          <th>Role</th>
-          <th style="text-align:center;">Frequency</th>
-          <th style="text-align:center;" title="Measurement — Expected grade"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
-          <th style="text-align:center;" title="Inspection — Expected grade"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+          <th>${t('gicaFreqDeptLevel')}</th>
+          <th>${t('gicaFreqRole')}</th>
+          <th style="text-align:center;">${t('gicaFreqFreq')}</th>
+          <th style="text-align:center;" title="${escapeHtml(t('gicaExpectedMeas'))}"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+          <th style="text-align:center;" title="${escapeHtml(t('gicaExpectedInsp'))}"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
         </tr></thead>
         <tbody>
           ${depts.map(dept => `
@@ -5585,7 +6312,7 @@ function _gicaSummaryHtml(vm) {
               <tr>
                 <td style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(r.level || '—')}</td>
                 <td class="u-muted" style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escapeHtml(r.role || '—')}</td>
-                <td style="text-align:center; overflow:hidden; white-space:nowrap;">Every ${r.freqMonths != null ? `${r.freqMonths} mos` : '—'}</td>
+                <td style="text-align:center; overflow:hidden; white-space:nowrap;">${r.freqMonths != null ? t('gicaFreqEveryNMos', { n: r.freqMonths }) : '—'}</td>
                 <td style="text-align:center;">${expBadge(r.expectation1)}</td>
                 <td style="text-align:center;">${expBadge(r.expectation2)}</td>
               </tr>`).join('')}
@@ -5599,18 +6326,18 @@ function _gicaSummaryHtml(vm) {
     <div class="card card--section gica-expect-section">
       <div class="chart-header">
         <div style="display:flex;align-items:center;gap:10px;margin-top:-16px;">
-          <h3 style="margin:0; font-size:1rem; color:var(--text);">Expectation Matrix</h3>
-          
+          <h3 style="margin:0; font-size:1rem; color:var(--text);">${t('gicaExpMatrix')}</h3>
+
         </div>
         <div class="exp-legend">
-          <button id="gica-kpi-setup-btn" class="gica-kpi-setup-btn" title="กำหนด KPI target สำหรับแต่ละ Level">
-            <i class="ti ti-target-arrow" aria-hidden="true"></i> KPI Setup
+          <button id="gica-kpi-setup-btn" class="gica-kpi-setup-btn" title="${escapeHtml(t('gicaKpiSetupTip'))}">
+            <i class="ti ti-target-arrow" aria-hidden="true"></i> ${t('gicaKpiSetup')}
           </button>
-          <button id="gica-freq-info-btn" class="gica-kpi-setup-btn" title="เกณฑ์ความถี่การประเมิน (Table_freq)">
+          <button id="gica-freq-info-btn" class="gica-kpi-setup-btn" title="${escapeHtml(t('gicaFreqInfoTip'))}">
             <i class="ti ti-file-text" aria-hidden="true"></i>
           </button>
-          <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#16a34a;"></span>KPI Achieved</span>
-          <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#dc2626;"></span>KPI Not Achieved</span>
+          <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#16a34a;"></span>${t('gicaKpiAchieved')}</span>
+          <span class="exp-legend__item"><span class="exp-legend__dot" style="background:#dc2626;"></span>${t('gicaKpiNotAchieved')}</span>
         </div>
       </div>
       <div id="gica-matrix-tables">
@@ -5618,9 +6345,9 @@ function _gicaSummaryHtml(vm) {
           <div class="exp-table-wrap">
             <table class="exp-table">
               <thead><tr>
-                <th class="exp-th exp-th--level">Level</th>
-                <th class="exp-th exp-th--expect" title="Measurement — เกรดที่คาดหวัง"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
-                <th class="exp-th exp-th--expect exp-th--expect-last" title="Inspection — เกรดที่คาดหวัง"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+                <th class="exp-th exp-th--level">${t('gicaColLevel')}</th>
+                <th class="exp-th exp-th--expect" title="${escapeHtml(t('gicaExpectedMeas'))}"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+                <th class="exp-th exp-th--expect exp-th--expect-last" title="${escapeHtml(t('gicaExpectedInsp'))}"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
                 ${buThs}
               </tr></thead>
               <tbody>${matrixRows}</tbody>
@@ -5631,9 +6358,9 @@ function _gicaSummaryHtml(vm) {
           <div class="exp-table-wrap">
             <table class="exp-table">
               <thead><tr>
-                <th class="exp-th exp-th--level exp-th--dept">Department</th>
-                <th class="exp-th exp-th--expect" title="Measurement — เกรดที่คาดหวัง"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
-                <th class="exp-th exp-th--expect exp-th--expect-last" title="Inspection — เกรดที่คาดหวัง"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
+                <th class="exp-th exp-th--level exp-th--dept">${t('gicaColDept')}</th>
+                <th class="exp-th exp-th--expect" title="${escapeHtml(t('gicaExpectedMeas'))}"><i class="ti ti-eye-search" aria-hidden="true"></i></th>
+                <th class="exp-th exp-th--expect exp-th--expect-last" title="${escapeHtml(t('gicaExpectedInsp'))}"><i class="ti ti-ruler-2" aria-hidden="true"></i></th>
                 ${buThs}
               </tr></thead>
               <tbody>${matrixDeptRows}</tbody>
@@ -5656,13 +6383,13 @@ function _gicaSummaryHtml(vm) {
       <div class="gica-modal__backdrop" id="gica-kpi-backdrop"></div>
       <div class="gica-modal__panel gica-kpi-modal__panel">
         <div class="gica-modal__head">
-          <h4 style="margin:0;font-size:1rem;">KPI Setup</h4>
+          <h4 style="margin:0;font-size:1rem;">${t('gicaKpiSetup')}</h4>
           <button class="gica-modal__close" id="gica-kpi-close" aria-label="ปิด">✕</button>
         </div>
         <div class="gica-kpi-modal__body">
-          <p class="u-muted gica-kpi-modal__desc">Define KPI target (%) for each level </p>
+          <p class="u-muted gica-kpi-modal__desc">${t('gicaKpiModalDesc')} </p>
           <div class="gica-kpi-bu-tabs">
-            <button class="gica-kpi-bu-tab${_gicaKpiActiveBu === 'all' ? ' gica-kpi-bu-tab--active' : ''}" data-bu="all" type="button">All BU</button>
+            <button class="gica-kpi-bu-tab${_gicaKpiActiveBu === 'all' ? ' gica-kpi-bu-tab--active' : ''}" data-bu="all" type="button">${t('gicaAllBu')}</button>
             ${BU_ORDER.map(bu => `<button class="gica-kpi-bu-tab${_gicaKpiActiveBu === bu ? ' gica-kpi-bu-tab--active' : ''}" data-bu="${escapeHtml(bu)}" type="button">${escapeHtml(bu)}</button>`).join('')}
           </div>
           <div class="gica-kpi-list" id="gica-kpi-list">
@@ -5670,8 +6397,8 @@ function _gicaSummaryHtml(vm) {
           </div>
         </div>
         <div class="gica-kpi-modal__footer">
-          <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-kpi-cancel">Cancel</button>
-          <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-kpi-confirm">Confirm</button>
+          <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-kpi-cancel">${t('cancel')}</button>
+          <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-kpi-confirm">${t('confirm')}</button>
         </div>
       </div>
     </div>
@@ -5679,7 +6406,7 @@ function _gicaSummaryHtml(vm) {
       <div class="gica-modal__backdrop" id="gica-freq-backdrop"></div>
       <div class="gica-modal__panel">
         <div class="gica-modal__head">
-          <h4 style="margin:0;font-size:1rem;">Assessment Frequency &amp; Expectation</h4>
+          <h4 style="margin:0;font-size:1rem;">${t('gicaFreqModalTitle')}</h4>
           <button class="gica-modal__close" id="gica-freq-close" aria-label="ปิด">✕</button>
         </div>
         <div class="gica-modal__body">${freqModalBody}</div>
@@ -5689,19 +6416,19 @@ function _gicaSummaryHtml(vm) {
   const quadSection = `
     <div class="card card--section" id="gica-quad-section">
       <div class="chart-header">
-        <h3 style="margin:0;font-size:1rem;color:var(--text);">Quadrant Analysis</h3>
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">${t('gicaQuadTitle')}</h3>
         <div style="display:flex;align-items:center;gap:6px;">
           <div class="quad-dropdown">
-            <button class="quad-dd-btn" id="quad-bu-trigger"><span class="quad-dd-label">BU</span> ▾</button>
+            <button class="quad-dd-btn" id="quad-bu-trigger"><span class="quad-dd-label">${t('gicaColBu')}</span> ▾</button>
             <div class="quad-dd-panel" id="quad-bu-panel" hidden>
-              <button class="quad-btn quad-btn--active" data-bu="all">All BU</button>
+              <button class="quad-btn quad-btn--active" data-bu="all">${t('gicaAllBu')}</button>
               ${vm.expMatrixBus.map(bu => `<button class="quad-btn" data-bu="${escapeHtml(bu)}">${escapeHtml(bu)}</button>`).join('')}
             </div>
           </div>
           <div class="quad-dropdown">
-            <button class="quad-dd-btn" id="quad-dept-trigger"><span class="quad-dd-label">Department</span> ▾</button>
+            <button class="quad-dd-btn" id="quad-dept-trigger"><span class="quad-dd-label">${t('gicaColDept')}</span> ▾</button>
             <div class="quad-dd-panel" id="quad-dept-panel" hidden>
-              <button class="quad-btn quad-btn--active" data-dept="all">All Departments</button>
+              <button class="quad-btn quad-btn--active" data-dept="all">${t('gicaAllDepts')}</button>
               ${vm.expMatrixDepts.map(d => `<button class="quad-btn" data-dept="${escapeHtml(d)}">${escapeHtml(d)}</button>`).join('')}
             </div>
           </div>
@@ -5721,7 +6448,7 @@ function _gicaSummaryHtml(vm) {
   return `${kpi}
     <div style="position:relative;">
       <div class="stat-grid stat-grid--6">${buFlipCards}</div>
-      <button id="gica-flip-all" class="gica-flip-btn" data-flipped="0" aria-label="ดู Trend" title="ดู Trend">
+      <button id="gica-flip-all" class="gica-flip-btn" data-flipped="0" aria-label="${escapeHtml(t('gicaFlipViewTrend'))}" title="${escapeHtml(t('gicaFlipViewTrend'))}">
         <span class="gica-flip-btn__icon" aria-hidden="true">↻</span>
       </button>
     </div>
@@ -5733,11 +6460,12 @@ function _mountGicaQuadrant(container, emps) {
   const section = container.querySelector('#gica-quad-section');
   if (!section || typeof Chart === 'undefined') return;
 
+  // Resolve descriptions from i18n at mount time so a language change re-render picks the new labels.
   const QUAD_CFG = {
-    I:   { bg: 'rgba(22,163,74,0.65)',  bd: '#15803d', desc: 'Pass Both'               },
-    II:  { bg: 'rgba(245,158,11,0.65)', bd: '#b45309', desc: 'Meas. Fail / Insp. Pass' },
-    III: { bg: 'rgba(99,102,241,0.65)', bd: '#4338ca', desc: 'Meas. Pass / Insp. Fail' },
-    IV:  { bg: 'rgba(220,38,38,0.65)',  bd: '#b91c1c', desc: 'Fail Both'               },
+    I:   { bg: 'rgba(22,163,74,0.65)',  bd: '#15803d', desc: t('gicaQuadPassBoth')    },
+    II:  { bg: 'rgba(245,158,11,0.65)', bd: '#b45309', desc: t('gicaQuadMFailIPass')  },
+    III: { bg: 'rgba(99,102,241,0.65)', bd: '#4338ca', desc: t('gicaQuadMPassIFail')  },
+    IV:  { bg: 'rgba(220,38,38,0.65)',  bd: '#b91c1c', desc: t('gicaQuadFailBoth')    },
   };
   const _charts  = {};
   const _buSet   = new Set();
@@ -5921,7 +6649,7 @@ function _mountGicaSummary(html, vm) {
       btn.setAttribute('aria-label', newLabel);
     });
   };
-  wireFlipAll('#gica-flip-all', '.flip-card-wrap[data-bu]', 'ดู Trend', 'ดู Score');
+  wireFlipAll('#gica-flip-all', '.flip-card-wrap[data-bu]', t('gicaFlipViewTrend'), t('gicaFlipViewScore'));
   const avgFlip = container.querySelector('#gica-avg-flip');
   if (avgFlip) avgFlip.addEventListener('click', () => avgFlip.classList.toggle('is-flipped'));
 
@@ -6084,6 +6812,9 @@ function _mountGicaSummary(html, vm) {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
+      // Top padding on the chart area itself lifts the 100-line marker off the
+      // edge without stretching the axis (max stays 100, ticks stay 0/20/…/100).
+      layout: { padding: { top: 10 } },
       scales: {
         y: {
           min: 0, max: 100,
@@ -6501,84 +7232,84 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
 function _gicaScheduleHtml(vm) {
   const legendItem = (color, text) => `
     <span><span style="display:inline-block;width:10px;height:10px;background:${color};border-radius:2px;margin-right:4px;vertical-align:middle;"></span>${text}</span>`;
-  const buLabel   = vm.buFilter.size === 0   ? 'BU'   : vm.buFilter.size   <= 2 ? [...vm.buFilter].join(', ')   : `BU (${vm.buFilter.size})`;
-  const deptLabel = vm.deptFilter.size === 0 ? 'Department' : vm.deptFilter.size <= 2 ? [...vm.deptFilter].join(', ') : `Department (${vm.deptFilter.size})`;
+  const buLabel   = vm.buFilter.size === 0   ? t('gicaColBu')   : vm.buFilter.size   <= 2 ? [...vm.buFilter].join(', ')   : `${t('gicaColBu')} (${vm.buFilter.size})`;
+  const deptLabel = vm.deptFilter.size === 0 ? t('gicaColDept') : vm.deptFilter.size <= 2 ? [...vm.deptFilter].join(', ') : `${t('gicaColDept')} (${vm.deptFilter.size})`;
   const timelineCard = `
     <div class="card card--section">
       <div class="card-head u-between">
-        <h3 style="margin:0;font-size:1rem;color:var(--text);">Assessment Schedule Timeline</h3>
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">${t('gicaSchedTimeline')}</h3>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <div class="quad-dropdown">
             <button class="quad-dd-btn${vm.buFilter.size > 0 ? ' quad-dd-btn--active' : ''}" id="gica-sched-bu-trigger" type="button"><span class="quad-dd-label">${buLabel}</span> ▾</button>
             <div class="quad-dd-panel" id="gica-sched-bu-panel" hidden>
-              <button class="quad-btn${vm.buFilter.size === 0 ? ' quad-btn--active' : ''}" data-bu="all" type="button">All BU</button>
+              <button class="quad-btn${vm.buFilter.size === 0 ? ' quad-btn--active' : ''}" data-bu="all" type="button">${t('gicaAllBu')}</button>
               ${vm.availBus.map(bu => `<button class="quad-btn${vm.buFilter.has(bu) ? ' quad-btn--active' : ''}" data-bu="${escapeHtml(bu)}" type="button">${escapeHtml(bu)}</button>`).join('')}
             </div>
           </div>
           <div class="quad-dropdown">
             <button class="quad-dd-btn${vm.deptFilter.size > 0 ? ' quad-dd-btn--active' : ''}" id="gica-sched-dept-trigger" type="button"><span class="quad-dd-label">${deptLabel}</span> ▾</button>
             <div class="quad-dd-panel" id="gica-sched-dept-panel" hidden>
-              <button class="quad-btn${vm.deptFilter.size === 0 ? ' quad-btn--active' : ''}" data-dept="all" type="button">All Departments</button>
+              <button class="quad-btn${vm.deptFilter.size === 0 ? ' quad-btn--active' : ''}" data-dept="all" type="button">${t('gicaAllDepts')}</button>
               ${vm.availDepts.map(d => `<button class="quad-btn${vm.deptFilter.has(d) ? ' quad-btn--active' : ''}" data-dept="${escapeHtml(d)}" type="button">${escapeHtml(d)}</button>`).join('')}
             </div>
           </div>
           <div class="toggle-group" id="gica-schedTimelineToggle">
-            <button class="toggle-btn ${vm.timelineMode === 'week'  ? 'active' : ''}" data-mode="week"  type="button">Week</button>
-            <button class="toggle-btn ${vm.timelineMode === 'month' ? 'active' : ''}" data-mode="month" type="button">Month</button>
+            <button class="toggle-btn ${vm.timelineMode === 'week'  ? 'active' : ''}" data-mode="week"  type="button">${t('gicaWeek')}</button>
+            <button class="toggle-btn ${vm.timelineMode === 'month' ? 'active' : ''}" data-mode="month" type="button">${t('gicaMonth')}</button>
           </div>
         </div>
       </div>
       <div class="chart-canvas-wrap" style="height:300px;"><canvas id="gica-schedTimelineChart"></canvas></div>
       <div style="display:flex;gap:16px;margin-top:10px;font-size:0.74rem;color:var(--text-muted);flex-wrap:wrap;">
-        ${legendItem('#64748b', 'Total')}
-        ${legendItem('#16a34a', 'On-time (Pass)')}
-        ${legendItem('#8def86', 'On-time (Fail)')}
-        ${legendItem('#dc4e4e', 'Overdue')}
+        ${legendItem('#64748b', t('gicaLegendTotal'))}
+        ${legendItem('#16a34a', t('gicaLegendOnTimePass'))}
+        ${legendItem('#8def86', t('gicaLegendOnTimeFail'))}
+        ${legendItem('#dc4e4e', t('gicaLegendOverdue'))}
       </div>
     </div>`;
 
   const buCardsHtml = vm.weeklyBuCards.map(c => {
     if (c.empty) return `<div class="stat-card stat-card--empty" style="min-width:0;">
       <div class="bu-name u-muted">${escapeHtml(c.bu)}</div>
-      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">— no data —</div>
+      <div class="u-muted" style="font-size:0.75rem;margin-top:12px;">${t('gicaNoData')}</div>
     </div>`;
     const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
     const passPct = c.total > 0 ? Math.min(100, Math.round(c.attendedPass / c.total * 100)) : 0;
     const failPct = c.total > 0 ? Math.min(100, Math.round(c.attendedFail / c.total * 100)) : 0;
     return `
-      <div class="stat-card gica-bu-cohort-card" data-bu="${escapeHtml(c.bu)}" style="min-width:0;cursor:pointer;" title="Click to view the name list">
+      <div class="stat-card gica-bu-cohort-card" data-bu="${escapeHtml(c.bu)}" style="min-width:0;cursor:pointer;" title="${escapeHtml(t('gicaClickBuCohort'))}">
         <div class="bu-head">
           <span class="bu-name" style="color:${buColor};">${escapeHtml(c.bu)}</span>
-          <span class="u-muted bu-count">${c.total} People</span>
+          <span class="u-muted bu-count">${c.total} ${t('gicaPeople')}</span>
         </div>
         <div style="margin-bottom:8px;">
           <div class="u-between u-muted" style="font-size:0.7rem;margin-bottom:2px;">
-            <span>Assessment Status</span>
+            <span>${t('gicaAssessmentStatus')}</span>
             <span class="u-text" style="font-weight:600;">${c.attended}/${c.total}</span>
           </div>
-          <div class="pbar pbar--6" style="display:flex;" title="Pass: ${c.attendedPass}, Fail: ${c.attendedFail}">
+          <div class="pbar pbar--6" style="display:flex;" title="${t('pass')}: ${c.attendedPass}, ${t('fail')}: ${c.attendedFail}">
             ${passPct > 0 ? `<div class="pbar__fill" style="background:#16a34a;width:${passPct}%;border-radius:0;"></div>` : ''}
             ${failPct > 0 ? `<div class="pbar__fill" style="background:#86efac;width:${failPct}%;border-radius:0;"></div>` : ''}
           </div>
         </div>
         <div class="u-muted stat-card__footer">
           <div class="u-between" style="margin-bottom:2px;">
-            <span>Attended</span><strong class="u-text">${c.attended}</strong>
+            <span>${t('gicaAttended')}</span><strong class="u-text">${c.attended}</strong>
           </div>
           <div class="u-between">
-            <span>Not yet attended</span><strong style="${c.overdue > 0 ? 'color:#dc2626;' : 'color:var(--text);'}">${c.overdue}</strong>
+            <span>${t('gicaNotYetAttended')}</span><strong style="${c.overdue > 0 ? 'color:#dc2626;' : 'color:var(--text);'}">${c.overdue}</strong>
           </div>
         </div>
       </div>`;
-  }).join('') || `<div class="u-muted" style="grid-column:1/-1;text-align:center;padding:20px;">ไม่มีข้อมูล BU</div>`;
+  }).join('') || `<div class="u-muted" style="grid-column:1/-1;text-align:center;padding:20px;">${t('gicaNoBuData')}</div>`;
   const upcomingCard = `
     <div class="card card--section">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <h3 style="margin:0;font-size:1rem;color:var(--text);">Upcoming Assessments</h3>
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">${t('gicaUpcoming')}</h3>
         <div id="gica-schedToggle" class="toggle-group">
-          <button class="toggle-btn${vm.schedMode === 'all'    ? ' active' : ''}" data-mode="all"    type="button">All</button>
-          <button class="toggle-btn${vm.schedMode === 'Retest' ? ' active' : ''}" data-mode="Retest" type="button">Retest</button>
-          <button class="toggle-btn${vm.schedMode === 'Review' ? ' active' : ''}" data-mode="Review" type="button">Review</button>
+          <button class="toggle-btn${vm.schedMode === 'all'    ? ' active' : ''}" data-mode="all"    type="button">${t('gicaAll')}</button>
+          <button class="toggle-btn${vm.schedMode === 'Retest' ? ' active' : ''}" data-mode="Retest" type="button">${t('gicaRetest')}</button>
+          <button class="toggle-btn${vm.schedMode === 'Review' ? ' active' : ''}" data-mode="Review" type="button">${t('gicaReview')}</button>
         </div>
       </div>
       <div id="gica-schedSummary"></div>
@@ -6602,7 +7333,7 @@ function _gicaScheduleHtml(vm) {
   // Proportion of failed employees (passed === false, same population as the "Total
   // employees" card) broken down by how many consecutive attempts they've failed.
   const failStreakColors = { fail1: '#f59e0b', fail2: '#ea580c', fail3: '#dc2626' };
-  const failStreakLabels = { fail1: 'Fail 1', fail2: 'Fail 2', fail3: 'Fail 3+' };
+  const failStreakLabels = { fail1: t('gicaFail1'), fail2: t('gicaFail2'), fail3: t('gicaFail3') };
   const failStreakCounts = { fail1: 0, fail2: 0, fail3: 0 };
   vm.employees.filter(e => e.passed === false).forEach(e => {
     const s = _gicaFailStreak(e);
@@ -6660,12 +7391,12 @@ function _gicaScheduleHtml(vm) {
         ${segs.join('')}
         ${lines.join('')}
         <text x="${CX}" y="${CY + 8}" text-anchor="middle" font-size="22" font-weight="800" fill="${failStreakColors.fail3}">${tot}</text>
-        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)" letter-spacing="0.5">Fail Cases</text>
+        <text x="${CX}" y="${CY + 20}" text-anchor="middle" font-size="8.5" fill="var(--text-muted)" letter-spacing="0.5">${escapeHtml(t('gicaFailCases'))}</text>
       </svg>`;
   };
 
   const failedBuBarChart = buCards => {
-    if (!buCards.length) return `<div class="u-muted" style="font-size:0.75rem;margin-top:10px;">ไม่มีข้อมูล</div>`;
+    if (!buCards.length) return `<div class="u-muted" style="font-size:0.75rem;margin-top:10px;">${t('gicaMatrixEmpty')}</div>`;
     const active = buCards.filter(c => !c.empty);
     const maxN = Math.max(...active.map(c => (c.failed || 0) + (c.awaiting || 0)), 1);
     const W = 220, CH = 70, PAD = 8, LH = 16, TPAD = 14;
@@ -6677,7 +7408,7 @@ function _gicaScheduleHtml(vm) {
       const x  = Math.round(PAD + i * slot + bo);
       const cx = Math.round(x + bw / 2);
       if (c.empty) {
-        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">no data</text>
+        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">${escapeHtml(t('gicaNoData'))}</text>
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
       }
       const failed  = c.failed   || 0;
@@ -6713,13 +7444,13 @@ function _gicaScheduleHtml(vm) {
     <div class="stat-card">
       <div class="u-between">
         <div>
-          <div class="stat-card__label">Assessment Required</div>
+          <div class="stat-card__label">${t('gicaAssessmentRequired')}</div>
           <div class="stat-card__value"${vm.retestN > 0 ? ' style="color:#dc2626;"' : ''}>${vm.retestN}</div>
         </div>
         <div style="text-align:right;">
-          
+
           <div class="u-between" style="width:96px;margin-left:auto;font-size:0.74rem;">
-            <span class="u-muted">Pending</span><strong class="u-muted">${vm.pendingN}</strong>
+            <span class="u-muted">${t('pending')}</span><strong class="u-muted">${vm.pendingN}</strong>
           </div>
         </div>
       </div>
@@ -6728,7 +7459,7 @@ function _gicaScheduleHtml(vm) {
 
   const donutStatCard = `
     <div class="stat-card">
-      <div class="stat-card__label">Failure Status by Consecutive Attempts</div>
+      <div class="stat-card__label">${t('gicaFailStatusStreak')}</div>
       ${donutFailStreakLg(failStreakCounts, failStreakTotal)}
     </div>`;
 
@@ -6741,7 +7472,7 @@ function _gicaScheduleHtml(vm) {
     if (c.empty) {
       return `<div class="mini-bar__row mini-bar__row--lg">
         <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
-        <span class="u-muted" style="font-size:0.68rem;">no data</span>
+        <span class="u-muted" style="font-size:0.68rem;">${escapeHtml(t('gicaNoData'))}</span>
       </div>`;
     }
     const passPct  = c.total ? Math.round(c.attendedPass  / c.total * 100) : 0;
@@ -6772,7 +7503,7 @@ function _gicaScheduleHtml(vm) {
     if (c.empty && !c.earlyN) {
       return `<div class="mini-bar__row mini-bar__row--lg">
         <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
-        <span class="u-muted" style="font-size:0.68rem;">no data</span>
+        <span class="u-muted" style="font-size:0.68rem;">${escapeHtml(t('gicaNoData'))}</span>
       </div>`;
     }
     const totalPass  = (c.attendedPass || 0) + (c.earlyPass || 0);
@@ -6798,16 +7529,16 @@ function _gicaScheduleHtml(vm) {
     <div class="stat-card">
       <div style="display:flex;gap:0;">
         <div style="flex:1;min-width:0;padding-right:12px;">
-          <div class="stat-card__label">Due this week</div>
+          <div class="stat-card__label">${t('gicaDueThisWeek')}</div>
           <div class="stat-card__value">${weekAttended}/${weekTotal}</div>
         </div>
         <div style="width:1px;background:var(--border-light);flex-shrink:0;"></div>
         <div style="flex:1;min-width:0;padding-left:12px;">
-          <div class="stat-card__label">Early Assessment</div>
+          <div class="stat-card__label">${t('gicaEarlyAssessment')}</div>
           <div class="stat-card__value" style="color:${earlyTotal > 0 ? '#2563eb' : 'var(--text)'};">${earlyTotal}</div>
         </div>
       </div>
-      <div style="border-top:1px solid var(--border-light);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px;">${combinedBuRows || '<span class="u-muted" style="font-size:0.74rem;">No data</span>'}</div>
+      <div style="border-top:1px solid var(--border-light);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px;">${combinedBuRows || `<span class="u-muted" style="font-size:0.74rem;">${t('gicaMatrixEmpty')}</span>`}</div>
     </div>`;
 
   // On-time Rate = attended this week / required this week — pass/fail doesn't matter
@@ -6819,7 +7550,7 @@ function _gicaScheduleHtml(vm) {
     if (c.empty) {
       return `<div class="mini-bar__row mini-bar__row--lg">
         <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
-        <span class="u-muted" style="font-size:0.68rem;">no data</span>
+        <span class="u-muted" style="font-size:0.68rem;">${escapeHtml(t('gicaNoData'))}</span>
       </div>`;
     }
     const pct = c.total ? Math.round(c.attended / c.total * 100) : 0;
@@ -6834,7 +7565,7 @@ function _gicaScheduleHtml(vm) {
   }).join('');
   const onTimeRateCard = `
     <div class="stat-card">
-      <div class="stat-card__label">Overall On-time Rate</div>
+      <div class="stat-card__label">${t('gicaOverallOnTime')}</div>
       <div class="stat-card__value" style="color:${onTimePctColor(overallOnTimePct)};">${overallOnTimePct != null ? overallOnTimePct + '%' : '—'}</div>
       <div style="display:flex;flex-direction:column;gap:9px;margin-top:8px;">${onTimeBuRows}</div>
     </div>`;
@@ -6850,7 +7581,7 @@ function _gicaScheduleHtml(vm) {
   const calendarCard = `
     <div class="card card--section">
       <div class="card-head u-between">
-        <h3 style="margin:0;font-size:1rem;color:var(--text);">Assessment Schedule (Calendar View)</h3>
+        <h3 style="margin:0;font-size:1rem;color:var(--text);">${t('gicaSchedCalendar')}</h3>
       </div>
       <div id="gica-cal-summary"></div>
     </div>`;
@@ -6862,8 +7593,8 @@ function _gicaScheduleHtml(vm) {
         <div class="gica-modal__head">
           <h4 id="gica-buCohort-title" style="margin:0;font-size:1rem;"></h4>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button onclick="_gicaBuCohortPrint();" style="font-size:0.72rem;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print</button>
-            <button class="gica-modal__close" data-buclose="1" aria-label="ปิด">✕</button>
+            <button onclick="_gicaBuCohortPrint();" style="font-size:0.72rem;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">${escapeHtml(t('gicaPrint'))}</button>
+            <button class="gica-modal__close" data-buclose="1" aria-label="${escapeHtml(t('gicaClose'))}">✕</button>
           </div>
         </div>
         <div id="gica-buCohort-body" class="gica-modal__body"></div>
@@ -6978,25 +7709,25 @@ function _mountGicaSchedule(html, vm) {
         labels: vm.timeline.map(t => t.label),
         datasets: [
           {
-            label: 'จำนวนต้องสอบ', stack: 'total',
+            label: t('gicaLegendTotal'), stack: 'total',
             data: vm.timeline.map(t => t.onTimePassed + t.onTimeFailed + t.overdue + t.upcoming),
             backgroundColor: '#64748b', borderRadius: 4,
             datalabels: { anchor: 'end', align: 'top', font: { size: 10, weight: '600' }, color: '#475569', formatter: v => v > 0 ? v : null, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 },
           },
           {
-            label: 'On-time (ผ่าน)', stack: 'ontime',
+            label: t('gicaLegendOnTimePass'), stack: 'ontime',
             data: vm.timeline.map(t => t.onTimePassed),
             backgroundColor: '#16a34a', borderRadius: 4,
             datalabels: _dlOntime(t => t.onTimeFailed === 0 && t.onTimePassed > 0),
           },
           {
-            label: 'On-time (ไม่ผ่าน)', stack: 'ontime',
+            label: t('gicaLegendOnTimeFail'), stack: 'ontime',
             data: vm.timeline.map(t => t.onTimeFailed),
             backgroundColor: '#86efac', borderRadius: 4,
             datalabels: _dlOntime(t => t.onTimeFailed > 0),
           },
           {
-            label: 'Overdue', stack: 'overdue',
+            label: t('gicaLegendOverdue'), stack: 'overdue',
             data: vm.timeline.map(t => t.overdue),
             backgroundColor: '#dc2626', borderRadius: 4,
             datalabels: { anchor: 'end', align: 'top', font: { size: 10, weight: '600' }, color: '#b91c1c', formatter: v => v > 0 ? v : null, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 },
@@ -7053,24 +7784,34 @@ const GICA_CAL_TYPE = {
   Review:  { color: '#16a34a', bg: 'rgba(22,163,74,0.14)', label: 'Review assessment' },
 };
 function _gicaCalendarHtml(vm) {
+  // Resolve calendar type labels from i18n at render time so language changes take effect.
+  const calTypeLabel = key => {
+    if (key === 'Initial') return t('gicaCalTypeInitial');
+    if (key === 'Retest')  return t('gicaCalTypeRetest');
+    if (key === 'Review')  return t('gicaCalTypeReview');
+    return key;
+  };
   const buChips = `
-    <button class="quad-btn${vm.buFilter.size === 0 ? ' quad-btn--active' : ''}" data-bu="all" type="button">All BU</button>
+    <button class="quad-btn${vm.buFilter.size === 0 ? ' quad-btn--active' : ''}" data-bu="all" type="button">${t('gicaAllBu')}</button>
     ${vm.availBus.map(bu => `<button class="quad-btn${vm.buFilter.has(bu) ? ' quad-btn--active' : ''}" data-bu="${escapeHtml(bu)}" type="button">${escapeHtml(bu)}</button>`).join('')}`;
+  // NB: the outer `t()` (i18n) is shadowed by the `t` map-parameter (calendar-type key)
+  // inside the map body — calTypeLabel above closes over the outer `t`, so use it here.
   const typeRows = Object.keys(GICA_CAL_TYPE).map(t => {
     const info = GICA_CAL_TYPE[t];
     const checked = vm.typeFilter.size === 0 || vm.typeFilter.has(t);
     return `
       <label class="gica-cal-type-row">
         <input type="checkbox" data-type="${t}" ${checked ? 'checked' : ''}>
-        <span class="gica-cal-type-dot" style="background:${info.color};"></span>${info.label}
+        <span class="gica-cal-type-dot" style="background:${info.color};"></span>${escapeHtml(calTypeLabel(t))}
       </label>`;
   }).join('');
 
-  const weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const weekdayNames = [t('gicaWeekMon'), t('gicaWeekTue'), t('gicaWeekWed'), t('gicaWeekThu'), t('gicaWeekFri'), t('gicaWeekSat'), t('gicaWeekSun')];
   const cellHtml = day => {
     const evtHtml = day.buGroups.map(g => {
       const color = GICA_BU_COLORS[g.bu] || '#6b7280';
-      const typeDots = g.types.map(t => `<span class="gica-cal-evt-type-dot" style="background:${GICA_CAL_TYPE[t].color};" title="${escapeHtml(GICA_CAL_TYPE[t].label)}"></span>`).join('');
+      // Same shadowing avoidance as above — `t` here is the calendar-type key, use `tr` for i18n.
+      const typeDots = g.types.map(t => `<span class="gica-cal-evt-type-dot" style="background:${GICA_CAL_TYPE[t].color};" title="${escapeHtml(calTypeLabel(t))}"></span>`).join('');
       return `<div class="gica-cal-evt" data-day-key="${day.key}" data-bu="${escapeHtml(g.bu)}" style="background:${hexToRgba(color, 0.16)};color:${color};">${escapeHtml(g.bu)} (${g.count})<span class="gica-cal-evt-types">${typeDots}</span>${g.overdue ? '<span class="gica-cal-evt__dot"></span>' : ''}</div>`;
     }).join('');
     const cls = ['gica-cal-cell', !day.inMonth ? 'gica-cal-cell--out' : '', day.isPast ? 'gica-cal-cell--past' : '', day.isToday ? 'gica-cal-cell--today' : ''].filter(Boolean).join(' ');
@@ -7079,31 +7820,31 @@ function _gicaCalendarHtml(vm) {
 
   const sidebarHtml = vm.sidebarOpen ? `
       <div class="gica-cal-sidebar">
-        <div class="gica-cal-sidebar-label">BU</div>
+        <div class="gica-cal-sidebar-label">${t('gicaColBu')}</div>
         <div id="gica-cal-bu-chips" class="gica-cal-bu-grid">${buChips}</div>
-        <div class="gica-cal-sidebar-label" style="margin-top:12px;">Type</div>
+        <div class="gica-cal-sidebar-label" style="margin-top:12px;">${t('gicaCalType')}</div>
         <div id="gica-cal-type-chips" class="gica-cal-type-list">${typeRows}</div>
-        <div class="gica-cal-sidebar-label" style="margin-top:12px;">Status</div>
+        <div class="gica-cal-sidebar-label" style="margin-top:12px;">${t('gicaCalStatus')}</div>
         <div class="gica-cal-type-row" style="cursor:default;">
-          <span class="gica-cal-type-dot" style="background:#dc2626;"></span> Overdue (Not yet tested)
+          <span class="gica-cal-type-dot" style="background:#dc2626;"></span> ${t('gicaCalOverdue')}
         </div>
       </div>` : '';
 
   return `
     <div class="gica-cal-toolbar">
-      <button class="gica-cal-nav-btn" id="gica-cal-today" type="button">Today</button>
+      <button class="gica-cal-nav-btn" id="gica-cal-today" type="button">${t('gicaCalToday')}</button>
       <button class="gica-cal-nav-btn" id="gica-cal-prev" type="button">‹</button>
       <span class="gica-cal-month-label">${escapeHtml(vm.monthLabel)}</span>
       <button class="gica-cal-nav-btn" id="gica-cal-next" type="button">›</button>
-      <button class="gica-cal-nav-btn${vm.sidebarOpen ? ' gica-cal-nav-btn--active' : ''}" id="gica-cal-filter-toggle" type="button" title="BU / Type / Status filters" style="margin-left:auto;">
-        <i class="ti ti-filter" aria-hidden="true"></i> Filters
+      <button class="gica-cal-nav-btn${vm.sidebarOpen ? ' gica-cal-nav-btn--active' : ''}" id="gica-cal-filter-toggle" type="button" title="${escapeHtml(t('gicaCalFilters'))}" style="margin-left:auto;">
+        <i class="ti ti-filter" aria-hidden="true"></i> ${t('gicaCalFilters')}
       </button>
     </div>
     <div class="gica-cal-body">
       ${sidebarHtml}
       <div class="gica-cal-main">
-        <div class="gica-cal-weekdays"><div class="gica-cal-weeknum-head"></div>${weekdayNames.map(n => `<div class="gica-cal-weekday">${n}</div>`).join('')}</div>
-        <div class="gica-cal-grid" id="gica-cal-grid">${vm.weeks.map(week => `<div class="gica-cal-weeknum"><span>WEEK ${week.weekNumber}</span></div>${week.days.map(cellHtml).join('')}`).join('')}</div>
+        <div class="gica-cal-weekdays"><div class="gica-cal-weeknum-head"></div>${weekdayNames.map(n => `<div class="gica-cal-weekday">${escapeHtml(n)}</div>`).join('')}</div>
+        <div class="gica-cal-grid" id="gica-cal-grid">${vm.weeks.map(week => `<div class="gica-cal-weeknum"><span>${escapeHtml(t('gicaCalWeekPrefix'))} ${week.weekNumber}</span></div>${week.days.map(cellHtml).join('')}`).join('')}</div>
       </div>
     </div>
     <div id="gica-cal-drill-modal" class="gica-modal hidden">
@@ -7121,13 +7862,13 @@ function _gicaCalDrillHtml(dayKey, bu, emps) {
   const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
   return `
     <div class="gica-print-header">
-      <div style="font-size:1rem;font-weight:700;">Employee List for GICA Assessment Schedule</div>
-      <div style="font-size:0.78rem;color:#555;margin-top:3px;">Assessment Date: ${_gicaFmtDate(dayKey)} · BU ${escapeHtml(bu)} · Total: ${rows.length} employees · Report Date: ${printDate}</div>
+      <div style="font-size:1rem;font-weight:700;">${escapeHtml(t('gicaEmpListForAssessmentSchedule'))}</div>
+      <div style="font-size:0.78rem;color:#555;margin-top:3px;">${escapeHtml(t('gicaAssessmentDateLbl'))}: ${_gicaFmtDate(dayKey)} · ${escapeHtml(t('gicaColBu'))} ${escapeHtml(bu)} · ${escapeHtml(t('gicaTotalWord'))}: ${rows.length} ${escapeHtml(t('gicaEmpsWord'))} · ${escapeHtml(t('gicaReportDate'))}: ${printDate}</div>
     </div>
     <div class="no-print" style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <span>${_gicaFmtDate(dayKey)} · <span style="color:${GICA_BU_COLORS[bu] || 'var(--accent)'};">${escapeHtml(bu)}</span> — ${rows.length} Participants</span>
-      <button id="gica-cal-panel-close" type="button" style="font-size:0.72rem;padding:2px 8px;">✕ Close</button>
-      <button onclick="_gicaPrint('gica-cal-panel');" type="button" style="font-size:0.72rem;padding:2px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print PDF</button>
+      <span>${_gicaFmtDate(dayKey)} · <span style="color:${GICA_BU_COLORS[bu] || 'var(--accent)'};">${escapeHtml(bu)}</span> — ${rows.length} ${escapeHtml(t('gicaParticipants'))}</span>
+      <button id="gica-cal-panel-close" type="button" style="font-size:0.72rem;padding:2px 8px;">✕ ${escapeHtml(t('gicaClose'))}</button>
+      <button onclick="_gicaPrint('gica-cal-panel');" type="button" style="font-size:0.72rem;padding:2px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">${escapeHtml(t('gicaPrintPdf'))}</button>
     </div>
     ${_gicaFailStatsHtml(rows)}
     <div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
@@ -7416,13 +8157,13 @@ function renderGicaScheduleDrill() {
   const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
   wrap.innerHTML = `
     <div class="gica-print-header">
-      <div style="font-size:1rem;font-weight:700;">Employee List for GICA Assessment${typeLabel}</div>
-      <div style="font-size:0.78rem;color:#555;margin-top:3px;">Assessment Date: ${_gicaFmtDate(_gicaSchedDate)}${_gicaSchedBu ? ' · BU ' + _gicaSchedBu : ''} · Total: ${rows.length} employees · Report Date: ${printDate}</div>
+      <div style="font-size:1rem;font-weight:700;">${escapeHtml(t('gicaEmpListForAssessment'))}${typeLabel}</div>
+      <div style="font-size:0.78rem;color:#555;margin-top:3px;">${escapeHtml(t('gicaAssessmentDateLbl'))}: ${_gicaFmtDate(_gicaSchedDate)}${_gicaSchedBu ? ' · ' + escapeHtml(t('gicaColBu')) + ' ' + _gicaSchedBu : ''} · ${escapeHtml(t('gicaTotalWord'))}: ${rows.length} ${escapeHtml(t('gicaEmpsWord'))} · ${escapeHtml(t('gicaReportDate'))}: ${printDate}</div>
     </div>
     <div class="no-print" style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <span>📅 Assessment Schedule ${_gicaFmtDate(_gicaSchedDate)}${buLabel} — ${rows.length} Participants</span>
-      <button onclick="_gicaSchedDate='';_gicaSchedBu='';renderGicaScheduleDrill();" style="font-size:0.72rem;padding:2px 8px;">✕ Close</button>
-      <button onclick="_gicaPrint();" style="font-size:0.72rem;padding:2px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 พิมพ์ PDF</button>
+      <span>📅 ${escapeHtml(t('gicaSchedTimeline'))} ${_gicaFmtDate(_gicaSchedDate)}${buLabel} — ${rows.length} ${escapeHtml(t('gicaParticipants'))}</span>
+      <button onclick="_gicaSchedDate='';_gicaSchedBu='';renderGicaScheduleDrill();" style="font-size:0.72rem;padding:2px 8px;">✕ ${escapeHtml(t('gicaClose'))}</button>
+      <button onclick="_gicaPrint();" style="font-size:0.72rem;padding:2px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">${escapeHtml(t('gicaPrintPdf'))}</button>
     </div>
     ${_gicaFailStatsHtml(rows)}
     <div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
@@ -7571,14 +8312,14 @@ function _gicaCompareTableHtml(s) {
     <div class="gica-compare-table">
       <div class="gica-compare-row gica-compare-row--head">
         <span class="gica-compare-cell gica-compare-cell--label"></span>
-        <span class="gica-compare-cell">Prev</span>
-        <span class="gica-compare-cell">Last</span>
-        <span class="gica-compare-cell">Diff</span>
+        <span class="gica-compare-cell">${t('gicaPrev')}</span>
+        <span class="gica-compare-cell">${t('gicaLast')}</span>
+        <span class="gica-compare-cell">${t('gicaDiff')}</span>
       </div>
-      ${gridRow('Measurement', s.prevMeas, s.lastMeas)}
-      ${gridRow('Inspection', s.prevInsp, s.lastInsp)}
+      ${gridRow(t('gicaColMeas'), s.prevMeas, s.lastMeas)}
+      ${gridRow(t('gicaColInsp'), s.prevInsp, s.lastInsp)}
       <div class="gica-compare-divider"></div>
-      ${gridRow('Avg', avgPrev, avgLast, true)}
+      ${gridRow(t('gicaAvg'), avgPrev, avgLast, true)}
     </div>`;
 }
 
@@ -7594,20 +8335,20 @@ function _gicaAttemptStatsHtml(s) {
   return `
     <div class="gica-attempt-stats">
       <div class="gica-attempt-stats__col">
-        ${row('Total Assessments', s.total)}
-        ${row('Pass', s.passN, '#16a34a')}
-        ${row('Fail', s.failN, '#dc2626')}
-        ${row('Pass Rate', s.passPct + '%')}
-        ${row('Current Fail Streak', s.failStreak, s.failStreak > 0 ? '#dc2626' : null)}
+        ${row(t('gicaTotalAssessments'), s.total)}
+        ${row(t('pass'), s.passN, '#16a34a')}
+        ${row(t('fail'), s.failN, '#dc2626')}
+        ${row(t('gicaPassRate'), s.passPct + '%')}
+        ${row(t('gicaCurrentFailStreak'), s.failStreak, s.failStreak > 0 ? '#dc2626' : null)}
       </div>
       <div class="gica-attempt-stats__col">
         ${_gicaCompareTableHtml(s)}
       </div>
       <div class="gica-attempt-stats__col">
-        ${row('Avg Measurement', pctGrade(s.avgMeas))}
-        ${row('Avg Inspection', pctGrade(s.avgInsp))}
-        ${row('Measurement Range', rangeGrade(s.minMeas, s.maxMeas))}
-        ${row('Inspection Range', rangeGrade(s.minInsp, s.maxInsp))}
+        ${row(t('gicaAvgMeas'), pctGrade(s.avgMeas))}
+        ${row(t('gicaAvgInsp'), pctGrade(s.avgInsp))}
+        ${row(t('gicaMeasRange'), rangeGrade(s.minMeas, s.maxMeas))}
+        ${row(t('gicaInspRange'), rangeGrade(s.minInsp, s.maxInsp))}
       </div>
     </div>`;
 }
@@ -7624,7 +8365,7 @@ function _gicaShowAttemptDotsModal(empid) {
   if (title) {
     title.innerHTML = `
       <small class="gica-modal__close" style="padding:0; background:transparent; cursor:default; display:block; margin-bottom:4px;">
-        Assessment History
+        ${escapeHtml(t('gicaAssessmentHistory'))}
       </small>
       <strong class="exp-modal-table" style="font-size: 0.85rem; color: var(--text); display: block; font-weight: 900;">
         ${escapeHtml(e.name || e.empid || '')}
@@ -7640,15 +8381,15 @@ function _gicaShowAttemptDotsModal(empid) {
   body.innerHTML = `
     <div class="gica-attempt-charts-container">
       <div class="gica-attempt-chart-block">
-        <div class="gica-attempt-chart-label">Measurement Result</div>
+        <div class="gica-attempt-chart-label">${escapeHtml(t('gicaMeasResult'))}</div>
         <div class="gica-trend-canvas-wrap"><canvas id="gica-attchart-meas-${safeId}"></canvas></div>
       </div>
       <div class="gica-attempt-chart-block">
-        <div class="gica-attempt-chart-label">Inspection Result</div>
+        <div class="gica-attempt-chart-label">${escapeHtml(t('gicaInspResult'))}</div>
         <div class="gica-trend-canvas-wrap"><canvas id="gica-attchart-insp-${safeId}"></canvas></div>
       </div>
       <div class="gica-attempt-chart-block">
-        <div class="gica-attempt-chart-label">Total average score</div>
+        <div class="gica-attempt-chart-label">${escapeHtml(t('gicaTotalAvgScore'))}</div>
         <div class="gica-trend-canvas-wrap"><canvas id="gica-attchart-avg-${safeId}"></canvas></div>
       </div>
     </div>
@@ -7690,6 +8431,9 @@ function _gicaShowAttemptDotsModal(empid) {
       }] },
       options: {
         responsive: true, maintainAspectRatio: false,
+        // Same 100-line clipping fix as the row-3 trend cards: padding.top lifts
+        // the marker off the edge; axis stays 0–100 with stepSize 20.
+        layout: { padding: { top: 10 } },
         plugins: { legend: { display: false }, ...(annotation ? { annotation } : {}) },
         scales: {
           x: { ticks: { font: { size: 9 } } },
@@ -7729,40 +8473,40 @@ function _gicaEmpTableHtml(rows, opts = {}) {
   };
 
   const numTh   = showNum ? `<th class="emp-row-num-th"></th>` : '';
-  const actionTh = deletable ? `<th class="td-c">Action</th>` : '';
+  const actionTh = deletable ? `<th class="td-c">${t('gicaColAction')}</th>` : '';
 
   return `
     <div class="gica-emp-table-wrap">
     <table class="emp-table gica-emp-table" style="min-width:1080px;">
       <thead><tr>
         ${numTh}
-        ${TH('bu', 'BU')}
-        ${TH('empid', 'Emp ID')}
-        ${TH('name', 'Name')}
-        ${TH('deptname', 'Department')}
-        ${TH('level', 'Level', 'col-group-end td-c')}
-        ${TH('grade1', 'Measurement', 'td-c')}
-        ${TH('grade2', 'Inspection', 'td-c')}
-        ${TH('attempt', 'Attempt', 'td-c')}
-        ${TH('lastDate', 'Last Date', 'td-c')}
-        ${TH('passed', 'History', 'td-c col-group-end')}
-        ${TH('nextDate', 'Next Date', 'td-c')}
-        ${TH('nextDate', 'Days Left', 'td-c')}
-        ${TH('nextType', 'Status', 'td-c')}
+        ${TH('bu', t('gicaColBu'))}
+        ${TH('empid', t('gicaColEmpId'))}
+        ${TH('name', t('gicaColName'))}
+        ${TH('deptname', t('gicaColDept'))}
+        ${TH('level', t('gicaColLevel'), 'col-group-end td-c')}
+        ${TH('grade1', t('gicaColMeas'), 'td-c')}
+        ${TH('grade2', t('gicaColInsp'), 'td-c')}
+        ${TH('attempt', t('gicaColAttempt'), 'td-c')}
+        ${TH('lastDate', t('gicaColLastDate'), 'td-c')}
+        ${TH('passed', t('gicaColHistory'), 'td-c col-group-end')}
+        ${TH('nextDate', t('gicaColNextDate'), 'td-c')}
+        ${TH('nextDate', t('gicaColDaysLeft'), 'td-c')}
+        ${TH('nextType', t('gicaColStatus'), 'td-c')}
         ${actionTh}
       </tr></thead>
       <tbody>
         ${rows.length === 0
-          ? `<tr><td colspan="${cols}" class="td-c" style="padding:24px;color:var(--text-muted);">ไม่พบข้อมูล</td></tr>`
+          ? `<tr><td colspan="${cols}" class="td-c" style="padding:24px;color:var(--text-muted);">${t('gicaTableEmpty')}</td></tr>`
           : rows.map((e, idx) => {
               const numTd = showNum ? `<td class="emp-row-num">${idx + 1}</td>` : '';
               const nameCls = editable ? ' gica-emp-name-cell' : '';
               const nameAttrs = editable
-                ? ` data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" title="คลิกเพื่อบันทึกผลสอบ"`
+                ? ` data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" title="${escapeHtml(t('gicaEmpNameTip'))}"`
                 : '';
               const nameStyle = editable ? ' style="cursor:pointer;color:var(--primary,#6366f1);text-decoration:underline;"' : '';
               const deleteTd = deletable
-                ? `<td class="td-c"><button class="gica-delete-emp-btn emp-act-btn" data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" data-name="${escapeHtml(e.name || '')}" title="ลบพนักงาน" style="opacity:1;color:#dc2626;border-color:#fca5a5;"><i class="ti ti-trash" aria-hidden="true"></i></button></td>`
+                ? `<td class="td-c"><button class="gica-delete-emp-btn emp-act-btn" data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" data-name="${escapeHtml(e.name || '')}" title="${escapeHtml(t('gicaDeleteEmpTip'))}" style="opacity:1;color:#dc2626;border-color:#fca5a5;"><i class="ti ti-trash" aria-hidden="true"></i></button></td>`
                 : '';
               return `<tr>
                 ${numTd}
@@ -7856,7 +8600,7 @@ function _wireGicaDeleteBtns(wrap) {
   wrap.querySelectorAll('.gica-delete-emp-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const { bu, empid, name } = btn.dataset;
-      _gicaConfirm(`ลบพนักงาน "${name}" (${empid}) ออกจากระบบ GICA ?\nการลบไม่สามารถย้อนกลับได้`, async () => {
+      _gicaConfirm(t('gicaDeleteConfirmPrompt', { name, empid }), async () => {
         btn.disabled = true;
         btn.textContent = '…';
         try {
@@ -7864,11 +8608,11 @@ function _wireGicaDeleteBtns(wrap) {
           await _gicaRefreshData();
           renderGicaSummary();
           renderGicaTable();
-          showToast('ลบพนักงานแล้ว');
+          showToast(t('gicaDeleteEmpSaved'));
         } catch (e) {
-          alert('เกิดข้อผิดพลาด: ' + (e.message || 'Unknown error'));
+          alert(`${t('gicaErrPrefix')}: ${e.message || t('gicaUnknownErr')}`);
           btn.disabled = false;
-          btn.textContent = 'ลบ';
+          btn.textContent = t('gicaDelete');
         }
       });
     });
@@ -7919,7 +8663,7 @@ function _gicaOpenResultModal(bu, empid) {
     
     title.innerHTML = `
       <small style="padding: 0; background: transparent; cursor: default; display: block; margin-bottom: 4px; font-size: 0.75rem; color: var(--text-muted, #64748b); font-weight: 500;">
-        Add Assessment Result
+        ${escapeHtml(t('gicaAddResultTitle'))}
       </small>
       <strong style="font-size: 0.95rem; color: var(--text, #1e293b); display: block; font-weight: 900;">
         ${escapeHtml(empNameOrId || '')}
@@ -7932,18 +8676,22 @@ function _gicaOpenResultModal(bu, empid) {
   $('gica-result-date').value = today;
   _gicaUpdateDateLabel(today);
   $('gica-result-error').classList.add('hidden');
+  // Delete button is admin-only (backend gates DELETE /api/gica/... to admin);
+  // showing it to qe_edit would just yield a 403 on click.
+  const delBtn = $('gica-result-delete');
+  if (delBtn) delBtn.classList.toggle('hidden', currentRole !== 'admin');
   $('gica-result-modal').classList.remove('hidden');
 
   // Show Assessment History side-by-side so QE can see past results while
-  // entering a new one — History on the left, the entry form on the right.
+  // entering a new one — the entry form on the left, History on the right.
   _gicaShowAttemptDotsModal(empid);
-  $('gica-attempt-dots-modal')?.classList.add('gica-modal--paired-left');
-  $('gica-result-modal').classList.add('gica-modal--paired-right');
+  $('gica-result-modal').classList.add('gica-modal--paired-left');
+  $('gica-attempt-dots-modal')?.classList.add('gica-modal--paired-right');
 }
 function _gicaCloseResultModal() {
   $('gica-result-modal').classList.add('hidden');
-  $('gica-result-modal').classList.remove('gica-modal--paired-right');
-  $('gica-attempt-dots-modal')?.classList.remove('gica-modal--paired-left');
+  $('gica-result-modal').classList.remove('gica-modal--paired-left');
+  $('gica-attempt-dots-modal')?.classList.remove('gica-modal--paired-right');
 }
 
 function _gicaValidateResultForm() {
@@ -7952,7 +8700,7 @@ function _gicaValidateResultForm() {
   const insp = $('gica-result-insp').value;
   const date = $('gica-result-date').value;
   if (meas === '' || insp === '' || !date) {
-    errEl.textContent = 'Please complete all required fields';
+    errEl.textContent = t('gicaFormFillAll');
     errEl.classList.remove('hidden');
     return null;
   }
@@ -7966,7 +8714,12 @@ function _gicaValidateResultForm() {
 async function _gicaSaveResult(fields) {
   const { bu, empid } = _gicaResultCtx;
   _gicaCloseResultModal();
-  showToast('กำลังบันทึกข้อมูล...');
+  // Also dismiss the paired Assessment History modal — once the entry is submitted
+  // the whole side-by-side view has done its job, no point leaving history alone
+  // on screen. (Cancel/close still leaves history visible on purpose — that's the
+  // "just close the form, keep studying past results" flow.)
+  $('gica-attempt-dots-modal')?.classList.add('hidden');
+  showToast(t('gicaSaving'));
   try {
     await api(`/api/gica/${bu}/employees/${empid}/result`, {
       method: 'PATCH',
@@ -7979,9 +8732,9 @@ async function _gicaSaveResult(fields) {
     await _gicaRefreshData();
     renderGicaSummary();
     renderGicaTable();
-    showToast('บันทึกข้อมูลแล้ว');
+    showToast(t('gicaSaved'));
   } catch (err) {
-    showToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
+    showToast(`${t('gicaSaveFail')}: ${err.message || ''}`);
   }
 }
 
@@ -8001,7 +8754,7 @@ function _wireGicaResultModal() {
   $('gica-result-close')?.addEventListener('click', _gicaCloseResultModal);
   $('gica-result-backdrop')?.addEventListener('click', _gicaCloseResultModal);
   $('gica-result-cancel')?.addEventListener('click', () => {
-    _gicaConfirm('Cancel this entry?', () => {
+    _gicaConfirm(t('gicaResultCancelPrompt'), () => {
       $('gica-result-meas').value = '';
       $('gica-result-insp').value = '';
       $('gica-result-date').value = '';
@@ -8012,7 +8765,31 @@ function _wireGicaResultModal() {
   $('gica-result-confirm')?.addEventListener('click', () => {
     const fields = _gicaValidateResultForm();
     if (!fields) return; // empty field — don't even show the confirm dialog
-    _gicaConfirm('Save this record?', () => _gicaSaveResult(fields));
+    _gicaConfirm(t('gicaResultSavePrompt'), () => _gicaSaveResult(fields));
+  });
+
+  // Delete employee (admin only — button hidden for other roles at open time).
+  // Uses the same DELETE endpoint + refresh flow as the trash icon in the table.
+  $('gica-result-delete')?.addEventListener('click', () => {
+    if (!_gicaResultCtx) return;
+    const { bu, empid } = _gicaResultCtx;
+    const emp = (_gicaData.employees || []).find(e => e.bu === bu && String(e.empid) === String(empid));
+    const name = emp ? emp.name : empid;
+    _gicaConfirm(t('gicaDeleteConfirmPrompt', { name, empid }), async () => {
+      _gicaCloseResultModal();
+      // Also close the paired Assessment History modal that opens alongside the result form.
+      $('gica-attempt-dots-modal')?.classList.add('hidden');
+      showToast(t('gicaDeletingEmp'));
+      try {
+        await api(`/api/gica/${encodeURIComponent(bu)}/employees/${encodeURIComponent(empid)}`, { method: 'DELETE' });
+        await _gicaRefreshData();
+        renderGicaSummary();
+        renderGicaTable();
+        showToast(t('gicaDeleteEmpSaved'));
+      } catch (err) {
+        showToast(`${t('gicaDeleteFail')}: ${err.message || ''}`);
+      }
+    });
   });
 
   // Esc closes the modal — but not while the Save/Cancel confirm dialog is open
@@ -8144,7 +8921,7 @@ function _gicaValidateCreateForm() {
 // for why (waiting for the response before any feedback caused double-submits).
 async function _gicaSaveCreate(fields) {
   _gicaCloseCreateModal();
-  showToast('กำลังบันทึกข้อมูล...');
+  showToast(t('gicaSaving'));
   try {
     await api(`/api/gica/${fields.bu}/employees`, {
       method: 'POST',
@@ -8155,9 +8932,9 @@ async function _gicaSaveCreate(fields) {
     });
     await _gicaRefreshData();
     renderGicaTable();
-    showToast('บันทึกข้อมูลแล้ว');
+    showToast(t('gicaSaved'));
   } catch (err) {
-    showToast(`บันทึกไม่สำเร็จ: ${err.message || ''}`);
+    showToast(`${t('gicaSaveFail')}: ${err.message || ''}`);
   }
 }
 
@@ -8188,7 +8965,7 @@ function _wireGicaCreateModal() {
     _gicaFilterPositionDropdown(dept, e.target.value);
   });
   $('gica-create-cancel')?.addEventListener('click', () => {
-    _gicaConfirm('Cancel this entry?', () => {
+    _gicaConfirm(t('gicaResultCancelPrompt'), () => {
       _gicaClearCreateForm();
       _gicaCloseCreateModal();
     });
@@ -8196,7 +8973,7 @@ function _wireGicaCreateModal() {
   $('gica-create-confirm')?.addEventListener('click', () => {
     const fields = _gicaValidateCreateForm();
     if (!fields) return; // empty/invalid field — don't even show the confirm dialog
-    _gicaConfirm('Save this record?', () => _gicaSaveCreate(fields));
+    _gicaConfirm(t('gicaResultSavePrompt'), () => _gicaSaveCreate(fields));
   });
 }
 
