@@ -55,6 +55,8 @@ const TRANSLATIONS = {
     colGrade:               'เกรด',
     colCsaStart:            'วันเริ่มฝึก',
     colDueDate:             'วันครบกำหนด',
+    colBasicTraining:       'ฝึกพื้นฐาน',
+    colOperation:           'ฝึกปฏิบัติงาน',
     colBasicStart:          'เริ่มฝึกพื้นฐาน',
     colBasicEnd:            'ฝึกพื้นฐานเสร็จ',
     colOpStart:             'เริ่มฝึกขั้นตอนงาน',
@@ -193,6 +195,8 @@ const TRANSLATIONS = {
     colGrade:               'Grade',
     colCsaStart:            'CSA Start',
     colDueDate:             'Due Date',
+    colBasicTraining:       'Basic Training',
+    colOperation:           'Operation',
     colBasicStart:          'Basic Start',
     colBasicEnd:            'Basic End',
     colOpStart:             'Op Start',
@@ -331,6 +335,8 @@ const TRANSLATIONS = {
     colGrade:               'ເກຣດ',
     colCsaStart:            'ວັນເລີ່ມຝຶກ',
     colDueDate:             'ວັນຄົບກຳນົດ',
+    colBasicTraining:       'ຝຶກພື້ນຖານ',
+    colOperation:           'ຝຶກປະຕິບັດງານ',
     colBasicStart:          'ເລີ່ມຝຶກພື້ນຖານ',
     colBasicEnd:            'ຝຶກພື້ນຖານສຳເລັດ',
     colOpStart:             'ເລີ່ມຝຶກຂັ້ນຕອນ',
@@ -469,6 +475,8 @@ const TRANSLATIONS = {
     colGrade:               'Cấp bậc',
     colCsaStart:            'Ngày bắt đầu',
     colDueDate:             'Ngày hết hạn',
+    colBasicTraining:       'Đào tạo cơ bản',
+    colOperation:           'Đào tạo vận hành',
     colBasicStart:          'Bắt đầu cơ bản',
     colBasicEnd:            'Kết thúc cơ bản',
     colOpStart:             'Bắt đầu vận hành',
@@ -588,13 +596,13 @@ let currentRole       = 'user';  // 'user' | 'manager' (view-only)
 let lastCalc          = null;
 let currentLang       = localStorage.getItem('lang')  || 'th';
 let currentTheme      = localStorage.getItem('theme') || 'light';
-let currentNewOpType  = 'Sewing'; // 'Sewing' | 'QC/QA' — active New Operator subtab
+let currentNewOpType  = null; // null=Overall | 'Sewing' | 'QC/QA' | 'Technic' — active New Operator subtab
 
 const $ = (id) => document.getElementById(id);
 
-// Blank/missing Type (legacy rows from before this column existed) counts as
-// Sewing, so nothing silently disappears from the Sewing view.
+// null = Overall (show all types). Blank/missing Type counts as 'Sewing' (legacy rows).
 function _matchesNewOpType(emp) {
+  if (currentNewOpType === null) return true;
   return ((emp['Type'] || '').trim() || 'Sewing') === currentNewOpType;
 }
 function _filterByNewOpType(employees) {
@@ -822,10 +830,21 @@ function getHolidayQuery() {
   return holidays.map(h => `holiday=${encodeURIComponent(h)}`).join('&');
 }
 
+// Supabase JWT — stored in localStorage, injected into every write request.
+// Read requests work without it (anonymous read is permitted by the backend).
+let _sbJwt = localStorage.getItem('sb_jwt') || '';
+
+function _saveJwt(token) {
+  _sbJwt = token || '';
+  if (_sbJwt) localStorage.setItem('sb_jwt', _sbJwt);
+  else localStorage.removeItem('sb_jwt');
+}
+
 async function api(path, options = {}) {
+  const authHeader = _sbJwt ? { 'Authorization': `Bearer ${_sbJwt}` } : {};
   const res = await fetch(path, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...authHeader, ...(options.headers || {}) },
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -971,36 +990,74 @@ function fmtEff(val) {
   if (val === '' || val === null || val === undefined) return '';
   const n = parseFloat(val);
   if (isNaN(n)) return '';
-  // stored as decimal ratio (0–1) → multiply to get percent
-  const pct = n <= 1 ? n * 100 : n;
+  // stored as decimal ratio (e.g. 1.02 = 102%) — always multiply by 100
+  const pct = n * 100;
   return pct % 1 === 0 ? pct + '%' : pct.toFixed(1) + '%';
 }
 
-function buildRowHTML(emp, calc, actualKey) {
-  const nd  = (v) => escapeHtml(normalizeDateForInput(v) || '');
+function buildRowHTML(emp, calc, actualKey, rowNum) {
   const esc = escapeHtml;
-  const badgeClass = statusBadgeClass(actualKey);
   const statusLabel = t(STATUS_KEY_MAP[actualKey] || actualKey);
   const empId = esc(String(emp['Employee ID'] || ''));
-
   const leave = parseInt(emp['Employees Leave'], 10) || 0;
 
+  // Short date formatter — "15 Jan 25"
+  const fmtD = (v) => {
+    const iso = normalizeDateForInput(v);
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+  };
+
+  // Type pill
+  const type = emp['Type'] || '';
+  const typeKey = type === 'QC/QA' ? 'qcqa' : (type.toLowerCase() || 'sewing');
+  const typeLabel = esc(type || 'Sewing');
+  const typePill = `<span class="type-pill type-pill--${typeKey}"><span class="type-pill__dot"></span>${typeLabel}</span>`;
+
+  // Grade chip
+  const grade = emp['Grade'] || '';
+  const gradeHtml = grade
+    ? `<span class="grade-chip grade-chip--${esc(grade.toLowerCase())}">${esc(grade)}</span>`
+    : `<span class="emp-date-empty">—</span>`;
+
+  // Dates
+  const csaStart = fmtD(emp['CSA Start Date']);
+  const dueDate  = fmtD(emp['Due date']);
+  const today    = new Date().toISOString().slice(0, 10);
+  const dueIso   = normalizeDateForInput(emp['Due date']) || '';
+  const isDueOverdue = ['under-basic', 'under-operation'].includes(actualKey) && dueIso && dueIso < today;
+
+  const basicStart = fmtD(emp['Basic Start']);
+  const basicEnd   = fmtD(emp['Basic End']);
+  const opStart    = fmtD(emp['Operation Start']);
+  const opEnd      = fmtD(emp['Operation End']);
+  const basicRange = basicStart && basicEnd ? `${basicStart} → ${basicEnd}` : (basicStart || '');
+  const opRange    = opStart && opEnd       ? `${opStart} → ${opEnd}`       : (opStart || '');
+
+  // Status pill with dot
+  const statusPill = `<span class="status-pill status-pill--${actualKey}"><span class="status-pill__dot"></span>${esc(statusLabel)}</span>`;
+
+  // Eff
+  const effStr = fmtEff(emp['Graduate Eff']);
+  const effHtml = effStr
+    ? `<span class="emp-eff-val">${esc(effStr)}</span>`
+    : `<span class="emp-date-empty">—</span>`;
+
   return `
-    <td class="td-actions"><button class="btn-row-edit" data-id="${empId}" title="${t('tooltipEdit')}">✏</button></td>
-    <td>${esc(emp['Employee ID']   || '')}</td>
-    <td>${esc(emp['Employee Name'] || '')}</td>
-    <td>${esc(emp['Grade']         || '')}</td>
-    <td>${nd(emp['CSA Start Date'])}</td>
-    <td>${nd(emp['Due date'])}</td>
-    <td>${nd(emp['Basic Start'])}</td>
-    <td>${nd(emp['Basic End'])}</td>
-    <td>${nd(emp['Operation Start'])}</td>
-    <td>${nd(emp['Operation End'])}</td>
-    <td>${nd(emp['Resign Date'])}</td>
-    <td>${nd(emp['Transfers Date'])}</td>
-    <td>${esc(fmtEff(emp['Graduate Eff']))}</td>
-    <td><span class="badge ${badgeClass}">${esc(statusLabel)}</span></td>
-    <td class="leave-cell">${leave}</td>
+    <td class="emp-row-num">${rowNum || ''}</td>
+    <td><span class="emp-id-cell">${empId}</span></td>
+    <td class="td-l"><span class="emp-name-cell">${esc(emp['Employee Name'] || '')}</span></td>
+    <td>${typePill}</td>
+    <td class="td-c col-group-end">${gradeHtml}</td>
+    <td><span class="emp-date-val">${esc(csaStart)}</span></td>
+    <td class="col-group-end"><span class="emp-date-val${isDueOverdue ? ' emp-date-val--danger' : ''}">${esc(dueDate)}</span></td>
+    <td>${basicRange ? `<span class="emp-date-range">${esc(basicRange)}</span>` : `<span class="emp-date-empty">—</span>`}</td>
+    <td class="col-group-end">${opRange ? `<span class="emp-date-range">${esc(opRange)}</span>` : `<span class="emp-date-empty">—</span>`}</td>
+    <td>${effHtml}</td>
+    <td class="td-l">${statusPill}</td>
+    <td class="td-c"><span class="emp-leave-val">${leave}</span></td>
+    <td class="td-c"><button class="emp-act-btn btn-row-edit" data-id="${empId}" title="${t('tooltipEdit')}"><i class="ti ti-edit" aria-hidden="true"></i></button></td>
   `;
 }
 
@@ -1013,14 +1070,19 @@ function startInlineEdit(tr, emp, calc, actualKey) {
 
   const leave = parseInt(emp['Employees Leave'], 10) || 0;
 
+  const type = emp['Type'] || 'Sewing';
   tr.innerHTML = `
-    <td class="td-actions">
-      <button class="btn-confirm-inline" title="${t('tooltipConfirm')}">✓</button>
-      <button class="btn-cancel-inline"  title="${t('tooltipCancel')}">✗</button>
-    </td>
-    <td>${esc(emp['Employee ID'] || '')}</td>
+    <td></td>
+    <td><span class="emp-id-cell">${esc(emp['Employee ID'] || '')}</span></td>
     <td><input class="inline-edit" name="Employee Name" value="${esc(emp['Employee Name'] || '')}"></td>
     <td>
+      <select class="inline-edit" name="Type">
+        <option value="Sewing"${type === 'Sewing' ? ' selected' : ''}>Sewing</option>
+        <option value="QC/QA"${type === 'QC/QA'   ? ' selected' : ''}>QC/QA</option>
+        <option value="Technic"${type === 'Technic' ? ' selected' : ''}>Technic</option>
+      </select>
+    </td>
+    <td class="td-c col-group-end">
       <select class="inline-edit" name="Grade">
         <option value="">--</option>
         <option value="B"${grade === 'B' ? ' selected' : ''}>B</option>
@@ -1029,28 +1091,54 @@ function startInlineEdit(tr, emp, calc, actualKey) {
         <option value="E"${grade === 'E' ? ' selected' : ''}>E</option>
       </select>
     </td>
-    <td><input class="inline-edit" type="date" name="CSA Start Date"   value="${nd(emp['CSA Start Date'])}"></td>
-    <td>${nd(emp['Due date'])}</td>
-    <td><input class="inline-edit" type="date" name="Basic Start"      value="${nd(emp['Basic Start'])}"></td>
-    <td><input class="inline-edit" type="date" name="Basic End"        value="${nd(emp['Basic End'])}"></td>
-    <td><input class="inline-edit" type="date" name="Operation Start"  value="${nd(emp['Operation Start'])}"></td>
-    <td><input class="inline-edit" type="date" name="Operation End"    value="${nd(emp['Operation End'])}"></td>
-    <td><input class="inline-edit" type="date" name="Resign Date"      value="${nd(emp['Resign Date'])}"></td>
-    <td><input class="inline-edit" type="date" name="Transfers Date"   value="${nd(emp['Transfers Date'])}"></td>
-    <td><input class="inline-edit" type="number" name="Graduate Eff"   value="${esc(String(emp['Graduate Eff'] ?? ''))}" min="0" max="100" step="0.01"></td>
-    <td><span class="badge ${statusBadgeClass(actualKey)}">${esc(t(STATUS_KEY_MAP[actualKey] || actualKey))}</span></td>
-    <td><input class="inline-edit" type="number" name="Employees Leave" value="${leave}" min="0" step="1"></td>
+    <td><input class="inline-edit" type="date" name="CSA Start Date" value="${nd(emp['CSA Start Date'])}"></td>
+    <td class="col-group-end"><span class="emp-date-val">${nd(emp['Due date'])}</span></td>
+    <td>
+      <div class="ie-date-pair">
+        <label class="ie-date-label">Start<input class="inline-edit" type="date" name="Basic Start" value="${nd(emp['Basic Start'])}"></label>
+        <label class="ie-date-label">End<input class="inline-edit" type="date" name="Basic End"   value="${nd(emp['Basic End'])}"></label>
+      </div>
+    </td>
+    <td class="col-group-end">
+      <div class="ie-date-pair">
+        <label class="ie-date-label">Start<input class="inline-edit" type="date" name="Operation Start" value="${nd(emp['Operation Start'])}"></label>
+        <label class="ie-date-label">End<input class="inline-edit" type="date" name="Operation End"   value="${nd(emp['Operation End'])}"></label>
+      </div>
+    </td>
+    <td class="td-r"><input class="inline-edit" type="number" name="Graduate Eff" value="${esc(String(emp['Graduate Eff'] ?? ''))}" min="0" max="100" step="0.01" style="max-width:64px;text-align:right"></td>
+    <td><span class="status-pill status-pill--${actualKey}"><span class="status-pill__dot"></span>${esc(t(STATUS_KEY_MAP[actualKey] || actualKey))}</span></td>
+    <td class="td-c"><input class="inline-edit" type="number" name="Employees Leave" value="${leave}" min="0" step="1" style="max-width:48px;text-align:center"></td>
+    <td class="td-c ie-action-cell">
+      <button class="btn-confirm-inline" title="${t('tooltipConfirm')}">✓</button>
+      <button class="btn-cancel-inline"  title="${t('tooltipCancel')}">✗</button>
+      <input type="hidden" class="inline-edit" name="Resign Date"    value="${nd(emp['Resign Date'])}">
+      <input type="hidden" class="inline-edit" name="Transfers Date" value="${nd(emp['Transfers Date'])}">
+    </td>
   `;
+
+  // Escape key cancels edit
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      document.removeEventListener('keydown', onKeyDown);
+      const emp2 = lastEmployees.find(em => String(em['Employee ID']) === String(tr.dataset.employeeId));
+      if (emp2) cancelInlineEdit(tr, emp2, emp2.calculated || {}, computeActualStatus(emp2, emp2.calculated || {}));
+    }
+  };
+  document.addEventListener('keydown', onKeyDown);
+  // Remove listener when row is no longer editing (confirm/cancel cleans up via renderEmployeeTable)
+  tr._ieEscListener = onKeyDown;
 }
 
 // ===== INLINE EDIT — CANCEL =====
 function cancelInlineEdit(tr, emp, calc, actualKey) {
+  if (tr._ieEscListener) { document.removeEventListener('keydown', tr._ieEscListener); delete tr._ieEscListener; }
   tr.classList.remove('editing');
-  tr.innerHTML = buildRowHTML(emp, calc, actualKey);
+  renderEmployeeTable(lastEmployees);
 }
 
 // ===== INLINE EDIT — CONFIRM & SAVE =====
 async function confirmInlineEdit(tr, employeeId) {
+  if (tr._ieEscListener) { document.removeEventListener('keydown', tr._ieEscListener); delete tr._ieEscListener; }
   const confirmBtn = tr.querySelector('.btn-confirm-inline');
   if (confirmBtn) confirmBtn.disabled = true;
 
@@ -1137,7 +1225,12 @@ function renderEmployeeTable(employees) {
       const calc = emp.calculated || {};
       return { emp, calc, actualKey: computeActualStatus(emp, calc) };
     })
-    .filter(({ actualKey }) => !currentFilter || actualKey === currentFilter);
+    .filter(({ actualKey }) => !currentFilter || actualKey === currentFilter)
+    .sort((a, b) => {
+      const da = a.emp['CSA Start Date'] || '';
+      const db = b.emp['CSA Start Date'] || '';
+      return db < da ? -1 : db > da ? 1 : 0;
+    });
 
   const st     = _newOpTableState;
   const total  = filtered.length;
@@ -1146,22 +1239,31 @@ function renderEmployeeTable(employees) {
   const start    = (st.page - 1) * st.pageSize;
   const pageRows = filtered.slice(start, start + st.pageSize);
 
-  pageRows.forEach(({ emp, calc, actualKey }) => {
+  pageRows.forEach(({ emp, calc, actualKey }, idx) => {
     const tr = document.createElement('tr');
     tr.className = `actual-${actualKey}`;
     tr.dataset.employeeId = emp['Employee ID'] || '';
-    tr.innerHTML = buildRowHTML(emp, calc, actualKey);
+    tr.innerHTML = buildRowHTML(emp, calc, actualKey, start + idx + 1);
     body.appendChild(tr);
   });
 
+  // Range label + count badge
   const rangeEl = $('newop-rangeLabel');
-  if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} of ${total}` : '0 items';
-  const pageEl = $('newop-pageLabel');
-  if (pageEl) pageEl.textContent = `${st.page} of ${pages}`;
-  const prevEl = $('newop-prevPage');
-  if (prevEl) prevEl.disabled = st.page <= 1;
-  const nextEl = $('newop-nextPage');
-  if (nextEl) nextEl.disabled = st.page >= pages;
+  if (rangeEl) rangeEl.textContent = total ? `show ${start + 1}-${Math.min(start + st.pageSize, total)} from ${total} items` : '0 items';
+  const badge = $('emp-count-badge');
+  if (badge) badge.textContent = total ? `${total}` : '';
+
+  // Numbered pagination
+  _renderNewOpPagination(pages, st.page);
+}
+
+function _renderNewOpPagination(pages, current) {
+  const pl = $('newop-pageLabel');
+  const pp = $('newop-prevPage');
+  const np = $('newop-nextPage');
+  if (pl) pl.textContent = `Page ${current} of ${pages}`;
+  if (pp) pp.disabled = current <= 1;
+  if (np) np.disabled = current >= pages;
 }
 
 // ===== DASHBOARD PAGE =====
@@ -2497,7 +2599,7 @@ async function createNewEmployee() {
     'Employee ID':    $('newEmployeeId').value.trim(),
     'Employee Name':  $('newEmployeeName').value.trim(),
     'CSA Start Date': $('newCsaStartDate').value,
-    'Type':           currentNewOpType, // tag with whichever subtab (Sewing/QC-QA) was open
+    'Type':           currentNewOpType || 'Sewing', // fallback to Sewing when Overall is active
   };
   if (!payload['Employee ID']) {
     showMessage(t('pleaseEnterEmployeeId'), true);
@@ -2505,12 +2607,26 @@ async function createNewEmployee() {
   }
   try {
     await api(`/api/${currentDepartment}/employees`, { method: 'POST', body: JSON.stringify(payload) });
+    const createdYear = (payload['CSA Start Date'] || '').slice(0, 4);
     $('newEmployeeId').value   = '';
     $('newEmployeeName').value = '';
     $('newCsaStartDate').value = '';
     closeRegisterModal();
     showMessage(t('created'));
-    loadDashboard();
+
+    // Make the just-created operator visible without a manual page reload:
+    // a lingering status filter (new rows are always "Not Started") or year
+    // filter (new rows are dated today) would otherwise hide the fresh row.
+    // Clear the status filter and pin the year filter to the new row's year.
+    currentFilter     = '';
+    currentYearFilter = createdYear || '';
+    const statusSel = $('statusFilter');
+    if (statusSel) statusSel.value = '';
+    _newOpTableState.page = 1;
+
+    await loadDashboard();                 // re-fetch + render using the filters above
+    const yearSel = $('empYearFilter');    // sync the rebuilt dropdown to the pinned year
+    if (yearSel) yearSel.value = currentYearFilter;
   } catch (err) {
     showMessage(err.message, true);
   }
@@ -2601,15 +2717,14 @@ let _adminBtnAllowedByRole = false;
 // same in every language (it identifies which door+mode the session came from).
 function _roleBadgeText(role) {
   switch (role) {
-    case 'csa_view': return 'CSA (View Mode)';
-    case 'csa_user': return 'CSA (Edit Mode)';
-    case 'qe_view':  return 'QE (View Mode)';
-    case 'qe_user':  return 'QE (Edit Mode)';
-    case 'qe_audit': return 'QE (Audit Mode - Auditor)';
-    case 'qe_auditee': return 'QE (Audit Mode - Auditee)';
-    case 'admin':    return 'Admin Mode';
-    case 'manager':  return 'CSA (View Mode)'; // legacy role name
-    default:         return '';
+    case 'csa_user':   return 'CSA';
+    case 'qe_edit':    return 'QE (GICA Edit)';
+    case 'qe_read':    return 'QE (GICA Read)';
+    case 'qe_audit':   return 'QE (Auditor)';
+    case 'qe_auditee': return 'QE (Auditee)';
+    case 'admin':      return 'Admin';
+    case 'viewer':     return 'Viewer';
+    default:           return '';
   }
 }
 
@@ -2621,17 +2736,17 @@ function _applyRoleBrandTitle(role) {
   const titleEl = document.querySelector('.topbar-brand h1');
   const subEl   = document.querySelector('.topbar-brand p');
   if (!titleEl || !subEl) return;
-  if (['csa_view', 'csa_user', 'manager'].includes(role)) {
+  if (role === 'csa_user') {
     titleEl.textContent = 'CSA Dashboard';
     subEl.textContent   = 'Center of Skill Acquisition';
-  } else if (['qe_view', 'qe_user'].includes(role)) {
+  } else if (role === 'qe_edit' || role === 'qe_read') {
     titleEl.textContent = 'GICA Dashboard';
     subEl.textContent   = 'Garment Inspection Competency Assessment';
   } else if (role === 'qe_audit' || role === 'qe_auditee') {
     titleEl.textContent = 'Audit Dashboard';
     subEl.textContent   = 'Internal Process Audit';
   } else if (role === 'admin') {
-    titleEl.textContent = 'CSA & GICA Dashboard';
+    titleEl.textContent = 'FSK Dashboard';
     subEl.textContent   = 'Center of Skill Acquisition · Garment Inspection Competency Assessment';
   }
 }
@@ -2733,14 +2848,31 @@ function syncNewOpSubtabTop() {
 // Both subtabs reuse the same dashboard markup — switching just changes
 // currentNewOpType and re-renders against already-fetched data (no refetch),
 // scoped via the "Type" column added to each BU's Excel table.
+function _newOpShowTechnicPlaceholder(show) {
+  const placeholder = $('newop-technic-panel');
+  const dashCard    = $('homeDashCard');
+  const dashLoading = $('homeDashLoading');
+  if (placeholder) placeholder.classList.toggle('hidden', !show);
+  if (dashCard)    dashCard.classList.toggle('hidden', show);
+  if (dashLoading && show) dashLoading.classList.add('hidden');
+}
+
 function initNewOpSubtabs() {
+  const TYPE_MAP = { overall: null, sewing: 'Sewing', qcqa: 'QC/QA', technic: 'Technic' };
   document.querySelectorAll('.newop-subtab-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.newop-subtab-btn').forEach(b =>
         b.classList.toggle('newop-subtab-btn--active', b === btn));
-      currentNewOpType = btn.dataset.subtab === 'qcqa' ? 'QC/QA' : 'Sewing';
+      const subtab = btn.dataset.subtab;
+      currentNewOpType = TYPE_MAP[subtab] ?? null;
 
-      // Home Dashboard: re-render against the already-cached allDeptData
+      if (subtab === 'technic') {
+        _newOpShowTechnicPlaceholder(true);
+        return;
+      }
+      _newOpShowTechnicPlaceholder(false);
+
+      // Re-render against already-cached allDeptData
       if (Object.keys(allDeptData).length) {
         _rebuildHomeDashYearOptions();
         renderHomeDashboard($('homeDashYearFilter').value);
@@ -2796,167 +2928,62 @@ function startLoginParticles() {
   window.addEventListener('resize', () => { resize(); initParticles(); });
 }
 
-// ===== LOGIN DOORS (CSA / QE / Admin) + Admin wrong-attempt lockout =====
-const ADMIN_FAIL_KEY   = 'adminFailCount';
-const ADMIN_LOCK_LIMIT = 3;
-const ADMIN_LOCK_SECS  = 60;
+// ===== LOGIN FORM (Supabase email / password) =====
 
-function _showLoginDoor(door) {
-  $('loginDoors').classList.add('hidden');
-  ['csa', 'qe', 'qe-audit', 'admin'].forEach(d => {
-    const panel = $('loginDoor-' + d);
-    if (panel) panel.classList.toggle('hidden', d !== door);
-  });
-}
-function _showLoginDoorPicker() {
-  $('loginDoors').classList.remove('hidden');
-  ['csa', 'qe', 'qe-audit', 'admin'].forEach(d => $('loginDoor-' + d)?.classList.add('hidden'));
-}
-
-async function _openViewOnlySession(route, btn, errEl) {
-  btn.disabled = true;
+async function _doLogin(email, password) {
+  const errEl  = $('loginError');
+  const btn    = $('loginSubmitBtn');
+  const origTx = btn ? btn.textContent : 'Sign In';
   if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+  if (btn)   { btn.disabled = true; btn.textContent = 'Signing in…'; }
   try {
-    await api(route, { method: 'POST' });
+    const result = await api('/api/auth/login', {
+      method: 'POST',
+      body:   JSON.stringify({ email, password }),
+    });
+    _saveJwt(result.access_token);
     window.location.reload();
   } catch (err) {
-    btn.disabled = false;
-    const msg = err.message || t('managerLoginFailed');
-    if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
-    else showMessage(msg, true);
+    if (errEl) { errEl.textContent = err.message || 'Invalid email or password'; errEl.classList.remove('hidden'); }
+    if (btn)   { btn.disabled = false; btn.textContent = origTx; }
   }
 }
 
-function _startLockoutCountdown() {
-  show($('adminLockoutScreen'));
-  hide($('loginPanel'));
-  const el = $('lockoutCountdown');
-  let remaining = ADMIN_LOCK_SECS;
-  if (el) el.textContent = remaining;
-  const tick = setInterval(() => {
-    remaining--;
-    if (el) el.textContent = Math.max(remaining, 0);
-    if (remaining <= 0) {
-      clearInterval(tick);
-      sessionStorage.removeItem(ADMIN_FAIL_KEY);
-      hide($('adminLockoutScreen'));
-      show($('loginPanel'));
-      _showLoginDoorPicker();
-    }
-  }, 1000);
+async function _doLogout() {
+  try { await api('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+  _saveJwt('');
+  window.location.reload();
 }
 
-function _handleAdminLoginError() {
-  const count = Number(sessionStorage.getItem(ADMIN_FAIL_KEY) || 0) + 1;
-  sessionStorage.setItem(ADMIN_FAIL_KEY, String(count));
-  if (count >= ADMIN_LOCK_LIMIT) {
-    _startLockoutCountdown();
-    return;
+function initLoginForm() {
+  const form = $('loginForm');
+  if (!form) return;
+
+  // Restore saved employee ID if remember was checked
+  const savedId = localStorage.getItem('login_remember_id');
+  if (savedId) {
+    const emailEl    = $('loginEmail');
+    const rememberEl = $('loginRemember');
+    if (emailEl)    emailEl.value   = savedId;
+    if (rememberEl) rememberEl.checked = true;
   }
-  show($('loginPanel'));
-  startLoginParticles();
-  _showLoginDoor('admin');
-  const warnEl = $('adminLoginWarning');
-  if (warnEl) {
-    warnEl.textContent = `This is not an Admin account — the system will lock if you enter the wrong password ${ADMIN_LOCK_LIMIT} times (already entered incorrectly ${count} times)`;
-    warnEl.classList.remove('hidden');
-  }
-}
 
-let _doorPasswordPending = '';
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const raw      = ($('loginEmail')?.value    || '').trim();
+    const password = ($('loginPassword')?.value || '');
+    if (!raw || !password) return;
 
-function _showDoorPasswordPanel(door) {
-  _doorPasswordPending = door;
-  $('loginCard').classList.add('hidden');
-  $('doorPasswordPanel').classList.remove('hidden');
-  $('doorPasswordInput').value = '';
-  $('doorPasswordError').classList.add('hidden');
-  $('doorPasswordInput').focus();
-}
-function _hideDoorPasswordPanel() {
-  $('doorPasswordPanel').classList.add('hidden');
-  $('loginCard').classList.remove('hidden');
-}
-
-let _doorLoginRoutePending = '';   // set alongside _doorPasswordPending — which POST route to call after unlock
-
-async function _submitDoorPassword() {
-  const door     = _doorPasswordPending;
-  const password = $('doorPasswordInput').value;
-  const errEl    = $('doorPasswordError');
-  if (!password) {
-    errEl.textContent = 'กรุณากรอกรหัสผ่าน';
-    errEl.classList.remove('hidden');
-    return;
-  }
-  try {
-    await api('/api/door-unlock', { method: 'POST', body: JSON.stringify({ door, password }) });
-    if (door === 'qe') {
-      // QE Edit/Audit Mode write through the shared MANAGER_REFRESH_TOKEN (the
-      // file owner's own account) instead of each person's own Microsoft login —
-      // no OAuth redirect needed once the door password is verified. Which mode
-      // (Edit vs Audit) is decided by data-login-route on the button that was
-      // clicked, NOT hardcoded here — qeEditBtn and qeAuditBtn share the same
-      // door="qe" password gate but log in to different roles.
-      await api(_doorLoginRoutePending || '/qe-edit-login', { method: 'POST' });
-      window.location.reload();
+    const remember = !!$('loginRemember')?.checked;
+    if (remember) {
+      localStorage.setItem('login_remember_id', raw);
     } else {
-      window.location.href = `/login?door=${door}`;
+      localStorage.removeItem('login_remember_id');
     }
-  } catch (err) {
-    errEl.textContent = err.message || 'Incorrect password';
-    errEl.classList.remove('hidden');
-  }
-}
 
-function initLoginDoors() {
-  $('loginDoors')?.querySelectorAll('.login-door-btn[data-door]').forEach(btn => {
-    btn.onclick = () => _showLoginDoor(btn.dataset.door);
+    const email = raw.includes('@') ? raw : `${raw}@manu.local`;
+    _doLogin(email, password);
   });
-  document.querySelectorAll('.login-door-back[data-back]').forEach(btn => {
-    btn.onclick = _showLoginDoorPicker;
-  });
-  $('csaViewBtn')?.addEventListener('click', () => _openViewOnlySession('/manager-login', $('csaViewBtn'), $('csaViewError')));
-  $('qeViewBtn')?.addEventListener('click', () => _openViewOnlySession('/qe-view-login', $('qeViewBtn'), $('qeViewError')));
-
-  // Audit Sign In — top-level door (Auditor still needs QE password via data-door="qe")
-  $('auditDoorBtn')?.addEventListener('click', () => _showLoginDoor('qe-audit'));
-  $('loginAdminBtn')?.addEventListener('click', () => _showLoginDoor('admin'));
-  $('qeAuditeeBtn')?.addEventListener('click', () => _openViewOnlySession('/qe-auditee-login', $('qeAuditeeBtn'), $('qeAuditeeError')));
-
-  // QE / Admin "Sign in with Microsoft" — must pass the door password first.
-  document.querySelectorAll('.login-btn[data-door]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      _doorLoginRoutePending = btn.dataset.loginRoute || '/qe-edit-login';
-      _showDoorPasswordPanel(btn.dataset.door);
-    });
-  });
-  $('doorPasswordBack')?.addEventListener('click', _hideDoorPasswordPanel);
-  $('doorPasswordSubmit')?.addEventListener('click', _submitDoorPassword);
-  $('doorPasswordInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') _submitDoorPassword(); });
-
-  // Esc does the same thing as the ← back button, whichever screen is open.
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
-    if (!$('doorPasswordPanel').classList.contains('hidden')) {
-      _hideDoorPasswordPanel();
-      return;
-    }
-    const openDoor = ['csa', 'qe', 'qe-audit', 'admin'].find(d => !$('loginDoor-' + d)?.classList.contains('hidden'));
-    if (openDoor) _showLoginDoorPicker();
-  });
-
-  // If we just bounced back from a failed Admin Sign In (?adminError=1), strip the
-  // query param and run the warning/lockout flow before anything else renders.
-  if (new URLSearchParams(window.location.search).get('adminError') === '1') {
-    window.history.replaceState({}, '', window.location.pathname);
-    _handleAdminLoginError();
-  }
-  // /login redirected back here because the door password hadn't been verified
-  // yet (e.g. URL navigated to directly) — send them to the password prompt.
-  if (new URLSearchParams(window.location.search).get('doorLocked') === '1') {
-    window.history.replaceState({}, '', window.location.pathname);
-  }
 }
 
 async function init() {
@@ -2995,11 +3022,17 @@ async function init() {
     renderEmployeeTable(lastEmployees);
   };
   $('newop-prevPage').onclick = () => {
-    if (_newOpTableState.page > 1) { _newOpTableState.page--; renderEmployeeTable(lastEmployees); }
+    if (_newOpTableState.page <= 1) return;
+    _newOpTableState.page--;
+    const sy = window.scrollY;
+    renderEmployeeTable(lastEmployees);
+    requestAnimationFrame(() => window.scrollTo({ top: sy, behavior: 'instant' }));
   };
   $('newop-nextPage').onclick = () => {
     _newOpTableState.page++;
+    const sy = window.scrollY;
     renderEmployeeTable(lastEmployees);
+    requestAnimationFrame(() => window.scrollTo({ top: sy, behavior: 'instant' }));
   };
 
   // Home dashboard year filter + refresh
@@ -3072,31 +3105,28 @@ async function init() {
     }
   });
 
-  initLoginDoors();
+  initLoginForm();
 
-  // Check auth
+  // Check auth — JWT already set in _sbJwt if user was previously signed in
   const me = await api('/api/me');
   if (!me.authenticated) {
-    // Don't re-show the login doors over an active Admin lockout countdown.
-    if ($('adminLockoutScreen').classList.contains('hidden')) {
-      show($('loginPanel'));
-      startLoginParticles();
-    }
+    show($('loginPanel'));
+    startLoginParticles();
     return;
   }
 
   currentUser = me.user;
-  currentRole = me.role || 'user';
+  currentRole = me.role || 'viewer';
 
-  const VIEW_ONLY_ROLES = ['manager', 'csa_view', 'qe_view'];
-  const QE_ROLES        = ['qe_view', 'qe_user'];
-  const CSA_ROLES       = ['csa_view', 'csa_user', 'manager'];
-  const isViewOnly = VIEW_ONLY_ROLES.includes(currentRole);
+  const VIEW_ONLY_ROLES = ['viewer'];
+  const QE_ROLES        = ['qe_edit', 'qe_read'];
+  const CSA_ROLES       = ['csa_user'];
+  const isViewOnly = currentRole === 'viewer';
 
   // Apply view-only mode — hides all write controls
   if (isViewOnly) document.body.classList.add('view-only');
 
-  // Role badge — fixed labels per door/mode (not translated, same in every language).
+  // Role badge — fixed labels per role.
   const badgeText = _roleBadgeText(currentRole);
   const badge = $('roleBadge');
   if (badge && badgeText) {
@@ -3105,22 +3135,25 @@ async function init() {
   }
   _applyRoleBrandTitle(currentRole);
 
-  $('authBox').innerHTML = `${t('signedIn')} · <a href="/logout">${t('logout')}</a>`;
+  const userLabel = (me.user?.name || me.user?.email || '');
+  $('authBox').innerHTML = `${userLabel ? userLabel + ' · ' : ''}` +
+    `<a href="#" id="logoutLink">${t('logout')}</a>`;
+  $('logoutLink')?.addEventListener('click', e => { e.preventDefault(); _doLogout(); });
   show($('mainTabBar'));
   // Admin panel is a write surface (holidays) — hide it for any view-only session,
   // and switchTab() additionally hides it while on the GICA tab (see initTabBar).
   _adminBtnAllowedByRole = !isViewOnly;
   if (_adminBtnAllowedByRole) show($('adminBtn'));
-  // Force Refresh is Admin Sign In only — csa_user/qe_user never see it, even
-  // though they can open the Admin Settings modal for holidays.
+  // Force Refresh is Admin Sign In only
   $('forceRefreshSection')?.classList.toggle('hidden', currentRole !== 'admin');
 
-  // Role-based tab visibility: CSA roles never see GICA/Audit; QE roles see ONLY
-  // GICA; qe_audit/qe_auditee see ONLY Audit (sub-tab gating inside the module
-  // further restricts qe_auditee to Dashboard/Plan/Finding-CAR — see initAuditTab);
-  // admin sees everything (no filtering needed).
-  if (currentRole === 'admin') {
-    // no-op — all tabs already visible by default
+  // Role-based tab visibility:
+  //   csa_user         → CSA tabs only
+  //   qe_edit / qe_read → GICA only (qe_read = read-only, qe_edit = can write)
+  //   qe_audit / qe_auditee → Audit only
+  //   admin / viewer   → all tabs
+  if (currentRole === 'admin' || currentRole === 'viewer') {
+    // no-op — all tabs visible by default
   } else if (currentRole === 'qe_audit' || currentRole === 'qe_auditee') {
     ['newOperator', 'jumper', 'trainer', 'sewingOperator', 'gica'].forEach(id => {
       $('tabItem-' + id)?.classList.add('hidden');
@@ -3129,7 +3162,7 @@ async function init() {
     if (_switchMainTab) _switchMainTab('audit');
     initAuditTab();
     return;
-  } else if (QE_ROLES.includes(currentRole)) {
+  } else if (currentRole === 'qe_edit' || currentRole === 'qe_read') {
     ['newOperator', 'jumper', 'trainer', 'sewingOperator'].forEach(id => {
       $('tabItem-' + id)?.classList.add('hidden');
       document.querySelector(`.tab-btn[data-tab="${id}"]`)?.classList.add('hidden');
@@ -3138,7 +3171,7 @@ async function init() {
     if (_switchMainTab) _switchMainTab('gica');
     initGicaTab();
     return;
-  } else if (CSA_ROLES.includes(currentRole)) {
+  } else if (currentRole === 'csa_user') {
     document.querySelector('.tab-btn[data-tab="gica"]')?.classList.add('hidden');
     document.querySelector('.tab-btn[data-tab="audit"]')?.classList.add('hidden');
   }
@@ -4870,7 +4903,7 @@ async function initGicaTab() {
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAttemptDotsModal(); });
 
     // QE/Admin-only write UI on Employee List
-    if (['qe_user', 'admin'].includes(currentRole)) {
+    if (['qe_edit', 'admin'].includes(currentRole)) {
       _wireGicaResultModal();
       _wireGicaCreateModal();
       $('gica-create-operator-btn')?.classList.remove('hidden');
@@ -6304,6 +6337,7 @@ function _computeGicaWeeklyBuCards(emps, today) {
   const ensure = bu => buMap[bu] || (buMap[bu] = {
     bu, total: 0, attended: 0, overdue: 0, attendedPass: 0, attendedFail: 0,
     retestReq: 0, retestAttended: 0, reviewReq: 0, reviewAttended: 0,
+    earlyN: 0, earlyPass: 0, earlyFail: 0,
     employees: [],
   });
 
@@ -6311,10 +6345,32 @@ function _computeGicaWeeklyBuCards(emps, today) {
     if (!e.bu || currentIdx < 0) return;
     const thisWeekEntry = (e.history || []).find(h => h.date && _gicaSchedBucketIdx(h.date, buckets) === currentIdx);
     const attendedThisWeek = !!thisWeekEntry;
-    let inCohort = attendedThisWeek;
-    if (!attendedThisWeek && e.scheduledNext) {
+
+    // "Early Assessment": tested this week but scheduled date for that test is a future bucket
+    if (attendedThisWeek && thisWeekEntry.scheduledDate) {
+      const schedIdx = _gicaSchedBucketIdx(thisWeekEntry.scheduledDate, buckets);
+      if (schedIdx > currentIdx) {
+        const c = ensure(e.bu);
+        c.earlyN++;
+        const ep = thisWeekEntry.grade1 && thisWeekEntry.grade2 && e.exp1 && e.exp2 &&
+          (GICA_GRADE_RANK[thisWeekEntry.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
+          (GICA_GRADE_RANK[thisWeekEntry.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+        if (ep) c.earlyPass++; else c.earlyFail++;
+        return;
+      }
+    }
+
+    // "Due this week" cohort: scheduled this week or overdue (not yet tested), OR tested on-plan
+    let inCohort = false;
+    if (attendedThisWeek) {
+      // Tested this week and not early → on-plan attendance
+      inCohort = true;
+    } else if (e.scheduledNext) {
       const schedDate = _gicaParseDate(e.scheduledNext);
-      if (schedDate && schedDate <= cutoff) inCohort = true;
+      if (schedDate) {
+        if (_gicaSchedBucketIdx(e.scheduledNext, buckets) === currentIdx) inCohort = true;
+        else if (schedDate <= cutoff) inCohort = true;
+      }
     }
     if (!inCohort) return;
 
@@ -6335,7 +6391,7 @@ function _computeGicaWeeklyBuCards(emps, today) {
     else                          { c.reviewReq++; if (attendedThisWeek) c.reviewAttended++; }
   });
 
-  return BU_ORDER.map(bu => buMap[bu] || { bu, empty: true });
+  return BU_ORDER.map(bu => buMap[bu] || { bu, empty: true, earlyN: 0 });
 }
 
 function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFilter = new Set(), deptFilter = new Set()) {
@@ -6679,6 +6735,7 @@ function _gicaScheduleHtml(vm) {
   const weekCards    = vm.weeklyBuCards.filter(c => !c.empty);
   const weekTotal    = weekCards.reduce((s, c) => s + c.total, 0);
   const weekAttended = weekCards.reduce((s, c) => s + c.attended, 0);
+  const earlyTotal   = vm.weeklyBuCards.reduce((s, c) => s + (c.earlyN || 0), 0);
   const dueWeekRows = vm.weeklyBuCards.map(c => {
     const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
     if (c.empty) {
@@ -6700,11 +6757,57 @@ function _gicaScheduleHtml(vm) {
       <span class="mini-bar__count mini-bar__count--lg">${c.attended}/${c.total}</span>
     </div>`;
   }).join('');
+  const earlyBuRows = vm.weeklyBuCards.map(c => {
+    if (!c.earlyN) return '';
+    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
+    return `<div class="u-between" style="font-size:0.74rem;line-height:1.6;">
+      <span style="color:${buColor};font-weight:600;">${escapeHtml(c.bu)}</span>
+      <strong>${c.earlyN}</strong>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  // Combined gauge (Due + Early): green=passed, light green=failed, gray=not yet attended
+  const combinedBuRows = vm.weeklyBuCards.map(c => {
+    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
+    if (c.empty && !c.earlyN) {
+      return `<div class="mini-bar__row mini-bar__row--lg">
+        <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+        <span class="u-muted" style="font-size:0.68rem;">no data</span>
+      </div>`;
+    }
+    const totalPass  = (c.attendedPass || 0) + (c.earlyPass || 0);
+    const totalFail  = (c.attendedFail || 0) + (c.earlyFail || 0);
+    const totalDone  = (c.attended || 0) + (c.earlyN || 0);
+    const notYet     = c.overdue || 0;
+    const grandTotal = totalDone + notYet;
+    const passPct  = grandTotal ? Math.round(totalPass / grandTotal * 100) : 0;
+    const failPct  = grandTotal ? Math.round(totalFail / grandTotal * 100) : 0;
+    const awaitPct = Math.max(100 - passPct - failPct, 0);
+    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Pass: ${totalPass}, Fail: ${totalFail}, Awaiting: ${notYet} (Total ${grandTotal})">
+      <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+      <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
+        ${passPct  > 0 ? `<div style="width:${passPct}%;background:#16a34a;height:100%;"></div>`  : ''}
+        ${failPct  > 0 ? `<div style="width:${failPct}%;background:#86efac;height:100%;"></div>`  : ''}
+        ${awaitPct > 0 ? `<div style="width:${awaitPct}%;background:var(--border-light);height:100%;"></div>` : ''}
+      </div>
+      <span class="mini-bar__count mini-bar__count--lg">${totalDone}/${grandTotal}</span>
+    </div>`;
+  }).join('');
+
   const dueWeekCard = `
     <div class="stat-card">
-      <div class="stat-card__label">Due this week</div>
-      <div class="stat-card__value">${weekAttended}/${weekTotal}</div>
-      <div style="display:flex;flex-direction:column;gap:9px;margin-top:8px;">${dueWeekRows}</div>
+      <div style="display:flex;gap:0;">
+        <div style="flex:1;min-width:0;padding-right:12px;">
+          <div class="stat-card__label">Due this week</div>
+          <div class="stat-card__value">${weekAttended}/${weekTotal}</div>
+        </div>
+        <div style="width:1px;background:var(--border-light);flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;padding-left:12px;">
+          <div class="stat-card__label">Early Assessment</div>
+          <div class="stat-card__value" style="color:${earlyTotal > 0 ? '#2563eb' : 'var(--text)'};">${earlyTotal}</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--border-light);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px;">${combinedBuRows || '<span class="u-muted" style="font-size:0.74rem;">No data</span>'}</div>
     </div>`;
 
   // On-time Rate = attended this week / required this week — pass/fail doesn't matter
@@ -7353,13 +7456,13 @@ function _gicaFailStatsHtml(rows) {
   let fail1 = 0, fail2 = 0, fail3 = 0;
   rows.forEach(e => { const s = _gicaFailStreak(e); if (s === 1) fail1++; else if (s === 2) fail2++; else if (s >= 3) fail3++; });
   const chip = (label, count, color) =>
-    `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:0.78rem;font-weight:600;background:${color}15;color:${color};border:1px solid ${color}30;">` +
-    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};"></span>${label}: ${count} people</span>`;
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">`
-    + chip('Failed initial assessment', fail1, '#f59e0b')
-    + chip('Failed 2 consecutive attempts', fail2, '#ea580c')
-    + chip('Failed 3+ consecutive attempts', fail3, '#dc2626')
-    + `</div>`;
+    `<span class="gica-fail-chip">` +
+    `<span class="gica-fail-chip__count" style="color:${color};">${count}</span>` +
+    `<span class="gica-fail-chip__label">${label}</span>` +
+    `</span>`;
+  return chip('Initial fail', fail1, '#f59e0b')
+    + chip('2× consec. fail', fail2, '#ea580c')
+    + chip('3×+ consec. fail', fail3, '#dc2626');
 }
 
 // Front-facing "Assessment Result" cell — one dot per expected testing checkpoint in a
@@ -7396,7 +7499,12 @@ function _gicaEmpTableMonthDots(e) {
   // Pad after the real dots (not before) so colored dots always start at the left edge.
   for (let i = 0; i < padCount; i++) dots.push(dot('var(--border-light)', 'Not yet assessed'));
 
-  return `<div class="gica-month-dots" data-empid="${escapeHtml(e.empid || '')}" title="Click to view assessment history" style="display:flex;gap:3px;justify-content:flex-start;align-items:center;cursor:pointer;">${dots.join('')}</div>`;
+  const row1 = dots.slice(0, 6).join('');
+  const row2 = dots.slice(6).join('');
+  const rowHtml = row2
+    ? `<div style="display:flex;gap:3px;">${row1}</div><div style="display:flex;gap:3px;margin-top:3px;">${row2}</div>`
+    : `<div style="display:flex;gap:3px;">${row1}</div>`;
+  return `<div class="gica-month-dots" data-empid="${escapeHtml(e.empid || '')}" title="Click to view assessment history" style="display:inline-flex;flex-direction:column;align-items:flex-start;cursor:pointer;">${rowHtml}</div>`;
 }
 
 // Standard stats block for the Assessment History modal — total attempts,
@@ -7597,54 +7705,83 @@ function _gicaShowAttemptDotsModal(empid) {
 }
 
 function _gicaEmpTableHtml(rows, opts = {}) {
-  const sortable = opts.sortable !== false;
-  const editable = !!opts.editable;
+  const sortable  = opts.sortable !== false;
+  const editable  = !!opts.editable;
+  const deletable = !!opts.deletable;
+  const showNum   = false;
+  const cols      = (showNum ? 1 : 0) + 13 + (deletable ? 1 : 0);
   const st = _gicaTableState;
-  const arrow = k => sortable && st.sortKey === k ? (st.sortDir === 1 ? ' ▲' : ' ▼') : '';
-  const TH = (k, label, extra = '') => sortable
-    ? `<th onclick="_gicaSort('${k}')" style="padding:8px 10px;font-size:0.74rem;font-weight:600;color:var(--text-muted);text-align:left;border-bottom:2px solid var(--border-light);cursor:pointer;white-space:nowrap;${extra}">${label}${arrow(k)}</th>`
-    : `<th style="padding:8px 10px;font-size:0.74rem;font-weight:600;color:var(--text-muted);text-align:left;border-bottom:2px solid var(--border-light);white-space:nowrap;${extra}">${label}</th>`;
-  const TD = 'padding:7px 10px;font-size:0.8rem;color:var(--text);border-bottom:1px solid var(--border-light);';
 
-  const gradeCell = (g, s) => g
-    ? `${_gicaGradeBadge(g)}<span style="font-size:0.68rem;color:var(--text-muted);margin-left:3px;">${s != null ? Math.round(s * 100) + '%' : ''}</span>`
-    : '<span style="color:var(--text-muted);">—</span>';
+  const arrow = k => {
+    if (!sortable || st.sortKey !== k) return '';
+    return ` <span class="gica-sort-arrow">${st.sortDir === 1 ? '▲' : '▼'}</span>`;
+  };
+  const TH = (k, label, cls = '') => {
+    const sortCls = sortable ? ' gica-th-sort' : '';
+    const onclick = sortable ? ` onclick="_gicaSort('${k}')"` : '';
+    return `<th class="${cls}${sortCls}"${onclick}>${label}${arrow(k)}</th>`;
+  };
+
+  const gradeCell = (g, s) => {
+    if (!g) return '<span class="emp-date-empty">—</span>';
+    const scoreStr = s != null ? `<span class="gica-grade-score">${Math.round(s * 100)}%</span>` : '';
+    return `${_gicaGradeBadge(g)}${scoreStr}`;
+  };
+
+  const numTh   = showNum ? `<th class="emp-row-num-th"></th>` : '';
+  const actionTh = deletable ? `<th class="td-c">Action</th>` : '';
 
   return `
-    <div class="gica-emp-table-wrap" style="overflow-x:auto;"><table class="gica-emp-table" style="width:100%;border-collapse:collapse;min-width:1100px;">
+    <div class="gica-emp-table-wrap">
+    <table class="emp-table gica-emp-table" style="min-width:1080px;">
       <thead><tr>
+        ${numTh}
         ${TH('bu', 'BU')}
-        ${TH('empid', 'Employee ID')}
-        ${TH('name', 'Employee Name')}
+        ${TH('empid', 'Emp ID')}
+        ${TH('name', 'Name')}
         ${TH('deptname', 'Department')}
-        ${TH('level', 'Level', 'text-align:center;')}
-        ${TH('grade1', 'Measurement Result', 'text-align:center;')}
-        ${TH('grade2', 'Inspection Result', 'text-align:center;')}
-        ${TH('attempt', 'Attempt', 'text-align:center;')}
-        ${TH('lastDate', 'Assessment Date', 'text-align:center;')}
-        ${TH('passed', 'Assessment Result', 'text-align:center;')}
-        ${TH('nextDate', 'Next Assessment Date', 'text-align:center;')}
-        ${TH('nextDate', 'Days Remaining', 'text-align:center;')}
-        ${TH('nextType', 'Status', 'text-align:center;')}
+        ${TH('level', 'Level', 'col-group-end td-c')}
+        ${TH('grade1', 'Measurement', 'td-c')}
+        ${TH('grade2', 'Inspection', 'td-c')}
+        ${TH('attempt', 'Attempt', 'td-c')}
+        ${TH('lastDate', 'Last Date', 'td-c')}
+        ${TH('passed', 'History', 'td-c col-group-end')}
+        ${TH('nextDate', 'Next Date', 'td-c')}
+        ${TH('nextDate', 'Days Left', 'td-c')}
+        ${TH('nextType', 'Status', 'td-c')}
+        ${actionTh}
       </tr></thead>
       <tbody>
         ${rows.length === 0
-          ? `<tr><td colspan="13" style="${TD}text-align:center;color:var(--text-muted);padding:20px;">ไม่พบข้อมูล</td></tr>`
-          : rows.map(e => `<tr>
-          <td style="${TD}">${escapeHtml(e.bu)}</td>
-          <td style="${TD}">${escapeHtml(e.empid || '')}</td>
-          <td style="${TD}${editable ? 'cursor:pointer;color:var(--primary, #6366f1);text-decoration:underline;' : ''}"${editable ? ` class="gica-emp-name-cell" data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" title="คลิกเพื่อบันทึกผลสอบ"` : ''}>${escapeHtml(e.name)}</td>
-          <td style="${TD}">${escapeHtml(e.deptname)}</td>
-          <td style="${TD}">${escapeHtml(e.level || '')}</td>
-          <td style="${TD}text-align:center;">${gradeCell(e.grade1, e.score1)}</td>
-          <td style="${TD}text-align:center;">${gradeCell(e.grade2, e.score2)}</td>
-          <td style="${TD}text-align:center;">${e.attempt}</td>
-          <td style="${TD}text-align:center;">${_gicaFmtDate(e.lastDate)}</td>
-          <td style="${TD}text-align:center;">${_gicaEmpTableMonthDots(e)}</td>
-          <td style="${TD}text-align:center;">${_gicaFmtDate(e.nextDate)}</td>
-          <td style="${TD}text-align:center;">${_gicaDaysBadge(e.nextDate)}</td>
-          <td style="${TD}text-align:center;">${_gicaTypeBadge(e.nextType)}</td>
-        </tr>`).join('')}
+          ? `<tr><td colspan="${cols}" class="td-c" style="padding:24px;color:var(--text-muted);">ไม่พบข้อมูล</td></tr>`
+          : rows.map((e, idx) => {
+              const numTd = showNum ? `<td class="emp-row-num">${idx + 1}</td>` : '';
+              const nameCls = editable ? ' gica-emp-name-cell' : '';
+              const nameAttrs = editable
+                ? ` data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" title="คลิกเพื่อบันทึกผลสอบ"`
+                : '';
+              const nameStyle = editable ? ' style="cursor:pointer;color:var(--primary,#6366f1);text-decoration:underline;"' : '';
+              const deleteTd = deletable
+                ? `<td class="td-c"><button class="gica-delete-emp-btn emp-act-btn" data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" data-name="${escapeHtml(e.name || '')}" title="ลบพนักงาน" style="opacity:1;color:#dc2626;border-color:#fca5a5;"><i class="ti ti-trash" aria-hidden="true"></i></button></td>`
+                : '';
+              return `<tr>
+                ${numTd}
+                <td>${escapeHtml(e.bu)}</td>
+                <td><span class="emp-id-cell">${escapeHtml(e.empid || '')}</span></td>
+                <td class="${nameCls}"${nameAttrs}${nameStyle}>${escapeHtml(e.name)}</td>
+                <td>${escapeHtml(e.deptname)}</td>
+                <td class="td-c col-group-end">${escapeHtml(e.level || '')}</td>
+                <td class="td-c">${gradeCell(e.grade1, e.score1)}</td>
+                <td class="td-c">${gradeCell(e.grade2, e.score2)}</td>
+                <td class="td-c"><span class="emp-id-cell">${e.attempt}</span></td>
+                <td class="td-c">${_gicaFmtDate(e.lastDate)}</td>
+                <td class="td-c col-group-end">${_gicaEmpTableMonthDots(e)}</td>
+                <td class="td-c">${_gicaFmtDate(e.nextDate)}</td>
+                <td class="td-c">${_gicaDaysBadge(e.nextDate)}</td>
+                <td class="td-c">${_gicaTypeBadge(e.nextType)}</td>
+                ${deleteTd}
+              </tr>`;
+            }).join('')}
       </tbody>
     </table></div>`;
 }
@@ -7694,9 +7831,14 @@ function renderGicaTable() {
   const statsEl = $('gica-failStats');
   if (statsEl) statsEl.innerHTML = _gicaFailStatsHtml(rows);
 
-  const editable = ['qe_user', 'admin'].includes(currentRole);
-  wrap.innerHTML = _gicaEmpTableHtml(pageRows, { sortable: true, editable });
-  if (editable) _wireGicaEmpNameClicks(wrap);
+  const editable  = ['qe_edit', 'admin'].includes(currentRole);
+  const deletable = currentRole === 'admin';
+  wrap.innerHTML = _gicaEmpTableHtml(pageRows, { sortable: true, editable, deletable });
+  if (editable)  _wireGicaEmpNameClicks(wrap);
+  if (deletable) _wireGicaDeleteBtns(wrap);
+
+  const countBadge = $('gica-count-badge');
+  if (countBadge) countBadge.textContent = total;
 
   const rangeEl = $('gica-rangeLabel');
   if (rangeEl) rangeEl.textContent = total ? `${start + 1}–${Math.min(start + st.pageSize, total)} of ${total}` : '0 items';
@@ -7707,6 +7849,29 @@ function renderGicaTable() {
 function _wireGicaEmpNameClicks(wrap) {
   wrap.querySelectorAll('.gica-emp-name-cell[data-empid]').forEach(td => {
     td.addEventListener('click', () => _gicaOpenResultModal(td.dataset.bu, td.dataset.empid));
+  });
+}
+
+function _wireGicaDeleteBtns(wrap) {
+  wrap.querySelectorAll('.gica-delete-emp-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { bu, empid, name } = btn.dataset;
+      _gicaConfirm(`ลบพนักงาน "${name}" (${empid}) ออกจากระบบ GICA ?\nการลบไม่สามารถย้อนกลับได้`, async () => {
+        btn.disabled = true;
+        btn.textContent = '…';
+        try {
+          await api(`/api/gica/${encodeURIComponent(bu)}/employees/${encodeURIComponent(empid)}`, { method: 'DELETE' });
+          await _gicaRefreshData();
+          renderGicaSummary();
+          renderGicaTable();
+          showToast('ลบพนักงานแล้ว');
+        } catch (e) {
+          alert('เกิดข้อผิดพลาด: ' + (e.message || 'Unknown error'));
+          btn.disabled = false;
+          btn.textContent = 'ลบ';
+        }
+      });
+    });
   });
 }
 
@@ -7763,7 +7928,9 @@ function _gicaOpenResultModal(bu, empid) {
   }
   $('gica-result-meas').value = '';
   $('gica-result-insp').value = '';
-  $('gica-result-date').value = '';
+  const today = new Date().toISOString().slice(0, 10);
+  $('gica-result-date').value = today;
+  _gicaUpdateDateLabel(today);
   $('gica-result-error').classList.add('hidden');
   $('gica-result-modal').classList.remove('hidden');
 
@@ -7810,6 +7977,7 @@ async function _gicaSaveResult(fields) {
       }),
     });
     await _gicaRefreshData();
+    renderGicaSummary();
     renderGicaTable();
     showToast('บันทึกข้อมูลแล้ว');
   } catch (err) {
@@ -7818,7 +7986,18 @@ async function _gicaSaveResult(fields) {
 }
 
 
+function _gicaUpdateDateLabel(isoVal) {
+  const display = $('gica-result-date-display');
+  if (!display) return;
+  if (!isoVal) { display.value = ''; return; }
+  const d = new Date(isoVal + 'T00:00:00');
+  if (isNaN(d)) { display.value = ''; return; }
+  display.value = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 function _wireGicaResultModal() {
+  $('gica-result-date')?.addEventListener('change', e => _gicaUpdateDateLabel(e.target.value));
+
   $('gica-result-close')?.addEventListener('click', _gicaCloseResultModal);
   $('gica-result-backdrop')?.addEventListener('click', _gicaCloseResultModal);
   $('gica-result-cancel')?.addEventListener('click', () => {
@@ -7826,6 +8005,7 @@ function _wireGicaResultModal() {
       $('gica-result-meas').value = '';
       $('gica-result-insp').value = '';
       $('gica-result-date').value = '';
+      _gicaUpdateDateLabel('');
       _gicaCloseResultModal();
     });
   });
@@ -7859,30 +8039,75 @@ function _gicaPopulateCreateDropdowns() {
   const posSel  = $('gica-create-position');
   if (!buSel || !deptSel || !lvlSel || !posSel) return;
 
-  buSel.innerHTML = BU_ORDER.map(bu => `<option value="${escapeHtml(bu)}">${escapeHtml(bu)}</option>`).join('');
-
   const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
   const placeholder = `<option value="">— Select —</option>`;
+
+  buSel.innerHTML = BU_ORDER.map(bu => `<option value="${escapeHtml(bu)}">${escapeHtml(bu)}</option>`).join('');
 
   const depts = [...new Set(freq.map(r => r.department).filter(Boolean))].sort();
   deptSel.innerHTML = placeholder + depts.map(opt).join('');
 
-  const levels = [...new Set(freq.map(r => r.level).filter(Boolean))].sort((a, b) => {
+  lvlSel.innerHTML  = placeholder;
+  lvlSel.disabled   = true;
+  posSel.innerHTML  = placeholder;
+  posSel.disabled   = true;
+}
+
+function _gicaFilterLevelDropdown(dept) {
+  const freq   = _gicaData.freqTable || [];
+  const lvlSel = $('gica-create-level');
+  const posSel = $('gica-create-position');
+  if (!lvlSel || !posSel) return;
+
+  const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+  const placeholder = `<option value="">— Select —</option>`;
+
+  posSel.innerHTML = placeholder;
+  posSel.disabled  = true;
+
+  if (!dept) {
+    lvlSel.innerHTML = placeholder;
+    lvlSel.disabled  = true;
+    return;
+  }
+  const levels = [...new Set(
+    freq.filter(r => r.department === dept).map(r => r.level).filter(Boolean)
+  )].sort((a, b) => {
     const ia = GICA_LEVEL_ORDER.indexOf(a), ib = GICA_LEVEL_ORDER.indexOf(b);
     if (ia !== ib) return (ia === -1 ? 1 : ib === -1 ? -1 : ia - ib);
     return a.localeCompare(b);
   });
   lvlSel.innerHTML = placeholder + levels.map(opt).join('');
+  lvlSel.disabled  = levels.length === 0;
+}
 
-  const roles = [...new Set(freq.map(r => r.role).filter(Boolean))].sort();
+function _gicaFilterPositionDropdown(dept, level) {
+  const freq   = _gicaData.freqTable || [];
+  const posSel = $('gica-create-position');
+  if (!posSel) return;
+
+  const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+  const placeholder = `<option value="">— Select —</option>`;
+
+  if (!dept || !level) {
+    posSel.innerHTML = placeholder;
+    posSel.disabled  = true;
+    return;
+  }
+  const roles = [...new Set(
+    freq.filter(r => r.department === dept && r.level === level).map(r => r.role).filter(Boolean)
+  )].sort();
   posSel.innerHTML = placeholder + roles.map(opt).join('');
+  posSel.disabled  = roles.length === 0;
 }
 
 function _gicaOpenCreateModal() {
   _gicaPopulateCreateDropdowns();
   $('gica-create-empid').value = '';
   $('gica-create-name').value = '';
-  $('gica-create-startdate').value = '';
+  const today = new Date().toISOString().slice(0, 10);
+  $('gica-create-startdate').value = today;
+  _gicaUpdateStartDateLabel(today);
   $('gica-create-error').classList.add('hidden');
   $('gica-create-modal').classList.remove('hidden');
 }
@@ -7893,6 +8118,7 @@ function _gicaClearCreateForm() {
   $('gica-create-empid').value = '';
   $('gica-create-name').value = '';
   $('gica-create-startdate').value = '';
+  _gicaUpdateStartDateLabel('');
 }
 
 function _gicaValidateCreateForm() {
@@ -7935,10 +8161,32 @@ async function _gicaSaveCreate(fields) {
   }
 }
 
+function _gicaUpdateStartDateLabel(isoVal) {
+  const display = $('gica-create-startdate-display');
+  if (!display) return;
+  if (!isoVal) { display.value = ''; return; }
+  const d = new Date(isoVal + 'T00:00:00');
+  if (isNaN(d)) { display.value = ''; return; }
+  display.value = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 function _wireGicaCreateModal() {
+  $('gica-create-startdate')?.addEventListener('change', e => _gicaUpdateStartDateLabel(e.target.value));
   $('gica-create-operator-btn')?.addEventListener('click', _gicaOpenCreateModal);
   $('gica-create-close')?.addEventListener('click', _gicaCloseCreateModal);
   $('gica-create-backdrop')?.addEventListener('click', _gicaCloseCreateModal);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('gica-create-modal')?.classList.contains('hidden')) {
+      _gicaCloseCreateModal();
+    }
+  });
+  $('gica-create-dept')?.addEventListener('change', e => {
+    _gicaFilterLevelDropdown(e.target.value);
+  });
+  $('gica-create-level')?.addEventListener('change', e => {
+    const dept = $('gica-create-dept').value;
+    _gicaFilterPositionDropdown(dept, e.target.value);
+  });
   $('gica-create-cancel')?.addEventListener('click', () => {
     _gicaConfirm('Cancel this entry?', () => {
       _gicaClearCreateForm();
@@ -9279,7 +9527,7 @@ function _auditReportHtml(vm) {
   const ofiSection = vm.ofiItems.length ? `
     <div class="audit-report-section">
       <h4>Opportunities for Improvement (OFI)</h4>
-      <table class="audit-report-table">
+      <table class="audit-report-table audit-report-table--checklist">
         <colgroup><col style="width:26px;"><col style="width:55%;"><col></colgroup>
         <thead><tr><th class="audit-report-num">#</th><th>Audit Item</th><th>Auditor Comment</th></tr></thead>
         <tbody>${vm.ofiItems.map((it, i) => `

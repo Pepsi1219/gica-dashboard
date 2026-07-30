@@ -8,9 +8,9 @@
   <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'light';</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=172" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=186" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <body>
   <header class="topbar">
     <div class="topbar-brand">
-      <h1 data-i18n="appTitle">CSA & GICA Dashboard</h1>
+      <h1 data-i18n="appTitle">FSK Dashboard</h1>
       <p data-i18n="appSubtitle">Center of Skill Acquisition · Garment Inspection Competency Assessment</p>
     </div>
     <div class="topbar-right">
@@ -158,94 +158,54 @@
   </div>
 
   <main class="container" id="tabContent-newOperator">
-    <!-- Login Panel — 3 doors: CSA / QE / Admin -->
+    <!-- Login Panel — email / password (Supabase Auth) -->
     <section id="loginPanel" class="hidden">
       <canvas id="loginParticles"></canvas>
       <div class="login-card" id="loginCard">
         <div class="login-logo">FSK</div>
         <h1 class="login-app-name">Dashboard</h1>
-        <p class="login-app-sub"> · CSA · GICA ·</p>
-        <p class="login-version">v1.0.0</p>
+        <p class="login-app-sub"> · CSA · GICA · Audit ·</p>
+        <p class="login-version">v2.0.0</p>
 
-        <!-- Admin gear — top-right corner of login card -->
-        <button class="login-admin-gear" id="loginAdminBtn" title="Admin Sign In">⚙</button>
-
-        <!-- Door selection -->
-        <div id="loginDoors" class="login-doors">
-          <button class="login-door-btn" data-door="csa">
-            <span class="login-door-btn__title">CSA Sign In</span>
-            <span class="login-door-btn__sub">New Operator · Jumper · Trainer · Sewing</span>
-          </button>
-          <button class="login-door-btn" data-door="qe">
-            <span class="login-door-btn__title">QE Sign In</span>
-            <span class="login-door-btn__sub">GICA</span>
-          </button>
-          <button class="login-door-btn" id="auditDoorBtn">
-            <span class="login-door-btn__title">Audit Sign In</span>
-            <span class="login-door-btn__sub">Internal Process Audit</span>
-          </button>
-        </div>
-
-        <!-- CSA sub-panel -->
-        <div id="loginDoor-csa" class="login-door-panel hidden">
-          <button class="login-door-back" data-back="1">← back</button>
-          <h3 class="login-door-panel__title">CSA Sign In</h3>
-          <button id="csaViewBtn" class="login-btn">View Mode</button>
-          <button id="csaMsBtn" class="login-btn login-btn--disabled" disabled title="This function is not yet enabled">Edit Mode</button>
-          <p id="csaViewError" class="login-error hidden"></p>
-        </div>
-
-        <!-- QE sub-panel (View + Edit only, no Audit Mode button) -->
-        <div id="loginDoor-qe" class="login-door-panel hidden">
-          <button class="login-door-back" data-back="1">← back</button>
-          <h3 class="login-door-panel__title">QE Sign In</h3>
-          <button id="qeViewBtn" class="login-btn">View Mode</button>
-          <button id="qeEditBtn" class="login-btn" data-door="qe" data-login-route="/qe-edit-login">Edit Mode</button>
-          <p id="qeViewError" class="login-error hidden"></p>
-        </div>
-
-        <!-- Audit Sign In sub-panel: Auditor (password-gated) vs Auditee (no password) -->
-        <div id="loginDoor-qe-audit" class="login-door-panel hidden">
-          <button class="login-door-back" data-back="1">← back</button>
-          <h3 class="login-door-panel__title">Audit Sign In</h3>
-          <button id="qeAuditorBtn" class="login-btn" data-door="qe" data-login-route="/qe-audit-login">Auditor</button>
-          <button id="qeAuditeeBtn" class="login-btn">Auditee</button>
-          <p id="qeAuditeeError" class="login-error hidden"></p>
-        </div>
-
-        <!-- Admin sub-panel (accessible via gear button) -->
-        <div id="loginDoor-admin" class="login-door-panel hidden">
-          <button class="login-door-back" data-back="1">← back</button>
-          <h3 class="login-door-panel__title">Admin Sign In</h3>
-          <button id="adminMsBtn" class="login-btn" data-door="admin">Sign in with Microsoft</button>
-          <p id="adminLoginWarning" class="login-error hidden"></p>
-        </div>
-      </div>
-
-      <!-- Door password prompt (QE / Admin) before the Microsoft redirect starts -->
-      <div id="doorPasswordPanel" class="login-card login-card--overlay hidden">
-        <button class="login-door-back" id="doorPasswordBack">← back</button>
-        <h3 class="login-door-panel__title">Enter your password</h3>
-        <input type="password" id="doorPasswordInput" class="gica-form-input" placeholder="Password" style="margin-bottom:14px;">
-        <button id="doorPasswordSubmit" class="login-btn">Sign In</button>
-        <p id="doorPasswordError" class="login-error hidden"></p>
-      </div>
-    </section>
-
-    <!-- Admin lockout — shown after 3 wrong Admin Sign In attempts -->
-    <section id="adminLockoutScreen" class="hidden">
-      <div class="login-card login-card--lockout">
-        <p class="lockout-text">Too many failed attempts. Please try again later.</p>
-        <div id="lockoutCountdown" class="lockout-countdown">60</div>
-        <p class="lockout-text">Please wait...</p>
+        <form id="loginForm" autocomplete="on" style="width:100%;margin-top:24px;">
+          <input
+            type="text"
+            id="loginEmail"
+            name="username"
+            class="gica-form-input"
+            placeholder="รหัสพนักงาน"
+            autocomplete="username"
+            inputmode="numeric"
+            style="margin-bottom:12px;"
+          >
+          <input
+            type="password"
+            id="loginPassword"
+            name="password"
+            class="gica-form-input"
+            placeholder="Password"
+            autocomplete="current-password"
+            style="margin-bottom:16px;"
+          >
+          <div style="display:flex;align-items:center;justify-content:flex-start;margin-bottom:16px;padding-left:11px;">
+            <label for="loginRemember" style="display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">
+              <input type="checkbox" id="loginRemember" style="width:15px;height:15px;accent-color:var(--primary,#6366f1);cursor:pointer;flex-shrink:0;margin:0;">
+              Remember employee ID
+            </label>
+          </div>
+          <button type="submit" id="loginSubmitBtn" class="login-btn">Sign In</button>
+          <p id="loginError" class="login-error hidden" style="margin-top:12px;"></p>
+        </form>
       </div>
     </section>
 
     <!-- Home Page -->
     <section id="homePage" class="page hidden">
       <div class="newop-subtab-bar">
-        <button type="button" class="newop-subtab-btn newop-subtab-btn--active" data-subtab="sewing">Sewing</button>
+        <button type="button" class="newop-subtab-btn newop-subtab-btn--active" data-subtab="overall">Overall</button>
+        <button type="button" class="newop-subtab-btn" data-subtab="sewing">Sewing</button>
         <button type="button" class="newop-subtab-btn" data-subtab="qcqa">QC-QA</button>
+        <button type="button" class="newop-subtab-btn" data-subtab="technic">Technic</button>
       </div>
 
       <!-- Same content serves both Sewing and QC-QA — only the data differs
@@ -256,6 +216,13 @@
         <h2 data-i18n="selectDept">Select BU</h2>
         <div id="departmentGrid" class="department-grid"></div>
       </section>
+
+      <!-- Technic placeholder (shown only when Technic subtab active) -->
+      <div id="newop-technic-panel" class="hidden" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 24px;text-align:center;gap:12px;">
+        <div style="font-size:2.5rem;">🔧</div>
+        <h3 style="margin:0;font-size:1.1rem;font-weight:700;color:var(--text);">Technic</h3>
+        <p style="margin:0;color:var(--text-muted);font-size:0.88rem;max-width:320px;line-height:1.6;">หน้านี้อยู่ระหว่างพัฒนา<br>จะเชื่อมต่อกับคอลัม <strong>Type = Technic</strong> จาก Supabase เมื่อพร้อม</p>
+      </div>
 
       <!-- Overall Dashboard -->
       <div id="homeDashLoading" class="sk-screen">
@@ -312,72 +279,71 @@
       <section id="newop-stats"></section>
 
       <!-- Employee Data Card -->
-      <section class="card employee-data-card">
-  
-  <div class="table-toolbar">
-    <h2 data-i18n="riskList">ข้อมูลพนักงาน</h2>
-    
-    <div class="search-filter-bar">
-      
-      <div class="search-row">
-  <input id="searchEmployeeId" data-i18n-placeholder="employeeIdPlaceholder" placeholder="Employee ID" />
-  </div>
-      
-      <div class="filter-row">
-        <select id="empYearFilter" class="year-select">
-          <option value="" data-i18n="allYears">ทุกปี</option>
-        </select>
-        
-        <select id="statusFilter">
-          <option value="" data-i18n="filterAll">ทั้งหมด</option>
-          <option value="completed" data-i18n="statusCompleted">ฝึกเสร็จ</option>
-          <option value="completed-overdue" data-i18n="statusCompletedOverdue">ฝึกเสร็จ (เกินกำหนด)</option>
-          <option value="under-operation" data-i18n="statusUnderOperation">กำลังฝึกขั้นตอนงาน</option>
-          <option value="under-basic" data-i18n="statusUnderBasic">กำลังฝึกพื้นฐาน</option>
-          <option value="resign-operation" data-i18n="statusResignOperation">ลาออกระหว่างฝึกขั้นตอน</option>
-          <option value="resign-basic" data-i18n="statusResignBasic">ลาออกระหว่างฝึกพื้นฐาน</option>
-          <option value="resign-before-basic" data-i18n="statusResignBeforeBasic">ลาออกก่อนฝึกพื้นฐาน</option>
-          <option value="transfer-operation" data-i18n="statusTransferOperation">โอนย้ายระหว่างฝึกขั้นตอน</option>
-          <option value="transfer-basic" data-i18n="statusTransferBasic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
-          <option value="transfer-before-basic" data-i18n="statusTransferBeforeBasic">โอนย้ายก่อนฝึกพื้นฐาน</option>
-        </select>
-      </div>
+      <section class="employee-data-card">
 
-      <button id="registerBtn" class="primary small" data-i18n="register">ลงทะเบียน</button>
-      
-    </div>
-  </div>
-        <div class="table-wrap">
-          <table>
+        <!-- Toolbar -->
+        <div class="emp-toolbar">
+          <div class="emp-toolbar-left">
+            <h2 class="emp-toolbar-title" data-i18n="riskList">Employee data</h2>
+            <span id="emp-count-badge" class="emp-count-badge"></span>
+          </div>
+          <div class="emp-toolbar-right">
+            <div class="emp-search-box">
+              <i class="ti ti-search" aria-hidden="true"></i>
+              <input id="searchEmployeeId" placeholder="Search by ID or name…" />
+            </div>
+            <select id="empYearFilter" class="emp-filter-chip">
+              <option value="">All years</option>
+            </select>
+            <select id="statusFilter" class="emp-filter-chip">
+              <option value="">All status</option>
+              <option value="completed">ฝึกเสร็จ</option>
+              <option value="completed-overdue">ฝึกเสร็จ (เกินกำหนด)</option>
+              <option value="under-operation">กำลังฝึกขั้นตอนงาน</option>
+              <option value="under-basic">กำลังฝึกพื้นฐาน</option>
+              <option value="resign-operation">ลาออกระหว่างฝึกขั้นตอน</option>
+              <option value="resign-basic">ลาออกระหว่างฝึกพื้นฐาน</option>
+              <option value="resign-before-basic">ลาออกก่อนฝึกพื้นฐาน</option>
+              <option value="transfer-operation">โอนย้ายระหว่างฝึกขั้นตอน</option>
+              <option value="transfer-basic">โอนย้ายระหว่างฝึกพื้นฐาน</option>
+              <option value="transfer-before-basic">โอนย้ายก่อนฝึกพื้นฐาน</option>
+            </select>
+            <button id="registerBtn" class="primary small" data-i18n="register">ลงทะเบียน</button>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="emp-table-wrap">
+          <table class="emp-table">
             <thead>
               <tr>
-                <th class="th-actions"></th>
-                <th data-i18n="colEmployeeId">รหัสพนักงาน</th>
-                <th data-i18n="colEmployeeName">ชื่อพนักงาน</th>
-                <th data-i18n="colGrade">เกรด</th>
-                <th data-i18n="colCsaStart">วันเริ่มฝึก</th>
-                <th data-i18n="colDueDate">วันครบกำหนด</th>
-                <th data-i18n="colBasicStart">เริ่มฝึกพื้นฐาน</th>
-                <th data-i18n="colBasicEnd">ฝึกพื้นฐานเสร็จ</th>
-                <th data-i18n="colOpStart">เริ่มฝึกขั้นตอนงาน</th>
-                <th data-i18n="colOpEnd">ฝึกขั้นตอนงานเสร็จ</th>
-                <th data-i18n="colResignDate">วันลาออก</th>
-                <th data-i18n="colTransferDate">วันโอนย้าย</th>
-                <th data-i18n="colGradEff">ประสิทธิภาพ</th>
-                <th data-i18n="colActualStatus">สถานะจริง</th>
-                <th data-i18n="colEmployeesLeave">วันลา</th>
+                <th style="width:36px">#</th>
+                <th data-i18n="colEmployeeId" style="width:90px">Emp ID</th>
+                <th data-i18n="colEmployeeName" style="width:120px">Name</th>
+                <th data-i18n="empType" style="width:100px">Type</th>
+                <th data-i18n="colGrade" class="th-c col-group-end" style="width:62px">Grade</th>
+                <th data-i18n="colCsaStart" style="width:90px">CSA start</th>
+                <th data-i18n="colDueDate" class="col-group-end" style="width:90px">Due date</th>
+                <th data-i18n="colBasicTraining" style="width:158px">Basic training</th>
+                <th data-i18n="colOperation" class="col-group-end" style="width:158px">Operation</th>
+                <th data-i18n="colGradEff" class="th-r" style="width:64px">Eff %</th>
+                <th data-i18n="colActualStatus" style="width:136px">Status</th>
+                <th data-i18n="colEmployeesLeave" class="th-c" style="width:52px">Leave</th>
+                <th style="width:40px"></th>
               </tr>
             </thead>
             <tbody id="employeeTableBody"></tbody>
           </table>
         </div>
+
+        <!-- Footer / Pagination -->
         <div class="jtp-pagination">
           <span id="newop-rangeLabel" class="jtp-range-label"></span>
           <div class="jtp-page-size-group">
             <label class="jtp-page-size-label" for="newop-pageSize">Show per page</label>
             <select id="newop-pageSize" class="jtp-page-size-select">
               <option value="10" selected>10</option>
-              <option value="25" >25</option>
+              <option value="25">25</option>
               <option value="50">50</option>
             </select>
           </div>
@@ -387,6 +353,7 @@
             <button id="newop-nextPage" class="jtp-nav-btn">›</button>
           </div>
         </div>
+
       </section>
     </section>
     <p style="text-align:right;font-size:0.72rem;color:var(--text-muted);padding:10px 0 4px;border-top:1px solid var(--border-light);margin-top:16px;">Version 1.0.0</p>
@@ -681,21 +648,27 @@
         <div id="gica-emplist-panel" class="hidden">
           <div class="card card--section">
             <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;flex-wrap:wrap;gap:8px;">
-              <h3 style="margin:0;font-size:1rem;color:var(--text);">Employee List</h3>
+              <h3 style="margin:0;font-size:1rem;color:var(--text);display:flex;align-items:center;gap:8px;">Employee List <span id="gica-count-badge" class="emp-count-badge">0</span></h3>
               <div style="display:flex;gap:8px;">
                 <button id="gica-create-operator-btn" class="hidden" style="font-size:0.72rem;padding:4px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer;">+ Create new operator</button>
                 <button onclick="_gicaEmpListPrint();" style="font-size:0.72rem;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print</button>
               </div>
             </div>
-            <div class="filters">
-              <select id="gica-filterBu"><option value="">All BU</option></select>
-              <select id="gica-filterGrade"><option value="">All Grades</option></select>
-              <select id="gica-filterDept"><option value="">All Departments</option></select>
-              <select id="gica-filterLevel"><option value="">All Levels</option></select>
-              <select id="gica-filterType"><option value="">Type</option></select>
-              <input type="text" id="gica-filterSearch" placeholder="Search by name / ID" />
+            <div class="gica-emp-list-header">
+              <div class="search-filter-bar">
+                <div class="filter-row">
+                  <select id="gica-filterBu"    class="filter-select"><option value="">All BU</option></select>
+                  <select id="gica-filterGrade" class="filter-select"><option value="">All Grades</option></select>
+                  <select id="gica-filterDept"  class="filter-select"><option value="">All Departments</option></select>
+                  <select id="gica-filterLevel" class="filter-select"><option value="">All Levels</option></select>
+                  <select id="gica-filterType"  class="filter-select"><option value="">Type</option></select>
+                </div>
+                <div class="search-row">
+                  <input type="text" id="gica-filterSearch" placeholder="Search by name / ID" />
+                </div>
+              </div>
+              <div id="gica-failStats"></div>
             </div>
-            <div id="gica-failStats"></div>
             <div id="gica-table"></div>
             <div class="jtp-pagination">
               <span id="gica-rangeLabel" class="jtp-range-label"></span>
@@ -746,7 +719,11 @@
               </div>
               <div class="gica-form-row">
                 <label class="gica-form-label">Assessment Date</label>
-                <input type="date" id="gica-result-date" class="gica-form-input">
+                <div style="position:relative;">
+                  <input type="text" id="gica-result-date-display" class="gica-form-input" placeholder="Select date" readonly style="cursor:pointer;width:100%;padding-right:32px;">
+                  <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted);font-size:1rem;">&#128197;</span>
+                  <input type="date" id="gica-result-date" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;" tabindex="-1">
+                </div>
               </div>
               <p id="gica-result-error" class="login-error hidden" style="margin-top:8px;color:var(--danger,#dc2626);background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.3);"></p>
             </div>
@@ -792,7 +769,11 @@
               </div>
               <div class="gica-form-row">
                 <label class="gica-form-label">Start Date</label>
-                <input type="date" id="gica-create-startdate" class="gica-form-input">
+                <div style="position:relative;">
+                  <input type="text" id="gica-create-startdate-display" class="gica-form-input" placeholder="Select date" readonly style="cursor:pointer;width:100%;padding-right:32px;">
+                  <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted);font-size:1rem;">&#128197;</span>
+                  <input type="date" id="gica-create-startdate" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;" tabindex="-1">
+                </div>
               </div>
               <p id="gica-create-error" class="login-error hidden" style="margin-top:8px;color:var(--danger,#dc2626);background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.3);"></p>
             </div>
@@ -1056,6 +1037,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=385"></script>
+  <script src="/static/js/app.js?v=423"></script>
 </body>
 </html>

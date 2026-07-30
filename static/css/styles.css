@@ -106,7 +106,7 @@
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: 'Inter', "Segoe UI", sans-serif;
+  font-family: 'Geist', "Segoe UI", sans-serif;
   color: var(--text);
   background: var(--bg);
   transition: background .25s, color .25s;
@@ -391,7 +391,7 @@ body {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-  font-family: 'Inter', sans-serif;
+  font-family: 'Geist', sans-serif;
   overflow: hidden;
 }
 #loginParticles {
@@ -460,7 +460,7 @@ body {
   border-radius: 999px;
   font-size: 15px;
   font-weight: 700;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Geist', sans-serif;
   cursor: pointer;
   letter-spacing: .4px;
   box-shadow: 0 10px 28px rgba(102, 126, 234, .45);
@@ -514,7 +514,7 @@ body {
   color: #fff;
   text-align: left;
   cursor: pointer;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Geist', sans-serif;
   transition: background .15s, border-color .15s, transform .15s;
 }
 .login-door-btn:hover { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .32); transform: translateY(-1px); }
@@ -531,7 +531,7 @@ body {
   border: none;
   color: rgba(255, 255, 255, .6);
   font-size: 13px;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Geist', sans-serif;
   cursor: pointer;
   padding: 0;
 }
@@ -553,7 +553,7 @@ body {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-  font-family: 'Inter', sans-serif;
+  font-family: 'Geist', sans-serif;
 }
 .login-card--lockout { text-align: center; }
 .lockout-text { color: rgba(255, 255, 255, .7); font-size: 13px; margin: 8px 0; }
@@ -1112,11 +1112,13 @@ button:active { transform: scale(.97); }
   font-size: 11px;
   color: var(--text);
   word-break: break-word;
+  font-family: 'Geist Mono', monospace;
   font-variant-numeric: tabular-nums;
 }
 .ac-xt-n {
   font-size: 10px;
   color: var(--text);
+  font-family: 'Geist Mono', monospace;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1546,6 +1548,29 @@ textarea { min-height: 92px; resize: vertical; }
 #statusFilter { min-width: 180px; }
 #yearFilter   { min-width: 100px; }
 
+/* Reusable pill-style filter select — same visual as #statusFilter/#yearFilter */
+.filter-select {
+  padding: 5px 32px 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2364748b' stroke-width='2' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.filter-select:hover { border-color: var(--text-muted); }
+.filter-select:focus  {
+  outline: none;
+  border-color: var(--blue1, #3860b6);
+  box-shadow: 0 0 0 3px rgba(56, 96, 182, 0.15);
+}
+
 /* ปุ่มขนาดเล็กภายในบาร์ */
 button.small {
   padding: 8px 16px;
@@ -1872,6 +1897,8 @@ tbody tr:hover { filter: brightness(.97); }
   font-weight: 700;
   margin-top: 4px;
   color: var(--text);
+  font-family: 'Geist Mono', monospace;
+  font-variant-numeric: tabular-nums;
 }
 .stat-card__value--flush { margin-top: 0; }     /* value placed inline beside other content */
 
@@ -2283,6 +2310,39 @@ tbody tr:hover { filter: brightness(.97); }
 .mini-bar__count--lg { min-width:34px; }
 /* — GICA Sub-tab bar — */
 /* ─── 1. แผงถาดรองแท็บ (Sub-tab Bar Container) ─── */
+/* GICA Employee List — filter bar + fail stats on one row */
+.gica-emp-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.gica-emp-list-header .search-filter-bar { flex: 1; min-width: 0; margin-bottom: 0; }
+#gica-failStats { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+.gica-fail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-border, #e5e7eb);
+  background: var(--chip-bg, #f8fafc);
+  white-space: nowrap;
+}
+.gica-fail-chip__count {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.gica-fail-chip__label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
 .gica-subtab-bar { display:flex; gap:2px; margin-bottom:16px; border-bottom:2px solid var(--border); position:sticky; top:107px; /* approximate topbar + main tab-bar height — overridden by syncGicaSubtabTop() */ z-index:20; background:var(--bg); }
 .gica-subtab-btn { padding:8px 20px; font-size:0.85rem; font-weight:600; color:var(--text-muted); background:transparent; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; border-radius:6px 6px 0 0; transition:color .15s, border-color .15s, background .15s; }
 .gica-subtab-btn:hover { color:var(--text); background:var(--bg-hover, rgba(99,102,241,0.06)); }
@@ -2408,7 +2468,7 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-freq-dept-row:not(:first-child) td { padding-top:18px; }
 .gica-kpi-row { display:grid; grid-template-columns:105px 1fr 38px; align-items:center; gap:10px; }
 .gica-kpi-row__label { font-size:0.8rem; font-weight:600; color:var(--text); }
-.gica-kpi-row__val { font-size:0.75rem; font-weight:700; color:var(--primary, #6366f1); text-align:right; }
+.gica-kpi-row__val { font-size:0.75rem; font-weight:700; color:var(--primary, #6366f1); text-align:right; font-family:'Geist Mono',monospace; font-variant-numeric:tabular-nums; }
 .gica-kpi-slider { -webkit-appearance:none; appearance:none; width:100%; height:4px; background:var(--border); border-radius:999px; outline:none; cursor:pointer; }
 .gica-kpi-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; background:var(--primary, #6366f1); border-radius:50%; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.18); }
 .gica-kpi-slider::-moz-range-thumb { width:14px; height:14px; background:var(--primary, #6366f1); border-radius:50%; border:none; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.18); }
@@ -2421,7 +2481,7 @@ tbody tr:hover { filter: brightness(.97); }
 /* — GICA write forms (Add/Edit Result, Create new operator) — */
 .gica-form-row { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
 .gica-form-label { font-size:0.78rem; font-weight:600; color:var(--text-muted); }
-.gica-form-input { padding:8px 11px; border-radius:7px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:0.86rem; font-family:'Inter', sans-serif; }
+.gica-form-input { padding:8px 11px; border-radius:7px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:0.86rem; font-family: inherit; }
 .gica-form-input:focus { outline:none; border-color:var(--primary, #6366f1); }
 /* — Summary progress bar (Jumper + Trainer stat cards) — */
 .pbar { background:var(--progress-track); border-radius:999px; overflow:hidden; position:relative; }
@@ -2429,7 +2489,7 @@ tbody tr:hover { filter: brightness(.97); }
 .pbar--5 { height:5px; margin-top:3px; }
 .pbar__fill { height:100%; border-radius:999px; transition:width .3s; }
 /* — Summary stat card sub-components — */
-.stat-card__value--md { font-size:1.6rem; font-weight:700; margin-bottom:6px; }
+.stat-card__value--md { font-size:1.6rem; font-weight:700; margin-bottom:6px; font-family:'Geist Mono',monospace; font-variant-numeric:tabular-nums; }
 .stat-foot { font-size:0.72rem; margin-top:4px; }
 .stat-card__footer { font-size:0.7rem; border-top:1px solid var(--border-light); padding-top:6px; margin-top:auto; }
 .stat-section { display:flex; flex-direction:column; gap:10px; }
@@ -2653,6 +2713,356 @@ tbody tr:hover { filter: brightness(.97); }
   min-width: 72px;
   text-align: center;
 }
+
+/* ===== EMPLOYEE TABLE REDESIGN ===== */
+.employee-data-card {
+  border: 0.5px solid var(--border-light);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  margin-top: 16px;
+}
+.emp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 0.5px solid var(--border-light);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.emp-toolbar-left { display: flex; align-items: center; gap: 8px; }
+.emp-toolbar-title { font-size: 14px; font-weight: 500; color: var(--text); margin: 0; }
+.emp-list-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.emp-list-title { font-size: 1rem; font-weight: 600; color: var(--text); }
+.emp-count-badge {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface2);
+  border: 0.5px solid var(--border-light);
+  border-radius: 20px;
+  padding: 1px 9px;
+}
+.emp-toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.emp-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  height: 32px;
+  background: var(--surface);
+  transition: border-color .15s, box-shadow .15s;
+}
+.emp-search-box:focus-within {
+  border-color: var(--blue2);
+  box-shadow: 0 0 0 3px rgba(56,96,182,.12);
+}
+.emp-search-box i { font-size: 14px; color: var(--text-muted); pointer-events: none; }
+.emp-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+  color: var(--text);
+  width: 155px;
+  font-family: inherit;
+}
+.emp-search-box input::placeholder { color: var(--text-muted); }
+.emp-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .15s;
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2364748b' stroke-width='2' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 26px;
+}
+.emp-filter-chip:hover { border-color: var(--text-muted); }
+.emp-filter-chip:focus { outline: none; border-color: var(--blue2); }
+/* Scoped table — overrides global th/table rules */
+.emp-table-wrap { overflow-x: auto; }
+.emp-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1080px;
+  font-size: 13px;
+}
+.emp-table thead tr { background: var(--surface2); }
+.emp-table th {
+  padding: 9px 12px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted) !important;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  border-bottom: 0.5px solid var(--border-light);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--surface2) !important;
+  position: static !important;
+  z-index: auto !important;
+}
+.emp-table th:last-child { border-right: none; }
+.emp-table th.th-r { text-align: right; }
+.emp-table th.th-c { text-align: center; }
+.emp-table td {
+  padding: 10px 12px;
+  vertical-align: middle;
+  text-align: center;
+  border-bottom: 0.5px solid var(--border-light);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+.emp-table td:last-child { border-right: none; }
+.emp-table td.td-l { text-align: left; }
+.emp-table td.td-r { text-align: right; }
+.emp-table td.td-c { text-align: center; }
+.emp-table tbody tr { transition: background .1s; }
+.emp-table tbody tr:hover { filter: none !important; background: var(--surface2) !important; }
+.emp-table tbody tr:hover .emp-act-btn { opacity: 1; }
+[data-theme="dark"] .emp-table tbody tr:hover { filter: none !important; background: var(--surface2) !important; }
+/* Row color coding — keep actual-* semantic colors */
+.emp-table tr.actual-completed-overdue   { background: var(--row-completed-overdue-bg); }
+.emp-table tr.actual-completed           { background: var(--row-completed-bg); }
+.emp-table tr.actual-resign-operation    { background: var(--row-resign-op-bg); }
+.emp-table tr.actual-resign-basic        { background: var(--row-resign-basic-bg); }
+.emp-table tr.actual-resign-before-basic { background: var(--row-resign-before-bg); }
+.emp-table tr.actual-transfer-operation  { background: var(--row-transfer-op-bg); }
+.emp-table tr.actual-transfer-basic      { background: var(--row-transfer-basic-bg); }
+.emp-table tr.actual-transfer-before-basic { background: var(--row-transfer-before-bg); }
+.emp-table tr.actual-under-basic         { background: var(--row-under-basic-bg); }
+.emp-table tr.actual-under-operation     { background: var(--row-under-op-bg); }
+.emp-table tr.editing { outline: 2px solid var(--blue2); outline-offset: -2px; }
+.emp-table tr.editing td { background: var(--surface) !important; filter: none !important; }
+/* Cell content atoms */
+.emp-row-num { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.emp-id-cell { font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-muted); }
+.emp-name-cell { font-weight: 500; font-size: 13px; color: var(--text); }
+/* Type pill */
+.type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.type-pill__dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.type-pill--sewing  { background: #EAF3DE; color: #3B6D11; border: 0.5px solid #C0DD97; }
+.type-pill--sewing  .type-pill__dot { background: #3B6D11; }
+.type-pill--qcqa    { background: #EEEDFE; color: #3C3489; border: 0.5px solid #AFA9EC; }
+.type-pill--qcqa    .type-pill__dot { background: #3C3489; }
+.type-pill--technic { background: #E1F5EE; color: #085041; border: 0.5px solid #5DCAA5; }
+.type-pill--technic .type-pill__dot { background: #085041; }
+[data-theme="dark"] .type-pill--sewing  { background: #173404; color: #C0DD97; border-color: #3B6D11; }
+[data-theme="dark"] .type-pill--sewing  .type-pill__dot { background: #97C459; }
+[data-theme="dark"] .type-pill--qcqa    { background: #26215C; color: #CECBF6; border-color: #534AB7; }
+[data-theme="dark"] .type-pill--qcqa    .type-pill__dot { background: #AFA9EC; }
+[data-theme="dark"] .type-pill--technic { background: #04342C; color: #9FE1CB; border-color: #0F6E56; }
+[data-theme="dark"] .type-pill--technic .type-pill__dot { background: #5DCAA5; }
+/* Grade chip */
+.grade-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Geist Mono', monospace;
+}
+.grade-chip--b { background: #EAF3DE; color: #3B6D11; }
+.grade-chip--c { background: #FAEEDA; color: #633806; }
+.grade-chip--d { background: #FAECE7; color: #993C1D; }
+.grade-chip--e { background: #FCEBEB; color: #A32D2D; }
+[data-theme="dark"] .grade-chip--b { background: #173404; color: #C0DD97; }
+[data-theme="dark"] .grade-chip--c { background: #412402; color: #FAC775; }
+[data-theme="dark"] .grade-chip--d { background: #4A1B0C; color: #F0997B; }
+[data-theme="dark"] .grade-chip--e { background: #501313; color: #F09595; }
+/* Date cells */
+.emp-date-val { font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-muted); }
+.emp-date-val--danger { color: #A32D2D !important; font-weight: 500; }
+[data-theme="dark"] .emp-date-val--danger { color: #F09595 !important; }
+.emp-date-range { font-family: 'Geist Mono', monospace; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.emp-date-empty { font-size: 13px; color: var(--border); }
+/* Status pill with dot */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.status-pill__dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.status-pill--completed           { background: var(--row-completed-bg);          color: #15803d; }
+.status-pill--completed           .status-pill__dot { background: #639922; }
+.status-pill--completed-overdue   { background: var(--row-completed-overdue-bg);  color: #0f7c41; }
+.status-pill--completed-overdue   .status-pill__dot { background: #6d7c2a; }
+.status-pill--under-basic         { background: var(--row-under-basic-bg);        color: #0369a1; }
+.status-pill--under-basic         .status-pill__dot { background: #378ADD; }
+.status-pill--under-operation     { background: var(--row-under-op-bg);           color: #1d4ed8; }
+.status-pill--under-operation     .status-pill__dot { background: #2563eb; }
+.status-pill--resign-operation    { background: var(--row-resign-op-bg);          color: #b42318; }
+.status-pill--resign-operation    .status-pill__dot { background: #E24B4A; }
+.status-pill--resign-basic        { background: var(--row-resign-basic-bg);       color: #b42318; }
+.status-pill--resign-basic        .status-pill__dot { background: #E24B4A; }
+.status-pill--resign-before-basic { background: var(--row-resign-before-bg);      color: #b42318; }
+.status-pill--resign-before-basic .status-pill__dot { background: #E24B4A; }
+.status-pill--transfer-operation  { background: var(--row-transfer-op-bg);        color: var(--purple-badge); }
+.status-pill--transfer-operation  .status-pill__dot { background: #7F77DD; }
+.status-pill--transfer-basic      { background: var(--row-transfer-basic-bg);     color: var(--purple-badge); }
+.status-pill--transfer-basic      .status-pill__dot { background: #7F77DD; }
+.status-pill--transfer-before-basic { background: var(--row-transfer-before-bg);  color: var(--purple-badge); }
+.status-pill--transfer-before-basic .status-pill__dot { background: #7F77DD; }
+[data-theme="dark"] .status-pill--completed         { color: #86efac; }
+[data-theme="dark"] .status-pill--completed         .status-pill__dot { background: #86efac; }
+[data-theme="dark"] .status-pill--under-basic       { color: #38bdf8; }
+[data-theme="dark"] .status-pill--under-basic       .status-pill__dot { background: #38bdf8; }
+[data-theme="dark"] .status-pill--under-operation   { color: #93c5fd; }
+[data-theme="dark"] .status-pill--under-operation   .status-pill__dot { background: #93c5fd; }
+[data-theme="dark"] .status-pill--resign-operation  { color: #f87171; }
+[data-theme="dark"] .status-pill--resign-operation  .status-pill__dot { background: #f87171; }
+[data-theme="dark"] .status-pill--resign-basic      { color: #fca5a5; }
+[data-theme="dark"] .status-pill--resign-before-basic { color: #fecaca; }
+/* Numeric cells */
+.emp-eff-val   { font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 500; }
+.emp-leave-val { font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-muted); }
+/* Edit action button — hidden, shows on hover */
+.emp-act-btn {
+  opacity: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 0.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: opacity .1s, background .15s, border-color .15s, color .15s;
+  font-size: 15px;
+  line-height: 1;
+}
+.emp-act-btn:hover { background: var(--surface2); border-color: var(--text-muted); color: var(--text); }
+.emp-table tr.editing .emp-act-btn { opacity: 1; }
+/* Inline edit — action cell (confirm/cancel buttons on right) */
+.ie-action-cell { white-space: nowrap; }
+.btn-confirm-inline, .btn-cancel-inline {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px; border: none;
+  cursor: pointer; font-size: 14px; font-weight: 600; transition: background .15s, color .15s;
+}
+.btn-confirm-inline { background: #16a34a; color: #fff; margin-right: 4px; }
+.btn-confirm-inline:hover { background: #15803d; }
+.btn-confirm-inline:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+.btn-cancel-inline  { background: var(--surface2); color: var(--text-muted); border: 0.5px solid var(--border); }
+.btn-cancel-inline:hover  { background: #fee2e2; color: #dc2626; border-color: #dc2626; }
+/* Inline edit inputs inside emp-table */
+.emp-table .inline-edit {
+  width: 100%;
+  min-width: 80px;
+  padding: 4px 6px;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  margin-bottom: 2px;
+}
+.emp-table .inline-edit:last-child { margin-bottom: 0; }
+.emp-table input[type="date"].inline-edit { min-width: 116px; }
+.emp-table select.inline-edit { min-width: 80px; }
+/* Inline edit — date pair (Basic/Operation columns) */
+.ie-date-pair { display: flex; flex-direction: column; gap: 4px; }
+.ie-date-label { display: flex; flex-direction: column; gap: 1px; font-size: 10px; color: var(--text-muted); font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
+.ie-date-label input { margin-bottom: 0; }
+/* Footer / pagination */
+.emp-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 0.5px solid var(--border-light);
+  background: var(--surface2);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.emp-footer-info { font-size: 12px; color: var(--text-muted); font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; }
+.emp-pg-controls { display: flex; align-items: center; gap: 12px; }
+.emp-pg-size { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.emp-pg-size select {
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 6px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.emp-pg-nav { display: flex; align-items: center; gap: 3px; }
+.emp-pg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 0.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+  font-family: 'Geist Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.emp-pg-btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--text-muted); color: var(--text); }
+.emp-pg-btn:disabled { opacity: .35; cursor: not-allowed; }
+.emp-pg-btn--active { background: var(--text); color: var(--surface) !important; border-color: var(--text); }
+.emp-pg-ellipsis { font-size: 12px; color: var(--text-muted); padding: 0 3px; user-select: none; }
+
+/* ===== EMPLOYEE TABLE — GROUP SEPARATORS (Option 2) ===== */
+.emp-table th.col-group-end,
+.emp-table td.col-group-end {
+  border-right: 1px solid var(--border);
+}
+
+/* ===== GICA EMPLOYEE TABLE — shared emp-table overrides ===== */
+.gica-emp-table-wrap { overflow-x: auto; }
+.gica-emp-table { table-layout: auto; }
+.gica-emp-table thead th { text-align: center !important; }
+/* Sortable header */
+.gica-th-sort { cursor: pointer; user-select: none; }
+.gica-th-sort:hover { color: var(--text) !important; }
+.gica-sort-arrow { font-size: 0.6rem; opacity: 0.7; margin-left: 2px; }
+/* Row-num header (narrow, no label) */
+.emp-row-num-th { width: 36px; }
+/* Grade score % next to badge */
+.gica-grade-score { font-size: 0.68rem; color: var(--text-muted); margin-left: 3px; font-family: 'Geist Mono', monospace; }
 
 /* ===== PRINT (GICA schedule drill-down report) ===== */
 .gica-print-header { display: none; }
