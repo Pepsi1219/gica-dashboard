@@ -2450,6 +2450,18 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-compare-cell--label { text-align: left; color: var(--text-muted); }
 .gica-compare-row--bold .gica-compare-cell--label { color: var(--text); }
 .gica-compare-divider { border-top: 1px solid var(--border-light); margin: 4px 0; }
+/* — Score History list (admin per-attempt delete) — */
+.gica-scoreHistory-modal .gica-kpi-modal__panel,
+#gica-scoreHistory-modal .gica-kpi-modal__panel { width: 560px; max-width: 94vw; }
+.gica-score-hist-table { display: flex; flex-direction: column; font-size: 0.78rem; }
+.gica-score-hist-row { display: grid; grid-template-columns: 28px 40px 1.3fr 1.1fr 1.1fr 0.9fr 40px; gap: 6px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--border-light); }
+.gica-score-hist-row--head { color: var(--text-muted); font-weight: 600; border-bottom: 2px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.gica-score-hist-row:last-child { border-bottom: none; }
+.gica-score-hist-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gica-score-hist-cell--act { text-align: center; }
+.gica-score-hist-chk, #gica-score-hist-all { cursor: pointer; width: 15px; height: 15px; }
+.gica-score-hist-del { padding: 3px 6px; cursor: pointer; background: var(--surface); border: 1px solid; border-radius: 5px; }
+.gica-score-hist-del:hover { background: rgba(220,38,38,0.08); }
 /* — KPI Setup modal panel — */
 .gica-kpi-modal__panel { width:380px; max-width:92vw; }
 .gica-kpi-modal__body { padding:0 0 4px; }
@@ -2472,15 +2484,23 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-kpi-slider { -webkit-appearance:none; appearance:none; width:100%; height:4px; background:var(--border); border-radius:999px; outline:none; cursor:pointer; }
 .gica-kpi-slider::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; background:var(--primary, #6366f1); border-radius:50%; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.18); }
 .gica-kpi-slider::-moz-range-thumb { width:14px; height:14px; background:var(--primary, #6366f1); border-radius:50%; border:none; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,.18); }
-.gica-kpi-modal__footer { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; padding-top:12px; border-top:1px solid var(--border); }
-.gica-kpi-btn { padding:7px 22px; border-radius:7px; font-size:0.82rem; font-weight:600; cursor:pointer; border:1px solid var(--border); transition:opacity .15s, background .15s; }
+/* All footer actions share one row at equal width (flex:1 1 0). Icon-only utility
+   buttons (Delete, Score History) come out the same width as Cancel/Confirm. Hidden
+   buttons drop out of flow, so non-admins get an even Cancel/Confirm split. */
+.gica-kpi-modal__footer { display:flex; align-items:stretch; gap:8px; margin-top:18px; padding-top:14px; border-top:1px solid var(--border); }
+.gica-kpi-btn { flex:1 1 0; min-width:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap; padding:10px 14px; border-radius:8px; font-size:0.82rem; font-weight:600; line-height:1; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text); transition:background .15s, opacity .15s, box-shadow .15s, border-color .15s, transform .05s; }
+.gica-kpi-btn:active { transform:translateY(1px); }
+.gica-kpi-btn .ti { font-size:1.15rem; }
 .gica-kpi-btn--cancel { background:var(--surface); color:var(--text-muted); }
-.gica-kpi-btn--cancel:hover { background:var(--border-light); }
-.gica-kpi-btn--confirm { background:var(--primary, #6366f1); color:#fff; border-color:transparent; }
-.gica-kpi-btn--confirm:hover { opacity:0.88; }
-/* Danger action (e.g. Delete employee) — sits left of Cancel/Confirm via margin-right:auto */
-.gica-kpi-btn--danger { margin-right:auto; background:var(--danger,#dc2626); color:#fff; border-color:transparent; }
-.gica-kpi-btn--danger:hover { opacity:0.88; }
+.gica-kpi-btn--cancel:hover { background:var(--border-light); color:var(--text); }
+.gica-kpi-btn--confirm { background:var(--primary, #6366f1); color:#fff; border-color:transparent; box-shadow:0 1px 3px rgba(99,102,241,.35); }
+.gica-kpi-btn--confirm:hover { opacity:0.92; box-shadow:0 2px 7px rgba(99,102,241,.42); }
+/* Ghost = subtle utility action (Score History). Outline danger = destructive utility
+   (Delete) — less shouty than a filled red block, but still unmistakably red. */
+.gica-kpi-btn--ghost { background:transparent; color:var(--text-muted); }
+.gica-kpi-btn--ghost:hover { background:var(--surface2); color:var(--text); border-color:var(--border); }
+.gica-kpi-btn--danger { background:transparent; color:var(--danger,#dc2626); border-color:rgba(220,38,38,.4); }
+.gica-kpi-btn--danger:hover { background:rgba(220,38,38,.09); border-color:rgba(220,38,38,.65); }
 /* — GICA write forms (Add/Edit Result, Create new operator) — */
 .gica-form-row { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
 .gica-form-label { font-size:0.78rem; font-weight:600; color:var(--text-muted); }

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=187" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=190" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -168,28 +168,19 @@
 
         <form id="loginForm" autocomplete="on" style="width:100%;margin-top:24px;">
           <input
-            type="text"
-            id="loginEmail"
-            name="username"
-            class="gica-form-input"
-            placeholder="รหัสพนักงาน"
-            autocomplete="username"
-            inputmode="numeric"
-            style="margin-bottom:12px;"
-          >
-          <input
             type="password"
             id="loginPassword"
             name="password"
             class="gica-form-input"
-            placeholder="Password"
+            placeholder="รหัสผ่าน"
             autocomplete="current-password"
+            inputmode="numeric"
             style="margin-bottom:16px;"
           >
           <div style="display:flex;align-items:center;justify-content:flex-start;margin-bottom:16px;padding-left:11px;">
             <label for="loginRemember" style="display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">
               <input type="checkbox" id="loginRemember" style="width:15px;height:15px;accent-color:var(--primary,#6366f1);cursor:pointer;flex-shrink:0;margin:0;">
-              Remember ID
+              Remember me
             </label>
           </div>
           <button type="submit" id="loginSubmitBtn" class="login-btn">Sign In</button>
@@ -725,9 +716,27 @@
               <p id="gica-result-error" class="login-error hidden" style="margin-top:8px;color:var(--danger,#dc2626);background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.3);"></p>
             </div>
             <div class="gica-kpi-modal__footer">
-              <button class="gica-kpi-btn gica-kpi-btn--danger hidden" id="gica-result-delete"><i class="ti ti-trash" aria-hidden="true"></i> <span data-i18n="gicaDelete">Delete</span></button>
+              <button class="gica-kpi-btn gica-kpi-btn--danger gica-kpi-btn--icon hidden" id="gica-result-delete" aria-label="Delete"><i class="ti ti-trash" aria-hidden="true"></i></button>
+              <button class="gica-kpi-btn gica-kpi-btn--ghost gica-kpi-btn--icon hidden" id="gica-result-history" aria-label="Score History"><i class="ti ti-history" aria-hidden="true"></i></button>
               <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-result-cancel" data-i18n="cancel">Cancel</button>
               <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-result-confirm" data-i18n="confirm">Confirm</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Score History — per-attempt list with admin delete (select / delete all) -->
+        <div id="gica-scoreHistory-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="gica-scoreHistory-backdrop"></div>
+          <div class="gica-modal__panel gica-kpi-modal__panel">
+            <div class="gica-modal__head">
+              <h4 id="gica-scoreHistory-title" style="margin:0;font-size:1rem;"></h4>
+              <button class="gica-modal__close" id="gica-scoreHistory-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="gica-kpi-modal__body" id="gica-scoreHistory-body"></div>
+            <div class="gica-kpi-modal__footer">
+              <button class="gica-kpi-btn gica-kpi-btn--danger" id="gica-scoreHistory-delAll"><i class="ti ti-trash" aria-hidden="true"></i> <span data-i18n="gicaDeleteAllScores">Delete all</span></button>
+              <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-scoreHistory-closeBtn" data-i18n="gicaClose">Close</button>
+              <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-scoreHistory-delSel" data-i18n="gicaDeleteSelected">Delete selected</button>
             </div>
           </div>
         </div>
@@ -1035,6 +1044,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=431"></script>
+  <script src="/static/js/app.js?v=437"></script>
 </body>
 </html>

@@ -1048,6 +1048,51 @@ def api_gica_add_result(bu, empid):
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route("/api/gica/<bu>/employees/<empid>/results", methods=["DELETE"])
+def api_gica_delete_results(bu, empid):
+    """Delete selected assessment attempts (or all) for one employee. Admin only.
+    Body: {"attempts": [n, ...]} to remove specific attempts, or {"all": true} to
+    clear every score. The employee row itself is kept — clearing scores just resets
+    them to a fresh 'needs Initial assessment' state."""
+    deny = require_writable(("admin",))
+    if deny: return deny
+
+    bu    = str(bu or "").strip().upper()
+    empid = str(empid or "").strip()
+    if not bu or not empid:
+        return jsonify({"error": "bu and empid are required"}), 400
+
+    payload    = request.json or {}
+    delete_all = bool(payload.get("all"))
+    try:
+        attempts = {int(n) for n in (payload.get("attempts") or [])}
+    except (TypeError, ValueError):
+        return jsonify({"error": "attempts must be a list of numbers"}), 400
+    if not delete_all and not attempts:
+        return jsonify({"error": "Nothing to delete"}), 400
+
+    try:
+        rows = sb_select("gica_employees", filters={"bu": bu, "empid": empid})
+        if not rows:
+            return jsonify({"error": "Employee not found"}), 404
+        tests = list(rows[0].get("tests") or [])
+
+        kept = [] if delete_all else [t for t in tests if int(t.get("n", 0)) not in attempts]
+
+        # Renumber remaining attempts contiguously (1..k) in original order — the
+        # read-time scheduler keys the first attempt on n==1, so a gap would shift
+        # scheduling. Sort by the old n to preserve chronological attempt order.
+        kept.sort(key=lambda t: int(t.get("n", 0)))
+        for i, t in enumerate(kept, start=1):
+            t["n"] = i
+
+        sb_update("gica_employees", {"bu": bu, "empid": empid}, {"tests": kept})
+        return jsonify({"message": "Deleted", "remaining": len(kept)})
+    except Exception as exc:
+        app.logger.error("api_gica_delete_results(%s/%s): %s", bu, empid, exc)
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @app.route("/api/gica/<bu>/employees/<empid>", methods=["DELETE"])
 def api_gica_delete_employee(bu, empid):
     deny = require_writable(("admin",))
@@ -1799,4 +1844,4 @@ def api_jumper_data():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False, threaded=True)

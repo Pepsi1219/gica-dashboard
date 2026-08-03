@@ -242,6 +242,17 @@ const TRANSLATIONS = {
     gicaStartDate:          'วันที่เริ่มงาน',
     gicaNumericOnly:        'ตัวเลขเท่านั้น',
     gicaDeleteConfirmPrompt:'ลบพนักงาน "{name}" ({empid}) ออกจากระบบ GICA?\nการลบไม่สามารถย้อนกลับได้',
+    gicaColResult:          'ผล',
+    gicaScoreHistory:       'ประวัติคะแนน',
+    gicaDeleteSelected:     'ลบที่เลือก',
+    gicaDeleteAllScores:    'ลบทั้งหมด',
+    gicaSelectAll:          'เลือกทั้งหมด',
+    gicaNoScores:           'ยังไม่มีคะแนน',
+    gicaDeletingScore:      'กำลังลบคะแนน…',
+    gicaScoreDeleted:       'ลบคะแนนแล้ว',
+    gicaSelectScoreFirst:   'เลือกรายการที่จะลบก่อน',
+    gicaDeleteScoreConfirm: 'ลบคะแนน {n} รายการที่เลือก?\nการลบไม่สามารถย้อนกลับได้',
+    gicaDeleteAllScoresConfirm:'ลบคะแนนทั้งหมดของพนักงานคนนี้?\nพนักงานยังอยู่ในระบบ แต่คะแนนจะถูกล้างทั้งหมด',
     yes:                    'ใช่',
     no:                     'ไม่',
     gicaUnknownErr:         'Unknown error',
@@ -291,6 +302,7 @@ const TRANSLATIONS = {
     gicaAttended:           'มาสอบ',
     gicaNotYetAttended:     'ยังไม่มาสอบ',
     gicaClickBuCohort:      'คลิกดูรายชื่อ',
+    gicaMustAttendWeek:     'ต้องเข้ารับการประเมินสัปดาห์นี้',
     gicaFailCases:          'ไม่ผ่าน',
     gicaNoBuData:           'ไม่มีข้อมูล BU',
     gicaClose:              'ปิด',
@@ -556,6 +568,17 @@ const TRANSLATIONS = {
     gicaStartDate:          'Start Date',
     gicaNumericOnly:        'Numeric characters only',
     gicaDeleteConfirmPrompt:'Delete employee "{name}" ({empid}) from GICA?\nThis action cannot be undone',
+    gicaColResult:          'Result',
+    gicaScoreHistory:       'Score History',
+    gicaDeleteSelected:     'Delete selected',
+    gicaDeleteAllScores:    'Delete all',
+    gicaSelectAll:          'Select all',
+    gicaNoScores:           'No scores yet',
+    gicaDeletingScore:      'Deleting score…',
+    gicaScoreDeleted:       'Score deleted',
+    gicaSelectScoreFirst:   'Select at least one to delete',
+    gicaDeleteScoreConfirm: 'Delete {n} selected score(s)?\nThis action cannot be undone',
+    gicaDeleteAllScoresConfirm:'Delete ALL scores for this employee?\nThe employee stays in the system, but every score is cleared',
     yes:                    'Yes',
     no:                     'No',
     gicaUnknownErr:         'Unknown error',
@@ -605,6 +628,7 @@ const TRANSLATIONS = {
     gicaAttended:           'Attended',
     gicaNotYetAttended:     'Not yet attended',
     gicaClickBuCohort:      'Click to view the name list',
+    gicaMustAttendWeek:     'Must attend assessment this week',
     gicaFailCases:          'Fail Cases',
     gicaNoBuData:           'No BU data',
     gicaClose:              'Close',
@@ -871,6 +895,17 @@ const TRANSLATIONS = {
     gicaStartDate:          'ວັນເລີ່ມງານ',
     gicaNumericOnly:        'ໃສ່ຕົວເລກເທົ່ານັ້ນ',
     gicaDeleteConfirmPrompt:'ລຶບພະນັກງານ "{name}" ({empid}) ອອກຈາກລະບົບ GICA?\nການລຶບບໍ່ສາມາດຍ້ອນກັບໄດ້',
+    gicaColResult:          'ຜົນ',
+    gicaScoreHistory:       'ປະຫວັດຄະແນນ',
+    gicaDeleteSelected:     'ລຶບທີ່ເລືອກ',
+    gicaDeleteAllScores:    'ລຶບທັງໝົດ',
+    gicaSelectAll:          'ເລືອກທັງໝົດ',
+    gicaNoScores:           'ຍັງບໍ່ມີຄະແນນ',
+    gicaDeletingScore:      'ກຳລັງລຶບຄະແນນ…',
+    gicaScoreDeleted:       'ລຶບຄະແນນແລ້ວ',
+    gicaSelectScoreFirst:   'ເລືອກຢ່າງໜ້ອຍໜຶ່ງລາຍການເພື່ອລຶບ',
+    gicaDeleteScoreConfirm: 'ລຶບຄະແນນ {n} ລາຍການທີ່ເລືອກ?\nການລຶບບໍ່ສາມາດຍ້ອນກັບໄດ້',
+    gicaDeleteAllScoresConfirm:'ລຶບຄະແນນທັງໝົດຂອງພະນັກງານຄົນນີ້?\nພະນັກງານຍັງຢູ່ໃນລະບົບ ແຕ່ຄະແນນຈະຖືກລຶບທັງໝົດ',
     yes:                    'ແມ່ນ',
     no:                     'ບໍ່',
     gicaUnknownErr:         'Unknown error',
@@ -920,6 +955,7 @@ const TRANSLATIONS = {
     gicaAttended:           'ມາສອບ',
     gicaNotYetAttended:     'ຍັງບໍ່ມາສອບ',
     gicaClickBuCohort:      'ຄລິກເບິ່ງລາຍຊື່',
+    gicaMustAttendWeek:     'ຕ້ອງເຂົ້າຮັບການປະເມີນອາທິດນີ້',
     gicaFailCases:          'ບໍ່ຜ່ານ',
     gicaNoBuData:           'ບໍ່ມີຂໍ້ມູນ BU',
     gicaClose:              'ປິດ',
@@ -1186,6 +1222,17 @@ const TRANSLATIONS = {
     gicaStartDate:          'Ngày bắt đầu',
     gicaNumericOnly:        'Chỉ số',
     gicaDeleteConfirmPrompt:'Xóa nhân viên "{name}" ({empid}) khỏi GICA?\nThao tác này không thể hoàn tác',
+    gicaColResult:          'Kết quả',
+    gicaScoreHistory:       'Lịch sử điểm',
+    gicaDeleteSelected:     'Xóa mục đã chọn',
+    gicaDeleteAllScores:    'Xóa tất cả',
+    gicaSelectAll:          'Chọn tất cả',
+    gicaNoScores:           'Chưa có điểm',
+    gicaDeletingScore:      'Đang xóa điểm…',
+    gicaScoreDeleted:       'Đã xóa điểm',
+    gicaSelectScoreFirst:   'Chọn ít nhất một mục để xóa',
+    gicaDeleteScoreConfirm: 'Xóa {n} điểm đã chọn?\nThao tác này không thể hoàn tác',
+    gicaDeleteAllScoresConfirm:'Xóa TẤT CẢ điểm của nhân viên này?\nNhân viên vẫn ở trong hệ thống, nhưng mọi điểm sẽ bị xóa',
     yes:                    'Có',
     no:                     'Không',
     gicaUnknownErr:         'Unknown error',
@@ -1235,6 +1282,7 @@ const TRANSLATIONS = {
     gicaAttended:           'Đã tham gia',
     gicaNotYetAttended:     'Chưa tham gia',
     gicaClickBuCohort:      'Nhấp để xem danh sách',
+    gicaMustAttendWeek:     'Phải tham gia đánh giá tuần này',
     gicaFailCases:          'Không đạt',
     gicaNoBuData:           'Không có dữ liệu BU',
     gicaClose:              'Đóng',
@@ -3674,30 +3722,24 @@ function initLoginForm() {
   const form = $('loginForm');
   if (!form) return;
 
-  // Restore saved employee ID if remember was checked
-  const savedId = localStorage.getItem('login_remember_id');
-  if (savedId) {
-    const emailEl    = $('loginEmail');
-    const rememberEl = $('loginRemember');
-    if (emailEl)    emailEl.value   = savedId;
-    if (rememberEl) rememberEl.checked = true;
-  }
+  // Single-field login: the value entered acts as both the identifier (empid) and the
+  // Supabase password. Each Supabase user must be provisioned with password === empid.
+  const savedId  = localStorage.getItem('login_remember_id');
+  const passEl   = $('loginPassword');
+  const remEl    = $('loginRemember');
+  if (savedId && passEl) passEl.value = savedId;
+  if (savedId && remEl)  remEl.checked = true;
 
   form.addEventListener('submit', e => {
     e.preventDefault();
-    const raw      = ($('loginEmail')?.value    || '').trim();
-    const password = ($('loginPassword')?.value || '');
-    if (!raw || !password) return;
+    const raw = ($('loginPassword')?.value || '').trim();
+    if (!raw) return;
 
-    const remember = !!$('loginRemember')?.checked;
-    if (remember) {
-      localStorage.setItem('login_remember_id', raw);
-    } else {
-      localStorage.removeItem('login_remember_id');
-    }
+    if ($('loginRemember')?.checked) localStorage.setItem('login_remember_id', raw);
+    else                             localStorage.removeItem('login_remember_id');
 
     const email = raw.includes('@') ? raw : `${raw}@manu.local`;
-    _doLogin(email, password);
+    _doLogin(email, raw);
   });
 }
 
@@ -5623,6 +5665,9 @@ async function initGicaTab() {
       _wireGicaCreateModal();
       $('gica-create-operator-btn')?.classList.remove('hidden');
     }
+    // Score History delete is admin-only, but wiring the modal is harmless for others
+    // (the button that opens it is hidden unless admin).
+    if (currentRole === 'admin') _wireGicaScoreHistoryModal();
 
     renderGicaSummary();
   } catch (err) {
@@ -7166,6 +7211,9 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
   const timeline = buckets.map(b => ({
     label: b.label, isFuture: b.isFuture,
     onTimePassed: 0, onTimeFailed: 0, upcoming: 0, overdue: 0,
+    // Parallel employee lists collected at each count increment below — powers the
+    // click-to-drill list (click a bar → see the people behind that number).
+    passEmps: [], failEmps: [], upcomingEmps: [], overdueEmps: [],
   }));
   schedable.forEach(e => {
     // Track buckets where this person already has an actual test recorded (from history).
@@ -7181,11 +7229,27 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
         const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
           (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
           (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
-        if (attemptPassed) timeline[actualIdx].onTimePassed++;
-        else               timeline[actualIdx].onTimeFailed++;
+        if (attemptPassed) { timeline[actualIdx].onTimePassed++; timeline[actualIdx].passEmps.push(e); }
+        else               { timeline[actualIdx].onTimeFailed++; timeline[actualIdx].failEmps.push(e); }
       }
-      // Tested in a different bucket than scheduled → mark scheduled bucket as overdue (missed)
-      if (schedIdx >= 0 && schedIdx !== actualIdx) timeline[schedIdx].overdue++;
+      // Late test → past is immutable: mark every missed bucket as overdue.
+      // Weekly: cascade from scheduled bucket through bucket-before-actual so a person who
+      //         eventually tests still shows overdue for each week they skipped (matches the
+      //         scheduledNext cascade above for still-overdue people).
+      // Monthly: single-bucket mark to keep monthly's "count once" policy consistent.
+      if (schedIdx >= 0 && schedIdx !== actualIdx) {
+        if (timelineMode === 'week') {
+          for (let bi = schedIdx; bi < buckets.length; bi++) {
+            if (actualIdx >= 0 && bi >= actualIdx) break;
+            if (buckets[bi].isFuture) break;
+            timeline[bi].overdue++;
+            timeline[bi].overdueEmps.push(e);
+          }
+        } else {
+          timeline[schedIdx].overdue++;
+          timeline[schedIdx].overdueEmps.push(e);
+        }
+      }
     });
     if (e.scheduledNext) {
       if (e.schedStatus === 'overdue') {
@@ -7198,7 +7262,7 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
         //          for keeping overdue visible in monthly mode.
         if (timelineMode === 'month') {
           const idx = _gicaSchedBucketIdx(e.scheduledNext, buckets);
-          if (idx >= 0 && !buckets[idx].isFuture) timeline[idx].overdue++;
+          if (idx >= 0 && !buckets[idx].isFuture) { timeline[idx].overdue++; timeline[idx].overdueEmps.push(e); }
         } else {
           const startDate    = _gicaParseDate(e.scheduledNext);
           const lastTestDate = _gicaParseDate(e.lastDate);
@@ -7206,14 +7270,14 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
             if (startDate > buckets[bi].end) continue;
             if (buckets[bi].isFuture) break;
             if (lastTestDate && lastTestDate >= buckets[bi].start && lastTestDate <= buckets[bi].end) continue;
-            if (buckets[bi].end < today) timeline[bi].overdue++;
-            else                         timeline[bi].upcoming++;
+            if (buckets[bi].end < today) { timeline[bi].overdue++;  timeline[bi].overdueEmps.push(e); }
+            else                         { timeline[bi].upcoming++; timeline[bi].upcomingEmps.push(e); }
           }
         }
       } else {
         const idx = _gicaSchedBucketIdx(e.scheduledNext, buckets);
         // Skip if person already counted in this bucket via a history entry (monthly double-count guard)
-        if (idx >= 0 && !testedBuckets.has(idx)) timeline[idx].upcoming++;
+        if (idx >= 0 && !testedBuckets.has(idx)) { timeline[idx].upcoming++; timeline[idx].upcomingEmps.push(e); }
       }
     }
   });
@@ -7682,6 +7746,8 @@ function _mountGicaSchedule(html, vm) {
 
   const cvs = $('gica-schedTimelineChart');
   if (cvs && typeof Chart !== 'undefined') {
+    // Captured here because inside the tooltip callback `t` is shadowed by the bucket object.
+    const _clickHint = t('gicaClickBuCohort');
     const _dlOntime = (showWhen) => ({
       anchor: 'end', align: 'top',
       font: { size: 10, weight: '600' }, color: '#15803d',
@@ -7736,6 +7802,13 @@ function _mountGicaSchedule(html, vm) {
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        onHover: (evt, els) => { const c = evt?.native?.target; if (c) c.style.cursor = els.length ? 'pointer' : 'default'; },
+        onClick: (evt, _els, chart) => {
+          const pts = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+          if (!pts.length) return;
+          const { datasetIndex, index } = pts[0];
+          _gicaShowSchedTimelineDrill(vm.timeline[index], datasetIndex);
+        },
         plugins: {
           legend: { display: false },
           datalabels: { display: false },
@@ -7744,7 +7817,7 @@ function _mountGicaSchedule(html, vm) {
               title: ctx => vm.timeline[ctx[0].dataIndex].label,
               afterBody: ctx => {
                 const t = vm.timeline[ctx[0].dataIndex];
-                return [`รวมทั้งหมด: ${t.onTimePassed + t.onTimeFailed + t.overdue + t.upcoming} คน`];
+                return [`รวมทั้งหมด: ${t.onTimePassed + t.onTimeFailed + t.overdue + t.upcoming} คน`, _clickHint];
               },
             },
           },
@@ -8608,6 +8681,7 @@ function _wireGicaDeleteBtns(wrap) {
           await _gicaRefreshData();
           renderGicaSummary();
           renderGicaTable();
+          if (_gicaScheduleRendered) renderGicaSchedule();
           showToast(t('gicaDeleteEmpSaved'));
         } catch (e) {
           alert(`${t('gicaErrPrefix')}: ${e.message || t('gicaUnknownErr')}`);
@@ -8679,7 +8753,18 @@ function _gicaOpenResultModal(bu, empid) {
   // Delete button is admin-only (backend gates DELETE /api/gica/... to admin);
   // showing it to qe_edit would just yield a 403 on click.
   const delBtn = $('gica-result-delete');
-  if (delBtn) delBtn.classList.toggle('hidden', currentRole !== 'admin');
+  if (delBtn) {
+    delBtn.classList.toggle('hidden', currentRole !== 'admin');
+    delBtn.title = t('gicaDelete');              // icon-only button → tooltip carries the label
+    delBtn.setAttribute('aria-label', t('gicaDelete'));
+  }
+  // Score History (per-attempt delete) is admin-only too — same gate as delete employee.
+  const histBtn = $('gica-result-history');
+  if (histBtn) {
+    histBtn.classList.toggle('hidden', currentRole !== 'admin');
+    histBtn.title = t('gicaScoreHistory');
+    histBtn.setAttribute('aria-label', t('gicaScoreHistory'));
+  }
   $('gica-result-modal').classList.remove('hidden');
 
   // Show Assessment History side-by-side so QE can see past results while
@@ -8785,12 +8870,16 @@ function _wireGicaResultModal() {
         await _gicaRefreshData();
         renderGicaSummary();
         renderGicaTable();
+        if (_gicaScheduleRendered) renderGicaSchedule();
         showToast(t('gicaDeleteEmpSaved'));
       } catch (err) {
         showToast(`${t('gicaDeleteFail')}: ${err.message || ''}`);
       }
     });
   });
+
+  // Score History (admin only) — opens the per-attempt list with delete controls.
+  $('gica-result-history')?.addEventListener('click', _gicaOpenScoreHistory);
 
   // Esc closes the modal — but not while the Save/Cancel confirm dialog is open
   // on top of it, otherwise Esc would close this modal and leave that orphaned.
@@ -8801,6 +8890,155 @@ function _wireGicaResultModal() {
     const confirmOverlay = $('gica-confirm-overlay');
     if (confirmOverlay && !confirmOverlay.classList.contains('hidden')) return;
     _gicaCloseResultModal();
+  });
+}
+
+// ── Score History modal (admin only) — list every attempt, delete some or all ──
+// Reads the current _gicaResultCtx (bu, empid) set when the Result modal opened.
+// The employee row is always kept; only the tests are removed (see backend).
+function _gicaOpenScoreHistory() {
+  if (!_gicaResultCtx) return;
+  const { bu, empid } = _gicaResultCtx;
+  const emp = (_gicaData.employees || []).find(e => e.bu === bu && String(e.empid) === String(empid));
+  if (!emp) return;
+  const title = $('gica-scoreHistory-title');
+  if (title) {
+    title.innerHTML = `
+      <small style="display:block;margin-bottom:4px;font-size:0.75rem;color:var(--text-muted,#64748b);font-weight:500;">
+        ${escapeHtml(t('gicaScoreHistory'))}
+      </small>
+      <strong style="font-size:0.95rem;color:var(--text,#1e293b);display:block;font-weight:900;">
+        ${escapeHtml(emp.name || emp.empid || '')}
+      </strong>`;
+  }
+  _gicaRenderScoreHistoryBody(emp);
+  $('gica-scoreHistory-modal').classList.remove('hidden');
+}
+
+function _gicaRenderScoreHistoryBody(emp) {
+  const body = $('gica-scoreHistory-body');
+  if (!body) return;
+  const hist = (emp.history || []).slice().sort((a, b) => (a.n || 0) - (b.n || 0));
+  const delSel = $('gica-scoreHistory-delSel');
+  const delAll = $('gica-scoreHistory-delAll');
+
+  if (!hist.length) {
+    body.innerHTML = `<div class="u-muted" style="text-align:center;padding:28px 12px;">${escapeHtml(t('gicaNoScores'))}</div>`;
+    if (delSel) delSel.disabled = true;
+    if (delAll) delAll.disabled = true;
+    return;
+  }
+  if (delSel) delSel.disabled = false;
+  if (delAll) delAll.disabled = false;
+
+  const pctGrade = (pct, g) => {
+    const p = pct != null ? `${Math.round(pct * 100)}%` : '—';
+    return `${p} ${g ? _gicaGradeBadge(g) : ''}`;
+  };
+  const rowsHtml = hist.map(h => {
+    const passed = h.grade1 && h.grade2 && emp.exp1 && emp.exp2 &&
+      (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[emp.exp1] || 0) &&
+      (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[emp.exp2] || 0);
+    const badge = passed
+      ? `<span class="status-pill status-pill--completed">${escapeHtml(t('pass'))}</span>`
+      : `<span class="status-pill status-pill--overdue">${escapeHtml(t('fail'))}</span>`;
+    return `
+      <div class="gica-score-hist-row" data-n="${h.n}">
+        <span class="gica-score-hist-cell"><input type="checkbox" class="gica-score-hist-chk" data-n="${h.n}"></span>
+        <span class="gica-score-hist-cell" style="font-weight:700;">#${h.n}</span>
+        <span class="gica-score-hist-cell">${escapeHtml(_gicaFmtDate(h.date) || '—')}</span>
+        <span class="gica-score-hist-cell">${pctGrade(h.score1, h.grade1)}</span>
+        <span class="gica-score-hist-cell">${pctGrade(h.score2, h.grade2)}</span>
+        <span class="gica-score-hist-cell">${badge}</span>
+        <span class="gica-score-hist-cell gica-score-hist-cell--act">
+          <button class="gica-score-hist-del emp-act-btn" data-n="${h.n}" title="${escapeHtml(t('gicaDelete'))}" style="color:#dc2626;border-color:#fca5a5;"><i class="ti ti-trash" aria-hidden="true"></i></button>
+        </span>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="gica-score-hist-table">
+      <div class="gica-score-hist-row gica-score-hist-row--head">
+        <span class="gica-score-hist-cell"><input type="checkbox" id="gica-score-hist-all" title="${escapeHtml(t('gicaSelectAll'))}"></span>
+        <span class="gica-score-hist-cell">#</span>
+        <span class="gica-score-hist-cell">${escapeHtml(t('gicaAssessmentDate'))}</span>
+        <span class="gica-score-hist-cell">${escapeHtml(t('gicaMeasResult'))}</span>
+        <span class="gica-score-hist-cell">${escapeHtml(t('gicaInspResult'))}</span>
+        <span class="gica-score-hist-cell">${escapeHtml(t('gicaColResult'))}</span>
+        <span class="gica-score-hist-cell gica-score-hist-cell--act"></span>
+      </div>
+      ${rowsHtml}
+    </div>`;
+
+  // Wire per-render controls (innerHTML wiped the old listeners).
+  const selAll = $('gica-score-hist-all');
+  if (selAll) selAll.addEventListener('change', () => {
+    body.querySelectorAll('.gica-score-hist-chk').forEach(chk => { chk.checked = selAll.checked; });
+  });
+  body.querySelectorAll('.gica-score-hist-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const n = Number(btn.dataset.n);
+      _gicaConfirm(t('gicaDeleteScoreConfirm', { n: 1 }), () => _gicaDeleteScores([n], false));
+    });
+  });
+}
+
+function _gicaSelectedScoreNs() {
+  return [...document.querySelectorAll('#gica-scoreHistory-body .gica-score-hist-chk:checked')]
+    .map(chk => Number(chk.dataset.n));
+}
+
+async function _gicaDeleteScores(ns, all) {
+  if (!_gicaResultCtx) return;
+  const { bu, empid } = _gicaResultCtx;
+  showToast(t('gicaDeletingScore'));
+  try {
+    await api(`/api/gica/${encodeURIComponent(bu)}/employees/${encodeURIComponent(empid)}/results`, {
+      method: 'DELETE',
+      body: JSON.stringify(all ? { all: true } : { attempts: ns }),
+    });
+    await _gicaRefreshData();
+    renderGicaSummary();
+    renderGicaTable();
+    if (_gicaScheduleRendered) renderGicaSchedule();
+    // Re-render the list and refresh the paired Assessment History charts to match.
+    const emp = (_gicaData.employees || []).find(e => e.bu === bu && String(e.empid) === String(empid));
+    if (emp && (emp.history || []).length) {
+      _gicaRenderScoreHistoryBody(emp);
+      if (!$('gica-attempt-dots-modal')?.classList.contains('hidden')) _gicaShowAttemptDotsModal(empid);
+    } else {
+      // No scores left (or the employee dropped out of the payload) — close the list.
+      $('gica-scoreHistory-modal')?.classList.add('hidden');
+    }
+    showToast(t('gicaScoreDeleted'));
+  } catch (err) {
+    showToast(`${t('gicaDeleteFail')}: ${err.message || ''}`);
+  }
+}
+
+function _gicaCloseScoreHistory() { $('gica-scoreHistory-modal')?.classList.add('hidden'); }
+
+function _wireGicaScoreHistoryModal() {
+  $('gica-scoreHistory-close')?.addEventListener('click', _gicaCloseScoreHistory);
+  $('gica-scoreHistory-closeBtn')?.addEventListener('click', _gicaCloseScoreHistory);
+  $('gica-scoreHistory-backdrop')?.addEventListener('click', _gicaCloseScoreHistory);
+
+  $('gica-scoreHistory-delSel')?.addEventListener('click', () => {
+    const ns = _gicaSelectedScoreNs();
+    if (!ns.length) { showToast(t('gicaSelectScoreFirst')); return; }
+    _gicaConfirm(t('gicaDeleteScoreConfirm', { n: ns.length }), () => _gicaDeleteScores(ns, false));
+  });
+  $('gica-scoreHistory-delAll')?.addEventListener('click', () => {
+    _gicaConfirm(t('gicaDeleteAllScoresConfirm'), () => _gicaDeleteScores([], true));
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modal = $('gica-scoreHistory-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const confirmOverlay = $('gica-confirm-overlay');
+    if (confirmOverlay && !confirmOverlay.classList.contains('hidden')) return;
+    _gicaCloseScoreHistory();
   });
 }
 
@@ -8977,16 +9215,52 @@ function _wireGicaCreateModal() {
   });
 }
 
-function _gicaShowBuCohortModal(bu, employees) {
+// Generic employee-list modal — reused by the weekly BU cohort cards and the
+// Assessment Schedule Timeline click-to-drill. `printOpts` sets the print header text.
+function _gicaShowEmpListModal(headingText, printOpts, employees) {
   const modal = $('gica-buCohort-modal');
   const title = $('gica-buCohort-title');
   const body  = $('gica-buCohort-body');
   if (!modal || !body) return;
-  if (title) title.textContent = `${bu} — Must attend training this week (${employees.length} people)`;
+  if (title) title.textContent = `${headingText} (${employees.length} ${t('gicaPeople')})`;
   body.innerHTML = `${_gicaFailStatsHtml(employees)}<div class="gica-drill-table-wrap">${_gicaEmpTableHtml(employees, { sortable: false })}</div>`;
   modal.classList.remove('hidden');
-  modal._cohortBu = bu;
-  modal._cohortEmployees = employees;
+  modal._cohortEmployees  = employees;
+  modal._cohortPrintTitle = printOpts.printTitle;
+  modal._cohortPrintSub   = printOpts.printSub;
+}
+
+function _gicaShowBuCohortModal(bu, employees) {
+  _gicaShowEmpListModal(
+    `${bu} — ${t('gicaMustAttendWeek')}`,
+    { printTitle: `${t('gicaEmpListForAssessment')} — ${bu}`, printSub: t('gicaMustAttendWeek') },
+    employees,
+  );
+}
+
+// Click-to-drill from an Assessment Schedule Timeline bar → list the people behind it.
+// datasetIndex: 0 = Total, 1 = On-time Pass, 2 = On-time Fail, 3 = Overdue.
+function _gicaShowSchedTimelineDrill(bucket, datasetIndex) {
+  let emps, catLabel;
+  if (datasetIndex === 1)      { emps = bucket.passEmps;     catLabel = t('gicaLegendOnTimePass'); }
+  else if (datasetIndex === 2) { emps = bucket.failEmps;     catLabel = t('gicaLegendOnTimeFail'); }
+  else if (datasetIndex === 3) { emps = bucket.overdueEmps;  catLabel = t('gicaLegendOverdue'); }
+  else { // Total — union of every category, de-duped (a person can be double-counted across segments)
+    const seen = new Set();
+    emps = [];
+    [...bucket.passEmps, ...bucket.failEmps, ...bucket.overdueEmps, ...bucket.upcomingEmps].forEach(e => {
+      const k = `${e.bu}|${e.empid}`;
+      if (!seen.has(k)) { seen.add(k); emps.push(e); }
+    });
+    catLabel = t('gicaLegendTotal');
+  }
+  if (!emps.length) return;
+  const heading = `${catLabel} · ${bucket.label}`;
+  _gicaShowEmpListModal(
+    heading,
+    { printTitle: t('gicaEmpListForAssessment'), printSub: heading },
+    emps,
+  );
 }
 
 function _gicaBuCohortPrint() {
@@ -9000,10 +9274,12 @@ function _gicaBuCohortPrint() {
     return el;
   })();
   const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+  const printTitle = modal._cohortPrintTitle || t('gicaEmpListForAssessment');
+  const printSub   = modal._cohortPrintSub   || t('gicaMustAttendWeek');
   overlay.innerHTML = `
     <div class="gica-print-header">
-      <div style="font-size:1rem;font-weight:700;">Employee List for GICA Assessment — ${escapeHtml(modal._cohortBu)}</div>
-      <div style="font-size:0.78rem;color:#555;margin-top:3px;">Must attend training this week · Total: ${rows.length} employees · Report Date: ${printDate}</div>
+      <div style="font-size:1rem;font-weight:700;">${escapeHtml(printTitle)}</div>
+      <div style="font-size:0.78rem;color:#555;margin-top:3px;">${escapeHtml(printSub)} · Total: ${rows.length} employees · Report Date: ${printDate}</div>
     </div>
     ${_gicaFailStatsHtml(rows)}
     <div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
