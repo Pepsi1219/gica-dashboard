@@ -753,6 +753,14 @@ def _gica_attempt_passed(g1, g2, exp1, exp2):
     return (_gica_rank(g1) >= _gica_rank(exp1) and _gica_rank(g2) >= _gica_rank(exp2))
 
 
+def _gica_uses_fast_retest(dept, level):
+    """QA/QC Officer/Worker fail → retest in 7 days.
+    Everyone else fail → wait until freq_months like a normal review."""
+    d = str(dept or "").strip().upper()
+    l = str(level or "").strip()
+    return d in ("QA", "QC") and l in ("Officer", "Worker")
+
+
 def _build_gica_freq_lookup(freq_rows: list) -> dict:
     lookup = {}
     for r in freq_rows:
@@ -844,9 +852,9 @@ def _build_gica_payload(rows: list, freq_rows: list = None, kpi_by_bu: dict = No
                 sched = _gica_add_months(start_date, 1) if start_date else None
             elif prev_actual is None:
                 sched = None
-            elif prev_passed is False:
+            elif prev_passed is False and _gica_uses_fast_retest(dept, level):
                 sched = prev_actual + timedelta(days=7)
-            elif prev_passed is True and freq_months:
+            elif freq_months:
                 sched = _gica_add_months(prev_actual, freq_months)
             else:
                 sched = None
@@ -881,12 +889,12 @@ def _build_gica_payload(rows: list, freq_rows: list = None, kpi_by_bu: dict = No
         elif prev_actual is None:
             scheduled_next = None
             next_type = "Review" if passed else "Retest"
-        elif passed is False:
+        elif passed is False and _gica_uses_fast_retest(dept, level):
             scheduled_next = prev_actual + timedelta(days=7)
             next_type = "Retest"
-        elif passed is True and freq_months:
+        elif freq_months:
             scheduled_next = _gica_add_months(prev_actual, freq_months)
-            next_type = "Review"
+            next_type = "Retest" if passed is False else "Review"
         else:
             scheduled_next = None
             next_type = "Review" if passed else "Retest"
@@ -967,7 +975,7 @@ def api_gica_excel():
 
 @app.route("/api/gica/<bu>/employees", methods=["POST"])
 def api_gica_create_employee(bu):
-    deny = require_writable(("qe_edit", "admin"))
+    deny = require_writable(("qe_edit", "gica_admin", "admin"))
     if deny: return deny
 
     bu      = str(bu or "").strip().upper()
@@ -1002,7 +1010,7 @@ def api_gica_create_employee(bu):
 
 @app.route("/api/gica/<bu>/employees/<empid>/result", methods=["PATCH"])
 def api_gica_add_result(bu, empid):
-    deny = require_writable(("qe_edit", "admin"))
+    deny = require_writable(("qe_edit", "gica_admin", "admin"))
     if deny: return deny
 
     bu      = str(bu or "").strip().upper()
@@ -1054,7 +1062,7 @@ def api_gica_delete_results(bu, empid):
     Body: {"attempts": [n, ...]} to remove specific attempts, or {"all": true} to
     clear every score. The employee row itself is kept — clearing scores just resets
     them to a fresh 'needs Initial assessment' state."""
-    deny = require_writable(("admin",))
+    deny = require_writable(("gica_admin", "admin"))
     if deny: return deny
 
     bu    = str(bu or "").strip().upper()
@@ -1095,7 +1103,7 @@ def api_gica_delete_results(bu, empid):
 
 @app.route("/api/gica/<bu>/employees/<empid>", methods=["DELETE"])
 def api_gica_delete_employee(bu, empid):
-    deny = require_writable(("admin",))
+    deny = require_writable(("gica_admin", "admin"))
     if deny: return deny
 
     bu    = str(bu or "").strip().upper()

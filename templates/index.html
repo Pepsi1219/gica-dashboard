@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=190" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=193" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -167,16 +167,20 @@
         <p class="login-version">version 2.0.0</p>
 
         <form id="loginForm" autocomplete="on" style="width:100%;margin-top:24px;">
-          <input
-            type="password"
-            id="loginPassword"
-            name="password"
-            class="gica-form-input"
-            placeholder="รหัสผ่าน"
-            autocomplete="current-password"
-            inputmode="numeric"
-            style="margin-bottom:16px;"
-          >
+          <div class="login-pw-wrap" style="margin-bottom:16px;">
+            <input
+              type="password"
+              id="loginPassword"
+              name="password"
+              class="gica-form-input login-pw-input"
+              placeholder="รหัสผ่าน"
+              autocomplete="current-password"
+              inputmode="numeric"
+            >
+            <button type="button" id="loginPwToggle" class="login-pw-toggle" aria-label="Show password" tabindex="-1">
+              <i class="ti ti-eye"></i>
+            </button>
+          </div>
           <div style="display:flex;align-items:center;justify-content:flex-start;margin-bottom:16px;padding-left:11px;">
             <label for="loginRemember" style="display:flex;flex-direction:row;align-items:center;gap:8px;cursor:pointer;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">
               <input type="checkbox" id="loginRemember" style="width:15px;height:15px;accent-color:var(--primary,#6366f1);cursor:pointer;flex-shrink:0;margin:0;">
@@ -1044,6 +1048,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=437"></script>
+  <script src="/static/js/app.js?v=441"></script>
 </body>
 </html>

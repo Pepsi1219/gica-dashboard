@@ -196,6 +196,17 @@ const TRANSLATIONS = {
     gicaExpMatrix:          'Expectation Matrix',
     gicaKpiSetup:           'KPI Setup',
     gicaKpiSetupTip:        'กำหนด KPI target สำหรับแต่ละระดับ',
+    gicaKpiSummary:         'KPI Summary',
+    gicaKpiSummaryTip:      'ดูสรุป KPI Actual ทุก BU และองค์กร',
+    gicaKpiSummaryTitle:    'KPI Summary',
+    gicaKpiOrgTitle:        'องค์กร (Organization)',
+    gicaKpiBuSection:       'Business Units',
+    gicaKpiPassRate:        'อัตราการผ่าน',
+    gicaKpiPassed:          'ผ่าน',
+    gicaKpiFailed:          'ไม่ผ่าน',
+    gicaKpiPending:         'ยังไม่ประเมิน',
+    gicaKpiTested:          'ประเมินแล้ว',
+    gicaKpiNoDataBu:        'ยังไม่มีข้อมูล',
     gicaKpiAchieved:        'ผ่าน KPI',
     gicaKpiNotAchieved:     'ไม่ผ่าน KPI',
     gicaKpiModalDesc:       'กำหนด KPI target (%) สำหรับแต่ละระดับ',
@@ -522,6 +533,17 @@ const TRANSLATIONS = {
     gicaExpMatrix:          'Expectation Matrix',
     gicaKpiSetup:           'KPI Setup',
     gicaKpiSetupTip:        'Set KPI target for each Level',
+    gicaKpiSummary:         'KPI Summary',
+    gicaKpiSummaryTip:      'View actual KPI per BU and organization-wide',
+    gicaKpiSummaryTitle:    'KPI Summary',
+    gicaKpiOrgTitle:        'Organization',
+    gicaKpiBuSection:       'Business Units',
+    gicaKpiPassRate:        'Pass Rate',
+    gicaKpiPassed:          'Passed',
+    gicaKpiFailed:          'Failed',
+    gicaKpiPending:         'Not Assessed',
+    gicaKpiTested:          'Assessed',
+    gicaKpiNoDataBu:        'No data',
     gicaKpiAchieved:        'KPI Achieved',
     gicaKpiNotAchieved:     'KPI Not Achieved',
     gicaKpiModalDesc:       'Define KPI target (%) for each level',
@@ -3483,6 +3505,7 @@ function _roleBadgeText(role) {
     case 'csa_user':   return 'CSA';
     case 'qe_edit':    return 'QE (GICA Edit)';
     case 'qe_read':    return 'QE (GICA Read)';
+    case 'gica_admin': return 'GICA Admin';
     case 'qe_audit':   return 'QE (Auditor)';
     case 'qe_auditee': return 'QE (Auditee)';
     case 'admin':      return 'Admin';
@@ -3730,6 +3753,16 @@ function initLoginForm() {
   if (savedId && passEl) passEl.value = savedId;
   if (savedId && remEl)  remEl.checked = true;
 
+  const toggleBtn = $('loginPwToggle');
+  if (toggleBtn && passEl) {
+    toggleBtn.addEventListener('click', () => {
+      const shown = passEl.type === 'text';
+      passEl.type = shown ? 'password' : 'text';
+      toggleBtn.setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
+      toggleBtn.querySelector('i').className = shown ? 'ti ti-eye' : 'ti ti-eye-off';
+    });
+  }
+
   form.addEventListener('submit', e => {
     e.preventDefault();
     const raw = ($('loginPassword')?.value || '').trim();
@@ -3919,7 +3952,7 @@ async function init() {
     if (_switchMainTab) _switchMainTab('audit');
     initAuditTab();
     return;
-  } else if (currentRole === 'qe_edit' || currentRole === 'qe_read') {
+  } else if (currentRole === 'qe_edit' || currentRole === 'qe_read' || currentRole === 'gica_admin') {
     ['newOperator', 'jumper', 'trainer', 'sewingOperator'].forEach(id => {
       $('tabItem-' + id)?.classList.add('hidden');
       document.querySelector(`.tab-btn[data-tab="${id}"]`)?.classList.add('hidden');
@@ -5660,14 +5693,14 @@ async function initGicaTab() {
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAttemptDotsModal(); });
 
     // QE/Admin-only write UI on Employee List
-    if (['qe_edit', 'admin'].includes(currentRole)) {
+    if (['qe_edit', 'gica_admin', 'admin'].includes(currentRole)) {
       _wireGicaResultModal();
       _wireGicaCreateModal();
       $('gica-create-operator-btn')?.classList.remove('hidden');
     }
     // Score History delete is admin-only, but wiring the modal is harmless for others
     // (the button that opens it is hidden unless admin).
-    if (currentRole === 'admin') _wireGicaScoreHistoryModal();
+    if (['gica_admin', 'admin'].includes(currentRole)) _wireGicaScoreHistoryModal();
 
     renderGicaSummary();
   } catch (err) {
@@ -5958,7 +5991,136 @@ function _computeGicaSummary(emps, busRaw, kpiTargets = {}, freqTable = []) {
     kpiTargets,
     trendByBu,
     freqTable,
+    emps,
   };
+}
+
+// KPI Summary — actual pass/fail counts per BU + organization rollup.
+// "Passed" mirrors the same rule used elsewhere: latest attempt's grades ≥
+// expectations from gica_freq (backend fills e.passed).
+function _computeGicaKpiSummary(emps) {
+  const mk = () => ({ total: 0, tested: 0, passed: 0, failed: 0, pending: 0 });
+  const org = mk();
+  const buStats = {};
+  BU_ORDER.forEach(bu => { buStats[bu] = { bu, ...mk() }; });
+
+  emps.forEach(e => {
+    if (!e.bu || !buStats[e.bu]) return;
+    const s = buStats[e.bu];
+    s.total++; org.total++;
+    if (e.passed === true) {
+      s.passed++; s.tested++;
+      org.passed++; org.tested++;
+    } else if (e.passed === false) {
+      s.failed++; s.tested++;
+      org.failed++; org.tested++;
+    } else {
+      s.pending++; org.pending++;
+    }
+  });
+
+  const withRate = (s, denomKey) => ({
+    ...s,
+    passRate: s[denomKey] > 0 ? (s.passed / s[denomKey] * 100) : null,
+  });
+
+  return {
+    // Organization KPI: passed / TOTAL (all employees across every BU, including untested)
+    org: withRate(org, 'total'),
+    // Per-BU KPI: passed / TESTED (only people actually assessed in that BU)
+    bus: BU_ORDER.map(bu => withRate(buStats[bu], 'tested')),
+  };
+}
+
+function _gicaKpiSummaryHtml(vm) {
+  const { org, bus } = vm;
+  // Ring geometry: 84px diameter, 8px stroke.
+  const ring = (pct, color, size = 84, sw = 8) => {
+    const r = (size - sw) / 2, cx = size / 2, cy = size / 2;
+    const circ = 2 * Math.PI * r;
+    const p = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+    const dash = (p / 100) * circ;
+    return `
+      <svg class="kpi-sum-ring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"
+                stroke-linecap="round" stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}"
+                stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})"></circle>
+      </svg>`;
+  };
+  const pctColor = pct => (pct == null) ? '#94a3b8' : (pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626');
+  const fmt = n => Number.isFinite(n) ? n : 0;
+
+  // Hero — organization rollup
+  const orgPct = org.passRate;
+  const orgPctTxt = orgPct == null ? '—' : orgPct.toFixed(1) + '%';
+  const orgColor = pctColor(orgPct);
+  const hero = `
+    <div class="kpi-sum-hero" style="--kpi-hero-accent:${orgColor};">
+      <div class="kpi-sum-hero__ring">${ring(orgPct ?? 0, orgColor, 132, 12)}
+        <div class="kpi-sum-hero__ring-center">
+          <div class="kpi-sum-hero__pct">${orgPctTxt}</div>
+          <div class="kpi-sum-hero__frac">${org.passed}/${org.total}</div>
+        </div>
+      </div>
+      <div class="kpi-sum-hero__meta">
+        <div class="kpi-sum-hero__eyebrow"><i class="ti ti-building" aria-hidden="true"></i> ${t('gicaKpiOrgTitle')}</div>
+        <div class="kpi-sum-hero__title">${t('gicaKpiPassRate')}</div>
+        <div class="kpi-sum-hero__stats">
+          <div class="kpi-sum-stat"><span class="kpi-sum-stat__dot" style="background:#16a34a;"></span><strong>${org.passed}</strong> ${t('gicaKpiPassed')}</div>
+          <div class="kpi-sum-stat"><span class="kpi-sum-stat__dot" style="background:#dc2626;"></span><strong>${org.failed}</strong> ${t('gicaKpiFailed')}</div>
+          <div class="kpi-sum-stat"><span class="kpi-sum-stat__dot" style="background:#94a3b8;"></span><strong>${org.pending}</strong> ${t('gicaKpiPending')}</div>
+          <div class="kpi-sum-stat kpi-sum-stat--tot"><i class="ti ti-users" aria-hidden="true"></i> <strong>${org.total}</strong> Total</div>
+        </div>
+      </div>
+    </div>`;
+
+  // BU cards
+  const buCards = bus.map(s => {
+    const buColor = (typeof GICA_BU_COLORS !== 'undefined' && GICA_BU_COLORS[s.bu]) || '#6b7280';
+    if (s.total === 0) {
+      return `
+        <div class="kpi-sum-bu-card kpi-sum-bu-card--empty" style="--kpi-bu-color:${buColor};">
+          <div class="kpi-sum-bu-card__head">
+            <span class="kpi-sum-bu-badge">${escapeHtml(s.bu)}</span>
+          </div>
+          <div class="kpi-sum-bu-card__body kpi-sum-bu-card__body--empty">${t('gicaKpiNoDataBu')}</div>
+        </div>`;
+    }
+    const pct = s.passRate;
+    const pctTxt = pct == null ? '—' : pct.toFixed(1) + '%';
+    const color = pctColor(pct);
+    return `
+      <div class="kpi-sum-bu-card" style="--kpi-bu-color:${buColor};">
+        <div class="kpi-sum-bu-card__head">
+          <span class="kpi-sum-bu-badge">${escapeHtml(s.bu)}</span>
+          <span class="kpi-sum-bu-card__total"><i class="ti ti-users" aria-hidden="true"></i> ${s.total}</span>
+        </div>
+        <div class="kpi-sum-bu-card__ring-wrap">
+          ${ring(pct ?? 0, color, 92, 9)}
+          <div class="kpi-sum-bu-card__ring-center">
+            <div class="kpi-sum-bu-card__pct" style="color:${color};">${pctTxt}</div>
+            <div class="kpi-sum-bu-card__frac">${s.passed}/${fmt(s.tested)}</div>
+          </div>
+        </div>
+        <div class="kpi-sum-bu-card__foot">
+          <div class="kpi-sum-bu-card__pill kpi-sum-bu-card__pill--pass">
+            <i class="ti ti-check" aria-hidden="true"></i> ${s.passed}
+          </div>
+          <div class="kpi-sum-bu-card__pill kpi-sum-bu-card__pill--fail">
+            <i class="ti ti-x" aria-hidden="true"></i> ${s.failed}
+          </div>
+          <div class="kpi-sum-bu-card__pill kpi-sum-bu-card__pill--pending">
+            <i class="ti ti-clock" aria-hidden="true"></i> ${s.pending}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    ${hero}
+    <div class="kpi-sum-section-title">${t('gicaKpiBuSection')}</div>
+    <div class="kpi-sum-bu-grid">${buCards}</div>`;
 }
 
 function _gicaSummaryHtml(vm) {
@@ -6375,6 +6537,9 @@ function _gicaSummaryHtml(vm) {
 
         </div>
         <div class="exp-legend">
+          <button id="gica-kpi-summary-btn" class="gica-kpi-setup-btn" title="${escapeHtml(t('gicaKpiSummaryTip'))}">
+            <i class="ti ti-chart-donut-4" aria-hidden="true"></i> ${t('gicaKpiSummary')}
+          </button>
           <button id="gica-kpi-setup-btn" class="gica-kpi-setup-btn" title="${escapeHtml(t('gicaKpiSetupTip'))}">
             <i class="ti ti-target-arrow" aria-hidden="true"></i> ${t('gicaKpiSetup')}
           </button>
@@ -6455,6 +6620,18 @@ function _gicaSummaryHtml(vm) {
           <button class="gica-modal__close" id="gica-freq-close" aria-label="ปิด">✕</button>
         </div>
         <div class="gica-modal__body">${freqModalBody}</div>
+      </div>
+    </div>
+    <div id="gica-kpi-summary-modal" class="gica-modal hidden">
+      <div class="gica-modal__backdrop" id="gica-kpi-summary-backdrop"></div>
+      <div class="gica-modal__panel gica-kpi-summary-modal__panel">
+        <div class="gica-modal__head">
+          <h4 style="margin:0;font-size:1rem;">${t('gicaKpiSummaryTitle')}</h4>
+          <button class="gica-modal__close" id="gica-kpi-summary-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="gica-modal__body" id="gica-kpi-summary-body">
+          ${_gicaKpiSummaryHtml(_computeGicaKpiSummary(vm.emps || []))}
+        </div>
       </div>
     </div>`;
 
@@ -6793,6 +6970,21 @@ function _mountGicaSummary(html, vm) {
     container.querySelector('#gica-freq-backdrop')?.addEventListener('click', closeFreqModal);
   }
 
+  // KPI Summary modal — pure read-only actual-vs-passed per BU + org rollup.
+  // Body is rebuilt each open so stale numbers can't sit under the cache-busted CSS/JS.
+  const kpiSumModal = container.querySelector('#gica-kpi-summary-modal');
+  const closeKpiSumModal = () => kpiSumModal && kpiSumModal.classList.add('hidden');
+  if (kpiSumModal) {
+    container.querySelector('#gica-kpi-summary-btn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      const body = kpiSumModal.querySelector('#gica-kpi-summary-body');
+      if (body) body.innerHTML = _gicaKpiSummaryHtml(_computeGicaKpiSummary(vm.emps || []));
+      kpiSumModal.classList.remove('hidden');
+    });
+    container.querySelector('#gica-kpi-summary-close')?.addEventListener('click', closeKpiSumModal);
+    container.querySelector('#gica-kpi-summary-backdrop')?.addEventListener('click', closeKpiSumModal);
+  }
+
   // Expectation matrix drill-down
   const modal     = container.querySelector('#gica-expect-modal');
   const modalTtl  = container.querySelector('#gica-expect-modal-title');
@@ -6802,7 +6994,7 @@ function _mountGicaSummary(html, vm) {
     modal.querySelectorAll('[data-close="1"]').forEach(el => el.addEventListener('click', closeModal));
   }
   if (window._gicaEscHandler) document.removeEventListener('keydown', window._gicaEscHandler);
-  window._gicaEscHandler = e => { if (e.key === 'Escape') { closeModal(); closeKpiModal(); closeFreqModal(); } };
+  window._gicaEscHandler = e => { if (e.key === 'Escape') { closeModal(); closeKpiModal(); closeFreqModal(); closeKpiSumModal(); } };
   document.addEventListener('keydown', window._gicaEscHandler);
 
   const _showModal = (list, title) => {
@@ -8648,8 +8840,8 @@ function renderGicaTable() {
   const statsEl = $('gica-failStats');
   if (statsEl) statsEl.innerHTML = _gicaFailStatsHtml(rows);
 
-  const editable  = ['qe_edit', 'admin'].includes(currentRole);
-  const deletable = currentRole === 'admin';
+  const editable  = ['qe_edit', 'gica_admin', 'admin'].includes(currentRole);
+  const deletable = ['gica_admin', 'admin'].includes(currentRole);
   wrap.innerHTML = _gicaEmpTableHtml(pageRows, { sortable: true, editable, deletable });
   if (editable)  _wireGicaEmpNameClicks(wrap);
   if (deletable) _wireGicaDeleteBtns(wrap);
@@ -8750,18 +8942,19 @@ function _gicaOpenResultModal(bu, empid) {
   $('gica-result-date').value = today;
   _gicaUpdateDateLabel(today);
   $('gica-result-error').classList.add('hidden');
-  // Delete button is admin-only (backend gates DELETE /api/gica/... to admin);
+  // Delete button is admin-only (backend gates DELETE /api/gica/... to admin/gica_admin);
   // showing it to qe_edit would just yield a 403 on click.
+  const canGicaAdmin = ['gica_admin', 'admin'].includes(currentRole);
   const delBtn = $('gica-result-delete');
   if (delBtn) {
-    delBtn.classList.toggle('hidden', currentRole !== 'admin');
+    delBtn.classList.toggle('hidden', !canGicaAdmin);
     delBtn.title = t('gicaDelete');              // icon-only button → tooltip carries the label
     delBtn.setAttribute('aria-label', t('gicaDelete'));
   }
   // Score History (per-attempt delete) is admin-only too — same gate as delete employee.
   const histBtn = $('gica-result-history');
   if (histBtn) {
-    histBtn.classList.toggle('hidden', currentRole !== 'admin');
+    histBtn.classList.toggle('hidden', !canGicaAdmin);
     histBtn.title = t('gicaScoreHistory');
     histBtn.setAttribute('aria-label', t('gicaScoreHistory'));
   }

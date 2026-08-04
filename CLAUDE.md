@@ -62,12 +62,12 @@ New Operator Monitoring/
 ### Frontend (Vanilla JS)
 - ไม่ใช้ framework — `static/js/app.js` เป็น plain JS ~10500+ บรรทัด
 - **Auth state**: `_sbJwt` (in-memory) + `localStorage('sb_jwt')` — inject เป็น `Authorization: Bearer` ใน `api()` ทุก call
-- **Login**: ช่องกรอก **รหัสพนักงาน** (ไม่ใช่ email) — JS ต่อท้าย `@manu.local` อัตโนมัติก่อนยิง API
-  - Admin/พนักงานกรอก email เต็มก็ได้ (ถ้ามี `@` ในค่าที่กรอก จะใช้ค่านั้นตรงๆ)
+- **Login**: ช่องเดียว — ค่าที่กรอกใช้เป็นทั้ง empid และ password (Supabase user ต้อง set `password = empid`) พร้อมปุ่มตา toggle
+  - JS ต่อท้าย `@manu.local` อัตโนมัติ (ถ้ามี `@` ในค่าที่กรอก จะใช้ตรงๆ)
 - ใช้ Chart.js v4 (CDN) + `chartjs-plugin-annotation` สำหรับกราฟ
 - ใช้ jsPDF (CDN) สำหรับ export PDF
 - แบ่งเป็น tab หลัก 6 แท็บ: `newOperator`, `jumper`, `trainer`, `sewingOperator`, `gica`, `audit`
-- **Login**: "Remember employee ID" checkbox — บันทึก empid ใน `localStorage('savedEmpId')` + `localStorage('rememberEmpId')`
+- **Login**: "Remember me" checkbox — บันทึกค่าที่กรอกใน `localStorage('login_remember_id')`
 
 ### Data Source
 | Tab | แหล่งข้อมูล | Endpoint | วิธีอ่าน |
@@ -113,6 +113,8 @@ New Operator Monitoring/
 | GICA compare | `.gica-compare-grid`, `.gica-compare-header`, `.gica-compare-cell` (div+grid ไม่ใช่ `<table>` เพื่อหลีกเลี่ยง global CSS leak) |
 | GICA paired | `.gica-modal--paired-left`, `.gica-modal--paired-right` (side-by-side modal layout) |
 | KPI BU tabs | `.gica-kpi-bu-tabs`, `.gica-kpi-bu-tab`, `.gica-kpi-bu-tab--active` |
+| GICA KPI Summary modal | `.gica-kpi-summary-modal__panel`, `.kpi-sum-hero`, `.kpi-sum-hero__ring`, `.kpi-sum-hero__pct/frac/meta/eyebrow/title/stats`, `.kpi-sum-stat`, `.kpi-sum-stat__dot`, `.kpi-sum-section-title`, `.kpi-sum-bu-grid`, `.kpi-sum-bu-card`, `.kpi-sum-bu-badge`, `.kpi-sum-bu-card__ring-wrap/center/pct/frac`, `.kpi-sum-bu-card__pill--pass/fail/pending`, `.kpi-sum-ring` — ธีมสีต่อ BU ผ่าน `--kpi-bu-color` custom property |
+| Login password toggle | `.login-pw-wrap`, `.login-pw-input`, `.login-pw-toggle` — ปุ่มตาเปิด/ปิด password (absolute positioned inside input wrap) |
 | Audit Create Form modal | `.audit-form-modal__panel`, `.audit-form-modal__body`, `.audit-form-modal__footer`, `.audit-btn`, `.audit-btn--cancel`, `.audit-btn--confirm` — **เจตนาแยกจาก `.gica-kpi-*`** ไม่ใช้ปนกัน แม้หน้าตาคล้าย KPI Setup modal |
 | Audit Trend KPI Setup | `.audit-kpi-setup-btn`, `.audit-kpi-modal__panel`, `.audit-kpi-modal__body`, `.audit-kpi-modal__desc`, `.audit-kpi-row`, `.audit-kpi-row__label`, `.audit-kpi-row__val`, `.audit-kpi-slider` — เหตุผลเดียวกับ Create Form modal (ของตัวเอง ไม่ปนกับ `.gica-kpi-*`) |
 | Stat card sub list modifier | `.stat-card__sub--flush` (ไม่มี border-top/margin-top) — ใช้เมื่อ `.stat-card__sub` เป็น element แรกในการ์ด |
@@ -171,7 +173,7 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 ### 4. Cache-busting (สำคัญ — ลืมบ่อย)
 
 ทุกครั้งที่แก้ `app.js` หรือ `styles.css` ต้อง **bump `?v=` ใน `index.html`**
-(ปัจจุบัน `styles.css?v=184`, `app.js?v=421`) ไม่งั้น browser cache ไฟล์เก่า
+(ปัจจุบัน `styles.css?v=193`, `app.js?v=441`) ไม่งั้น browser cache ไฟล์เก่า
 
 ---
 
@@ -236,7 +238,7 @@ Phase 4 — Jumper/Trainer: พักไว้ก่อน ยังไม่ต
 2. **Authorization ที่ Flask** — Bearer JWT → verify_jwt() → get_user_role() → require_writable(); service key bypass RLS; read ไม่ต้อง JWT
 3. **Employee ID login pattern** — Admin สร้าง user ด้วย `{empid}@manu.local`; พนักงานกรอกแค่รหัส; JS ต่อท้าย `@manu.local` ก่อนยิง API
 4. **MANAGER_REFRESH_TOKEN ยังอยู่** — service credential อ่าน Jumper/Trainer/CSA/GICA Excel เท่านั้น
-5. **Role**: `csa_user`/`qe_edit`/`qe_read`/`qe_audit`/`qe_auditee`/`admin`/`viewer` ใน `profiles.role` — (`qe_user` ถูกเปลี่ยนเป็น `qe_edit`/`qe_read`)
+5. **Role**: `csa_user`/`qe_edit`/`qe_read`/`gica_admin`/`qe_audit`/`qe_auditee`/`admin`/`viewer` ใน `profiles.role` — (`qe_user` ถูกเปลี่ยนเป็น `qe_edit`/`qe_read`; `gica_admin` = full admin ในโมดูล GICA เท่านั้น)
 6. **Audit: 3 Supabase tables** (ไม่ใช่ 4 Excel tables): `audit_templates`/`audit_plans`/`audit_findings`; execution JSONB array ใน `audit_plans.execution`
 
 ### สร้าง User ใหม่ (Admin ทำ)
@@ -245,8 +247,10 @@ Phase 4 — Jumper/Trainer: พักไว้ก่อน ยังไม่ต
 3. รัน SQL ตั้ง role:
    ```sql
    UPDATE profiles SET role = 'qe_audit' WHERE id = '<user_uuid>';
-   -- roles: csa_user | qe_edit | qe_read | qe_audit | qe_auditee | admin
+   -- roles: csa_user | qe_edit | qe_read | gica_admin | qe_audit | qe_auditee | admin
    ```
+
+**หมายเหตุเวลาเพิ่ม role ใหม่** — ต้อง `ALTER TABLE profiles DROP/ADD CONSTRAINT profiles_role_check` ให้ครอบคลุมค่าใหม่ก่อน ไม่งั้น UPDATE จะ error
 
 ---
 
@@ -254,11 +258,16 @@ Phase 4 — Jumper/Trainer: พักไว้ก่อน ยังไม่ต
 
 ### Supabase Email / Password Login
 
-หน้า login มีช่องกรอก **รหัสพนักงาน** + **Password** เพียงอย่างเดียว (ไม่มี 3-door แล้ว):
+หน้า login มี **ช่องเดียว** — ผู้ใช้กรอกค่าเดียวใช้เป็นทั้ง empid และ password:
+
+- Input `#loginPassword` (type=password) พร้อมปุ่มตา `#loginPwToggle` (toggle type ระหว่าง `password` ↔ `text`)
+- Checkbox `#loginRemember` — บันทึกค่าใน `localStorage('login_remember_id')` (สะดวก autofill ครั้งถัดไป)
 
 ```
-User กรอก empid + password
-→ JS ต่อท้าย @manu.local (ถ้าไม่มี @ ในค่าที่กรอก)
+User กรอกค่าเดียว (raw)
+→ JS ใช้ raw เป็นทั้ง empid และ password:
+   email    = raw.includes('@') ? raw : `${raw}@manu.local`
+   password = raw
 → POST /api/auth/login  → sb_auth_sign_in() → Supabase /auth/v1/token
 → return {access_token, ...}
 → _saveJwt(access_token) → localStorage('sb_jwt')
@@ -267,19 +276,22 @@ User กรอก empid + password
 → init() ตั้ง tab visibility ตาม role
 ```
 
+⚠️ **ทุก Supabase user ต้อง set password = empid ของตัวเอง** เช่น `12345@manu.local` → password `12345` — ไม่งั้น login ไม่ผ่าน
+
 ### Role ↔ Tab Visibility
 
 | Role | แหล่งที่มา | อ่าน | เขียน |
 |---|---|---|---|
 | `csa_user` | Supabase Auth | CSA tabs | ✓ |
-| `qe_edit` | Supabase Auth | GICA tab | ✓ (GICA write: add employee, add result, delete employee) |
+| `qe_edit` | Supabase Auth | GICA tab | ✓ (GICA write: add employee, add result — **ลบไม่ได้** ต้องเป็น admin/gica_admin) |
 | `qe_read` | Supabase Auth | GICA tab | อ่านอย่างเดียว (ไม่มีปุ่มแก้ไข) |
+| `gica_admin` | Supabase Auth | GICA tab เท่านั้น | ✓ ทุกอย่างใน GICA (add/edit/delete employee, delete score) — ทำหน้าที่เหมือน admin แต่จำกัดโมดูล GICA |
 | `qe_audit` | Supabase Auth | Audit tab — ทุก sub-tab | ✓ (ทุก route ยกเว้น Respond ที่ auditee ก็ทำได้) |
 | `qe_auditee` | Supabase Auth | Audit tab — Dashboard/Plan/Finding-CAR (ไม่เห็น Template) | ✓ เฉพาะ `POST /api/audit/plans/<id>/respond` |
 | `admin` | Supabase Auth | ทุก tab | ✓ (รวม delete employee GICA) |
 | `viewer` | fallback (ไม่มี role ใน profiles) | อ่านได้ตามที่ endpoint อนุญาต | ❌ |
 
-> ⚠️ `qe_user` ถูกแบ่งเป็น `qe_edit` + `qe_read` — อัปเดต `profiles_role_check` constraint ใน Supabase แล้ว
+> ⚠️ `qe_user` ถูกแบ่งเป็น `qe_edit` + `qe_read` แล้วต่อมาเพิ่ม `gica_admin` — อัปเดต `profiles_role_check` constraint ใน Supabase ตามลำดับ
 
 ### Key Backend Functions
 
@@ -320,7 +332,8 @@ User กรอก empid + password
 | GET | `/api/gica-excel` | — | GICA assessment data จาก **Supabase** (`gica_employees`/`gica_freq`/`gica_kpi`) |
 | POST | `/api/gica/<bu>/employees` | ✓ writable | เพิ่มพนักงาน GICA ใหม่ |
 | PATCH | `/api/gica/<bu>/employees/<empid>/result` | ✓ writable | เพิ่ม/แก้ผลสอบ GICA |
-| **DELETE** | **`/api/gica/<bu>/employees/<empid>`** | ✓ `admin` only | ลบพนักงาน GICA (admin เท่านั้น) |
+| **DELETE** | **`/api/gica/<bu>/employees/<empid>/results`** | ✓ `gica_admin`/`admin` | ลบผลสอบ (ทั้งหมดหรือเลือก attempts) |
+| **DELETE** | **`/api/gica/<bu>/employees/<empid>`** | ✓ `gica_admin`/`admin` | ลบพนักงาน GICA |
 | GET | `/api/audit-excel` | — | Audit data จาก **Supabase** (cached in-process 60s) |
 | POST | `/api/audit/templates/forms` | ✓ writable | สร้าง Form ใหม่ หรือ version ใหม่ (ถ้า `Code` ตรงกัน) |
 | POST | `/api/audit/plans` | ✓ writable | สร้าง Audit Plan (PlanID auto-gen `YYYY-MM-NNNN`) |
@@ -376,6 +389,23 @@ Supabase PostgreSQL (gica_employees / gica_freq / gica_kpi)
 
 > ⚠️ constant ที่มาร์ก **migration-only** ใช้แค่ตอนอ่าน Excel ใน `migrate_gica.py` เท่านั้น — runtime อ่าน Supabase ไม่แตะ Excel แล้ว
 
+### Next Assessment Date — Scheduling Rules ⚠️
+
+**ตัดสินจาก `_gica_uses_fast_retest(dept, level)`** ใน [app.py](app.py) → `True` เฉพาะ `dept ∈ {QA, QC}` และ `level ∈ {Officer, Worker}`
+
+| กรณี | `scheduled_next` | `next_type` |
+|---|---|---|
+| ยังไม่เคยสอบ (มี `start_date`) | `start_date + 1 เดือน` | `Initial` |
+| **QA/QC + Officer/Worker** สอบไม่ผ่าน | `ครั้งล่าสุด + 7 วัน` | `Retest` |
+| อื่นๆ ทุกกรณี — สอบผ่านหรือไม่ผ่าน + มี `freq_months` | `ครั้งล่าสุด + freq_months เดือน` | `Review` ถ้าผ่าน / `Retest` ถ้าไม่ผ่าน |
+| ไม่มี `freq_months` เลย | `None` | Review/Retest |
+
+**เหตุผล:** เฉพาะ QA/QC + Officer/Worker เท่านั้นที่ต้อง retest ภายใน 7 วัน (fast retest cycle) — role อื่น (Supervisor+, Sewing, Technic, CSA) มี freq_months schedule เป็นหลัก ไม่ต้อง fast retest
+
+**Passed logic:** `_gica_attempt_passed(g1, g2, exp1, exp2)` — grade ทั้ง 2 sub-tests ≥ expectation ทั้ง 2; ถ้าขาด exp1/exp2 (freq lookup ไม่เจอ) คืน `None` → คน pending
+
+**⚠️ ห้ามลืม** — logic นี้ใช้ทั้งใน history loop (คำนวณ scheduled date ของ attempt ที่ผ่านมา) และ post-history (คำนวณ scheduled_next) ถ้าแก้กฎ ต้องแก้ทั้ง 2 ที่ให้สอดคล้อง
+
 ### Employee Object (from API)
 ```json
 {
@@ -419,6 +449,8 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 | `_gicaCompareTableHtml(s)` | Pure | div+grid Previous/Last/Diff comparison table |
 | `_gicaOpenResultModal()` | Modal | Add Assessment Result (+ side-by-side Assessment History for QE) |
 | `_gicaKpiListHtml(bu)` | Pure | KPI slider list per BU tab |
+| `_computeGicaKpiSummary(emps)` | Pure | KPI Summary viewModel — org (denom=total) + per-BU (denom=tested) stats |
+| `_gicaKpiSummaryHtml(vm)` | Pure | KPI Summary modal HTML: hero card + 6-col BU grid with donut rings |
 | `kpiPctFor(level, bu)` | Pure | Resolve KPI: BU-specific → all fallback → null |
 
 ### BU Flip Cards (Row 2)
@@ -445,6 +477,16 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 - BU tab bar: All BU + per-BU tabs — ตั้งค่า slider แยกแต่ละ BU ได้
 - ตั้งค่าที่ All BU → ทุก BU ใช้ค่าเดียวกัน (frontend sync)
 - Defaults seed จาก `kpiDefaults` ใน API response (อ่านจาก `kpi_g1`...`kpi_trm` tables)
+
+### KPI Summary (read-only dashboard)
+- ปุ่ม `#gica-kpi-summary-btn` วางข้างซ้ายปุ่ม KPI Setup ใน Expectation Matrix header
+- Modal `#gica-kpi-summary-modal` (panel width 1080px) แสดง:
+  - **Hero card** — Organization KPI: donut ring 132px + `passed / total (ทุกคนทุก BU)` — สีเปลี่ยนตามเปอร์เซ็นต์ (≥80% เขียว, ≥50% ส้ม, <50% แดง)
+  - **BU grid** — 6 การ์ด (repeat(6,1fr) บนจอกว้าง, 3 บน ≤900px, 2 บน ≤560px): donut 92px + `passed / tested` + 3 pills (Passed/Failed/Pending)
+- **Denominator ต่างกัน**: Organization ใช้ `total` (รวมคนที่ยังไม่สอบ); BU cards ใช้ `tested` (นับเฉพาะคนที่มีผลสอบ)
+- ฟังก์ชัน: `_computeGicaKpiSummary(emps)` (pure, ต้องรับ `emps` ผ่าน vm) + `_gicaKpiSummaryHtml(vm)` (pure)
+- Wire ใน `_mountGicaSummary` — rebuild body ทุกครั้งที่เปิด (ไม่แคชค่าเก่า)
+- CSS: `.kpi-sum-hero`, `.kpi-sum-bu-card`, `.kpi-sum-ring` — ธีม BU ใช้ `--kpi-bu-color` custom property จาก `GICA_BU_COLORS`
 
 ### Quadrant Analysis
 - `quad` determination uses raw scores (`rx`/`ry`) ไม่ใช่ jittered coordinates (`x`/`y`)

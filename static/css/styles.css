@@ -450,6 +450,29 @@ body {
   color: rgba(255, 255, 255, .32);
   letter-spacing: .4px;
 }
+.login-pw-wrap { position: relative; width: 100%; display: block; }
+.login-pw-input { width: 100%; box-sizing: border-box; padding-right: 44px !important; }
+.login-pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: color .15s, background .15s;
+}
+.login-pw-toggle:hover { color: var(--text); background: rgba(148,163,184,.14); }
+.login-pw-toggle:active { transform: translateY(-50%) scale(.94); }
 .login-btn {
   display: block;
   width: 100%;
@@ -2462,6 +2485,79 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-score-hist-chk, #gica-score-hist-all { cursor: pointer; width: 15px; height: 15px; }
 .gica-score-hist-del { padding: 3px 6px; cursor: pointer; background: var(--surface); border: 1px solid; border-radius: 5px; }
 .gica-score-hist-del:hover { background: rgba(220,38,38,0.08); }
+/* ==== KPI Summary modal (read-only actual pass rate per BU + org rollup) ==== */
+.gica-kpi-summary-modal__panel { width:1080px; max-width:96vw; max-height:90vh; overflow-y:auto; }
+.kpi-sum-hero {
+  display:grid; grid-template-columns:auto 1fr; gap:22px; align-items:center;
+  padding:20px 22px; margin-bottom:20px;
+  background:linear-gradient(135deg, color-mix(in srgb, var(--kpi-hero-accent, #16a34a) 12%, var(--surface)) 0%, color-mix(in srgb, var(--kpi-hero-accent, #16a34a) 4%, var(--surface)) 100%);
+  border:1px solid color-mix(in srgb, var(--kpi-hero-accent, #16a34a) 25%, var(--border));
+  border-radius:14px; position:relative; overflow:hidden;
+}
+.kpi-sum-hero::before {
+  content:''; position:absolute; inset:0; background:radial-gradient(circle at top right, color-mix(in srgb, var(--kpi-hero-accent, #16a34a) 15%, transparent) 0%, transparent 60%);
+  pointer-events:none;
+}
+.kpi-sum-hero__ring { position:relative; width:132px; height:132px; flex-shrink:0; }
+.kpi-sum-hero__ring-center {
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px; text-align:center;
+}
+.kpi-sum-hero__pct { font-size:1.6rem; font-weight:800; color:var(--kpi-hero-accent, #16a34a); font-family:'Geist Mono',monospace; line-height:1; }
+.kpi-sum-hero__frac { font-size:0.78rem; color:var(--text-muted); font-family:'Geist Mono',monospace; }
+.kpi-sum-hero__meta { display:flex; flex-direction:column; gap:6px; position:relative; z-index:1; }
+.kpi-sum-hero__eyebrow { font-size:0.72rem; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+.kpi-sum-hero__eyebrow .ti { font-size:0.95rem; color:var(--kpi-hero-accent, #16a34a); }
+.kpi-sum-hero__title { font-size:1.15rem; font-weight:700; color:var(--text); }
+.kpi-sum-hero__stats { display:flex; gap:16px; flex-wrap:wrap; margin-top:6px; }
+.kpi-sum-stat { font-size:0.78rem; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px; }
+.kpi-sum-stat strong { color:var(--text); font-weight:700; font-family:'Geist Mono',monospace; }
+.kpi-sum-stat__dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.kpi-sum-stat--tot { color:var(--text); font-weight:600; padding-left:6px; border-left:1px solid var(--border); }
+.kpi-sum-stat--tot .ti { font-size:0.9rem; }
+.kpi-sum-section-title { font-size:0.78rem; text-transform:uppercase; letter-spacing:.6px; font-weight:700; color:var(--text-muted); margin:0 0 10px 2px; }
+/* Big screens: force all 6 BU cards into one row. Narrow viewports fall back through 3 → 2 cols. */
+.kpi-sum-bu-grid { display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; }
+@media (max-width: 900px)  { .kpi-sum-bu-grid { grid-template-columns:repeat(3, 1fr); } }
+@media (max-width: 560px)  { .kpi-sum-bu-grid { grid-template-columns:repeat(2, 1fr); } }
+.kpi-sum-bu-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:14px 14px 12px; display:flex; flex-direction:column; gap:10px;
+  position:relative; overflow:hidden; transition:transform .15s, box-shadow .15s, border-color .15s;
+}
+.kpi-sum-bu-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:3px;
+  background:var(--kpi-bu-color, #6b7280);
+}
+.kpi-sum-bu-card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.06); border-color:var(--kpi-bu-color, #6b7280); }
+.kpi-sum-bu-card__head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.kpi-sum-bu-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:3px 10px; border-radius:6px; font-size:0.74rem; font-weight:800;
+  background:color-mix(in srgb, var(--kpi-bu-color, #6b7280) 18%, transparent);
+  color:var(--kpi-bu-color, #6b7280); letter-spacing:.4px;
+}
+.kpi-sum-bu-card__total { font-size:0.72rem; color:var(--text-muted); display:inline-flex; align-items:center; gap:3px; font-family:'Geist Mono',monospace; }
+.kpi-sum-bu-card__total .ti { font-size:0.85rem; }
+.kpi-sum-bu-card__ring-wrap { position:relative; align-self:center; width:92px; height:92px; }
+.kpi-sum-bu-card__ring-center {
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:1px;
+}
+.kpi-sum-bu-card__pct { font-size:1.05rem; font-weight:800; font-family:'Geist Mono',monospace; line-height:1; }
+.kpi-sum-bu-card__frac { font-size:0.68rem; color:var(--text-muted); font-family:'Geist Mono',monospace; }
+.kpi-sum-bu-card__foot { display:flex; gap:5px; justify-content:space-between; }
+.kpi-sum-bu-card__pill {
+  flex:1; display:inline-flex; align-items:center; justify-content:center; gap:3px;
+  padding:5px 4px; border-radius:6px; font-size:0.7rem; font-weight:700; font-family:'Geist Mono',monospace;
+}
+.kpi-sum-bu-card__pill .ti { font-size:0.85rem; }
+.kpi-sum-bu-card__pill--pass    { background:rgba(22,163,74,.10); color:#16a34a; }
+.kpi-sum-bu-card__pill--fail    { background:rgba(220,38,38,.10); color:#dc2626; }
+.kpi-sum-bu-card__pill--pending { background:rgba(148,163,184,.14); color:#64748b; }
+.kpi-sum-bu-card--empty { opacity:.55; }
+.kpi-sum-bu-card--empty::before { background:var(--border); }
+.kpi-sum-bu-card__body--empty { text-align:center; color:var(--text-muted); font-size:0.78rem; padding:22px 0; }
 /* — KPI Setup modal panel — */
 .gica-kpi-modal__panel { width:380px; max-width:92vw; }
 .gica-kpi-modal__body { padding:0 0 4px; }
