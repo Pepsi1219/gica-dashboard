@@ -342,6 +342,7 @@ const TRANSLATIONS = {
     gicaCalTypeInitial:     'ประเมินครั้งแรก',
     gicaCalTypeRetest:      'ประเมินซ้ำ',
     gicaCalTypeReview:      'ทบทวน',
+    gicaCalTypeMissed:      'ขาดสอบ (roll +7 วัน)',
     gicaCalOverdue:         'เกินกำหนด (ยังไม่มาสอบ)',
     gicaCalWeekPrefix:      'สัปดาห์',
     gicaWeekMon:            'จันทร์',
@@ -697,6 +698,7 @@ const TRANSLATIONS = {
     gicaCalTypeInitial:     'Initial assessment',
     gicaCalTypeRetest:      'Re-assessment',
     gicaCalTypeReview:      'Review assessment',
+    gicaCalTypeMissed:      'Missed (rolled +7 days)',
     gicaCalOverdue:         'Overdue (Not yet tested)',
     gicaCalWeekPrefix:      'WEEK',
     gicaWeekMon:            'Monday',
@@ -1027,6 +1029,7 @@ const TRANSLATIONS = {
     gicaCalTypeInitial:     'ປະເມີນຄັ້ງທຳອິດ',
     gicaCalTypeRetest:      'ປະເມີນຄືນ',
     gicaCalTypeReview:      'ທົບທວນ',
+    gicaCalTypeMissed:      'ຂາດສອບ (roll +7 ວັນ)',
     gicaCalOverdue:         'ເກີນກຳນົດ (ຍັງບໍ່ມາສອບ)',
     gicaCalWeekPrefix:      'ອາທິດ',
     gicaWeekMon:            'ຈັນ',
@@ -1357,6 +1360,7 @@ const TRANSLATIONS = {
     gicaCalTypeInitial:     'Đánh giá lần đầu',
     gicaCalTypeRetest:      'Đánh giá lại',
     gicaCalTypeReview:      'Xem xét',
+    gicaCalTypeMissed:      'Vắng mặt (dời +7 ngày)',
     gicaCalOverdue:         'Quá hạn (Chưa sát hạch)',
     gicaCalWeekPrefix:      'TUẦN',
     gicaWeekMon:            'Thứ Hai',
@@ -7504,14 +7508,14 @@ function _gicaCalGrid(monthDate) {
   return days;
 }
 
-function _gicaCalGroupByBu(emps) {
+function _gicaCalGroupByBu(entries) {
   const map = {};
-  emps.forEach(e => {
-    const k = e.bu || '—';
+  entries.forEach(entry => {
+    const k = entry.emp.bu || '—';
     if (!map[k]) map[k] = { bu: k, count: 0, overdue: false, types: new Set() };
     map[k].count++;
-    if (e.schedStatus === 'overdue') map[k].overdue = true;
-    if (e.nextType) map[k].types.add(e.nextType);
+    if (entry.kind === 'Missed') map[k].overdue = true;
+    if (entry.kind) map[k].types.add(entry.kind);
   });
   return sortBus(Object.keys(map)).map(bu => {
     const g = map[bu];
@@ -7520,27 +7524,77 @@ function _gicaCalGroupByBu(emps) {
   });
 }
 
-// Calendar View — month grid keyed strictly by scheduledNext (the planned test date, not
-// the actual test date). BU/type filters here are independent of the Timeline's filters —
-// each chart owns its own filter state so they never leak into each other.
+// Add N days to an ISO date string (YYYY-MM-DD) → new ISO string. Null-safe.
+function _gicaAddDaysIso(iso, days) {
+  const d = _gicaParseDate(iso);
+  if (!d) return null;
+  d.setDate(d.getDate() + days);
+  return _gicaDateKey(d);
+}
+
+// Expand one employee into virtual calendar events.
+// - Historical backfill: between each h.scheduledDate and h.date (person tested late),
+//   generate a 'Missed' event at scheduledDate and every +7 days until the actual test.
+// - Current backlog: from e.scheduledNext, roll +7 days generating 'Missed' events for every
+//   step in the past; the final step >= today is emitted as the upcoming scheduled event
+//   (kind = e.nextType). This mirrors the Timeline's overdue-cascade so the sum of chips
+//   across a week matches the Timeline's per-week total for that person.
+// Guard limits prevent runaway loops on bad data (200 iterations = ~4 years of weekly rolls).
+function _gicaExpandCalendarEvents(e, today) {
+  const events = [];
+  const todayKey = _gicaDateKey(today);
+
+  (e.history || []).forEach(h => {
+    if (!h.scheduledDate || !h.date || h.date <= h.scheduledDate) return;
+    let d = h.scheduledDate;
+    let guard = 0;
+    while (d && d < h.date && guard++ < 200) {
+      events.push({ date: d, kind: 'Missed' });
+      d = _gicaAddDaysIso(d, 7);
+    }
+  });
+
+  if (e.scheduledNext) {
+    let d = e.scheduledNext;
+    let guard = 0;
+    while (d && d < todayKey && guard++ < 200) {
+      events.push({ date: d, kind: 'Missed' });
+      d = _gicaAddDaysIso(d, 7);
+    }
+    if (d) events.push({ date: d, kind: e.nextType || 'Review' });
+  }
+
+  // Dedup per date. When both a Missed and a non-Missed event land on the same day
+  // (rare overlap between history backfill and current backlog), the non-Missed wins.
+  const byDate = new Map();
+  events.forEach(ev => {
+    const prev = byDate.get(ev.date);
+    if (!prev || (prev.kind === 'Missed' && ev.kind !== 'Missed')) byDate.set(ev.date, ev);
+  });
+  return [...byDate.values()];
+}
+
+// Calendar View — month grid. Events keyed by expanded schedule (see _gicaExpandCalendarEvents):
+// each employee contributes one chip per expected/missed date, so overdue people appear on
+// every past 7-day step they skipped — this makes the calendar reflect real backlog workload
+// consistent with the Timeline's overdue cascade. BU/type filters are independent of the
+// Timeline's filters — each chart owns its own filter state.
 function _computeGicaCalendar(emps, monthDate, buFilter = new Set(), typeFilter = new Set(), sidebarOpen = false) {
   const allSchedable = emps.filter(e => e.scheduledNext || e.startDate);
   const availBus = sortBus([...new Set(allSchedable.map(e => e.bu).filter(Boolean))]);
 
-  const filtered = allSchedable.filter(e => {
-    if (buFilter.size > 0 && !buFilter.has(e.bu)) return false;
-    if (typeFilter.size > 0 && !typeFilter.has(e.nextType)) return false;
-    return true;
-  });
+  const buFiltered = allSchedable.filter(e => buFilter.size === 0 || buFilter.has(e.bu));
+
+  const today    = _gicaToday();
+  const todayKey = _gicaDateKey(today);
 
   const eventsByDate = {};
-  filtered.forEach(e => {
-    if (!e.scheduledNext) return;
-    (eventsByDate[e.scheduledNext] = eventsByDate[e.scheduledNext] || []).push(e);
+  buFiltered.forEach(e => {
+    _gicaExpandCalendarEvents(e, today).forEach(ev => {
+      if (typeFilter.size > 0 && !typeFilter.has(ev.kind)) return;
+      (eventsByDate[ev.date] = eventsByDate[ev.date] || []).push({ emp: e, kind: ev.kind });
+    });
   });
-
-  const today     = _gicaToday();
-  const todayKey  = _gicaDateKey(today);
   const gridDays  = _gicaCalGrid(monthDate);
   const month     = monthDate.getMonth();
   const weeks = [];
@@ -8390,6 +8444,7 @@ function renderGicaSchedule() {
 
 // ── Assessment Schedule (Calendar View) — month grid keyed by scheduledNext ───
 const GICA_CAL_TYPE = {
+  Missed:  { color: '#dc2626', bg: 'rgba(220,38,38,0.14)', label: 'Missed assessment' },
   Initial: { color: '#2563eb', bg: 'rgba(37,99,235,0.14)', label: 'Initial assessment' },
   Retest:  { color: '#fdf400', bg: 'rgba(180,83,9,0.14)',  label: 'Re-assessment' },
   Review:  { color: '#16a34a', bg: 'rgba(22,163,74,0.14)', label: 'Review assessment' },
@@ -8397,6 +8452,7 @@ const GICA_CAL_TYPE = {
 function _gicaCalendarHtml(vm) {
   // Resolve calendar type labels from i18n at render time so language changes take effect.
   const calTypeLabel = key => {
+    if (key === 'Missed')  return t('gicaCalTypeMissed');
     if (key === 'Initial') return t('gicaCalTypeInitial');
     if (key === 'Retest')  return t('gicaCalTypeRetest');
     if (key === 'Review')  return t('gicaCalTypeReview');
@@ -8435,10 +8491,6 @@ function _gicaCalendarHtml(vm) {
         <div id="gica-cal-bu-chips" class="gica-cal-bu-grid">${buChips}</div>
         <div class="gica-cal-sidebar-label" style="margin-top:12px;">${t('gicaCalType')}</div>
         <div id="gica-cal-type-chips" class="gica-cal-type-list">${typeRows}</div>
-        <div class="gica-cal-sidebar-label" style="margin-top:12px;">${t('gicaCalStatus')}</div>
-        <div class="gica-cal-type-row" style="cursor:default;">
-          <span class="gica-cal-type-dot" style="background:#dc2626;"></span> ${t('gicaCalOverdue')}
-        </div>
       </div>` : '';
 
   return `
@@ -8468,8 +8520,20 @@ function _gicaCalendarHtml(vm) {
 
 // Reuses the same _gicaEmpTableHtml component as the row-2 BU cohort drill-down
 // modal (_gicaShowBuCohortModal), scoped to one day + one BU.
-function _gicaCalDrillHtml(dayKey, bu, emps) {
-  const rows = emps.filter(e => e.bu === bu).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+function _gicaCalDrillHtml(dayKey, bu, entries) {
+  // Entries are {emp, kind} from _computeGicaCalendar; dedupe by empid so a person
+  // appearing under multiple event kinds on the same day shows once in the drill list.
+  const seen = new Set();
+  const rows = [];
+  entries.forEach(entry => {
+    const e = entry.emp;
+    if (!e || e.bu !== bu) return;
+    const key = e.empid || `${e.name}|${e.deptname}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push(e);
+  });
+  rows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
   return `
     <div class="gica-print-header">
