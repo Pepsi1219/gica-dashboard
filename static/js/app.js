@@ -7177,12 +7177,12 @@ function _gicaSchedBuckets(today, mode) {
         label: `${start.getDate()}/${start.getMonth() + 1}` });
     }
   } else {
-    const M = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
     for (let i = -5; i <= 6; i++) {
       const start = new Date(today.getFullYear(), today.getMonth() + i, 1);
       const end   = new Date(today.getFullYear(), today.getMonth() + i + 1, 0);
+      const yr = currentLang === 'th' ? start.getFullYear() + 543 : start.getFullYear();
       buckets.push({ start, end, isFuture: i > 0,
-        label: `${M[start.getMonth()]} ${String(start.getFullYear() + 543).slice(2)}` });
+        label: `${monthAbbr(start.getMonth())} ${String(yr).slice(2)}` });
     }
   }
   return buckets;
@@ -8400,6 +8400,26 @@ window._gicaEmpListPrint = function () {
   document.body.classList.remove('print-mode');
   overlay.innerHTML = '';
 };
+function _gicaSchedBuCardsHtml(allRows, activeBu, barId) {
+  if (activeBu === undefined) activeBu = _gicaSchedBu;
+  if (!barId) barId = 'gica-sched-bu-bar';
+  const buCounts = {};
+  BU_ORDER.forEach(bu => { buCounts[bu] = 0; });
+  allRows.forEach(e => { if (e.bu in buCounts) buCounts[e.bu]++; });
+  return `<div class="gica-sched-bu-bar no-print" id="${barId}">`
+    + BU_ORDER.map(bu => {
+        const count   = buCounts[bu];
+        const hasData = count > 0;
+        const active  = activeBu === bu;
+        return `<div class="gica-sched-bu-card${active ? ' is-active' : ''}${!hasData ? ' is-empty' : ''}" data-bu="${escapeHtml(bu)}">`
+          + `<div class="gica-sched-bu-card__name">${escapeHtml(bu)}</div>`
+          + `<div class="gica-sched-bu-card__count">${hasData ? count : '—'}</div>`
+          + `<div class="gica-sched-bu-card__label">${hasData ? escapeHtml(t('gicaEmpsWord')) : escapeHtml(t('gicaNoData') || 'ไม่มีข้อมูล')}</div>`
+          + `</div>`;
+      }).join('')
+    + `</div>`;
+}
+
 function renderGicaScheduleDrill() {
   if (_gicaDrillEscHandler) {
     document.removeEventListener('keydown', _gicaDrillEscHandler);
@@ -8414,8 +8434,8 @@ function renderGicaScheduleDrill() {
     return;
   }
   if (modal) modal.classList.remove('hidden');
-  let rows = _gicaSchedRows().filter(e => e.nextDate === _gicaSchedDate);
-  if (_gicaSchedBu) rows = rows.filter(e => e.bu === _gicaSchedBu);
+  const allRows = _gicaSchedRows().filter(e => e.nextDate === _gicaSchedDate);
+  let rows = _gicaSchedBu ? allRows.filter(e => e.bu === _gicaSchedBu) : allRows.slice();
   rows.sort((a, b) => a.bu.localeCompare(b.bu) || a.name.localeCompare(b.name));
   const buLabel = _gicaSchedBu ? ` · <span style="color:${GICA_BU_COLORS[_gicaSchedBu] || 'var(--accent)'};">${escapeHtml(_gicaSchedBu)}</span>` : '';
   const typeLabel = _gicaSchedMode !== 'all' ? ` (${_gicaSchedMode})` : '';
@@ -8430,8 +8450,22 @@ function renderGicaScheduleDrill() {
       <button onclick="_gicaSchedDate='';_gicaSchedBu='';renderGicaScheduleDrill();" style="font-size:0.72rem;padding:2px 8px;">✕ ${escapeHtml(t('gicaClose'))}</button>
       <button onclick="_gicaPrint();" style="font-size:0.72rem;padding:2px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">${escapeHtml(t('gicaPrintPdf'))}</button>
     </div>
-    ${_gicaFailStatsHtml(rows)}
+    ${_gicaSchedBuCardsHtml(allRows)}
+    <div class="gica-sched-fail-stats no-print">${_gicaFailStatsHtml(rows)}</div>
     <div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
+
+  // Wire BU cards: click card → filter; click empty area in bar → reset
+  const bar = wrap.querySelector('#gica-sched-bu-bar');
+  if (bar) {
+    bar.addEventListener('click', e => {
+      const card = e.target.closest('.gica-sched-bu-card');
+      if (!card) { _gicaSchedBu = ''; renderGicaScheduleDrill(); return; }
+      const bu = card.dataset.bu;
+      _gicaSchedBu = (_gicaSchedBu === bu) ? '' : bu;
+      renderGicaScheduleDrill();
+    });
+  }
+
   _gicaDrillEscHandler = e => {
     if (e.key === 'Escape') {
       _gicaSchedDate = '';
@@ -9415,12 +9449,36 @@ function _gicaShowEmpListModal(headingText, printOpts, employees) {
   const title = $('gica-buCohort-title');
   const body  = $('gica-buCohort-body');
   if (!modal || !body) return;
-  if (title) title.textContent = `${headingText} (${employees.length} ${t('gicaPeople')})`;
-  body.innerHTML = `${_gicaFailStatsHtml(employees)}<div class="gica-drill-table-wrap">${_gicaEmpTableHtml(employees, { sortable: false })}</div>`;
+
+  modal._cohortAllEmployees = employees;
+  modal._cohortBuFilter     = '';
+  modal._cohortPrintTitle   = printOpts.printTitle;
+  modal._cohortPrintSub     = printOpts.printSub;
+
+  const _render = buFilter => {
+    modal._cohortBuFilter  = buFilter;
+    const rows = buFilter ? employees.filter(e => e.bu === buFilter) : employees;
+    modal._cohortEmployees = rows;
+    const buSpan = buFilter
+      ? ` <span style="color:${GICA_BU_COLORS[buFilter] || 'var(--accent)'};">· ${escapeHtml(buFilter)}</span>`
+      : '';
+    if (title) title.innerHTML = `${escapeHtml(headingText)} (${rows.length} ${escapeHtml(t('gicaPeople'))})${buSpan}`;
+    body.innerHTML = _gicaSchedBuCardsHtml(employees, buFilter, 'gica-cohort-bu-bar')
+      + `<div class="gica-sched-fail-stats no-print">${_gicaFailStatsHtml(rows)}</div>`
+      + `<div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
+    const bar = body.querySelector('#gica-cohort-bu-bar');
+    if (bar) {
+      bar.addEventListener('click', e => {
+        const card = e.target.closest('.gica-sched-bu-card');
+        if (!card) { _render(''); return; }
+        const bu = card.dataset.bu;
+        _render(modal._cohortBuFilter === bu ? '' : bu);
+      });
+    }
+  };
+
+  _render('');
   modal.classList.remove('hidden');
-  modal._cohortEmployees  = employees;
-  modal._cohortPrintTitle = printOpts.printTitle;
-  modal._cohortPrintSub   = printOpts.printSub;
 }
 
 function _gicaShowBuCohortModal(bu, employees) {
