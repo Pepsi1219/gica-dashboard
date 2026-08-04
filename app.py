@@ -899,6 +899,15 @@ def _build_gica_payload(rows: list, freq_rows: list = None, kpi_by_bu: dict = No
             scheduled_next = None
             next_type = "Review" if passed else "Retest"
 
+        # Manual override — qe_edit / gica_admin can pin a specific date. Overrides the
+        # freq_months auto-calc above until a new test is added (add_result clears it).
+        override_iso = str(r.get("next_date_override", "") or "").strip()
+        override_dt  = _gica_parse_date(override_iso) if override_iso else None
+        is_overridden = False
+        if override_dt:
+            scheduled_next = override_dt
+            is_overridden  = True
+
         if scheduled_next:
             days_overdue = -(scheduled_next - today).days
             sched_status = "overdue" if days_overdue > 0 else ("due_soon" if days_overdue >= -7 else "upcoming")
@@ -933,6 +942,7 @@ def _build_gica_payload(rows: list, freq_rows: list = None, kpi_by_bu: dict = No
             "scheduledNext": scheduled_next.strftime("%Y-%m-%d") if scheduled_next else None,
             "daysOverdue":   days_overdue,
             "schedStatus":   sched_status,
+            "nextDateOverride": override_iso if is_overridden else None,
         })
 
     bus = sorted({e["bu"] for e in employees if e["bu"]})
@@ -1049,10 +1059,48 @@ def api_gica_add_result(bu, empid):
             "grade2":  _grade(insp),
             "date":    assess_date,
         })
-        sb_update("gica_employees", {"bu": bu, "empid": empid}, {"tests": tests})
+        # Clear any manual next-date override — new attempt means the auto-computed
+        # next date (based on freq_months from the new prev_actual) takes over.
+        sb_update("gica_employees", {"bu": bu, "empid": empid},
+                  {"tests": tests, "next_date_override": None})
         return jsonify({"message": "Saved"})
     except Exception as exc:
         app.logger.error("api_gica_add_result(%s/%s): %s", bu, empid, exc)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/api/gica/<bu>/employees/<empid>/next-date", methods=["PATCH"])
+def api_gica_set_next_date(bu, empid):
+    """Manually override the computed Next Assessment Date for one employee.
+    Body: {"date": "YYYY-MM-DD"} to pin a date, or {"date": null} / {"clear": true}
+    to reset back to the auto-computed schedule."""
+    deny = require_writable(("qe_edit", "gica_admin", "admin"))
+    if deny: return deny
+
+    bu    = str(bu or "").strip().upper()
+    empid = str(empid or "").strip()
+    if not bu or not empid:
+        return jsonify({"error": "bu and empid are required"}), 400
+
+    payload = request.json or {}
+    clear   = bool(payload.get("clear")) or payload.get("date") in (None, "", "null")
+    if clear:
+        override = None
+    else:
+        raw = str(payload.get("date") or "").strip()
+        if not _gica_parse_date(raw):
+            return jsonify({"error": "date ต้องเป็น YYYY-MM-DD"}), 400
+        override = raw
+
+    try:
+        rows = sb_select("gica_employees", filters={"bu": bu, "empid": empid})
+        if not rows:
+            return jsonify({"error": "Employee not found"}), 404
+        sb_update("gica_employees", {"bu": bu, "empid": empid},
+                  {"next_date_override": override})
+        return jsonify({"message": "Saved", "nextDateOverride": override})
+    except Exception as exc:
+        app.logger.error("api_gica_set_next_date(%s/%s): %s", bu, empid, exc)
         return jsonify({"error": "Internal server error"}), 500
 
 

@@ -244,6 +244,9 @@ const TRANSLATIONS = {
     gicaSaving:             'กำลังบันทึกข้อมูล...',
     gicaSaved:              'บันทึกข้อมูลแล้ว',
     gicaSaveFail:           'บันทึกไม่สำเร็จ',
+    gicaNextDateEditTip:    'คลิกเพื่อแก้ไขวันนัดสอบครั้งถัดไป',
+    gicaNextDateOverrideTip:'ตั้งค่าเองโดยผู้ใช้ (ไม่ใช่ค่าที่คำนวณอัตโนมัติ)',
+    gicaNextDateResetTip:   'รีเซ็ตกลับไปใช้ค่าที่คำนวณอัตโนมัติ',
     gicaDeleteEmpSaved:     'ลบพนักงานแล้ว',
     gicaErrPrefix:          'เกิดข้อผิดพลาด',
     gicaCreateTitle:        'เพิ่มพนักงานใหม่',
@@ -581,6 +584,9 @@ const TRANSLATIONS = {
     gicaSaving:             'Saving...',
     gicaSaved:              'Saved',
     gicaSaveFail:           'Save failed',
+    gicaNextDateEditTip:    'Click to edit next assessment date',
+    gicaNextDateOverrideTip:'Manually set (not auto-computed)',
+    gicaNextDateResetTip:   'Reset to auto-computed date',
     gicaDeleteEmpSaved:     'Employee deleted',
     gicaErrPrefix:          'Error',
     gicaCreateTitle:        'Create new operator',
@@ -908,6 +914,9 @@ const TRANSLATIONS = {
     gicaSaving:             'ກຳລັງບັນທຶກ...',
     gicaSaved:              'ບັນທຶກແລ້ວ',
     gicaSaveFail:           'ບັນທຶກບໍ່ສຳເລັດ',
+    gicaNextDateEditTip:    'ຄລິກເພື່ອແກ້ໄຂວັນນັດສອບຄັ້ງຕໍ່ໄປ',
+    gicaNextDateOverrideTip:'ຕັ້ງເອງໂດຍຜູ້ໃຊ້ (ບໍ່ແມ່ນຄ່າຄຳນວນອັດຕະໂນມັດ)',
+    gicaNextDateResetTip:   'ຣີເຊັດກັບໄປໃຊ້ຄ່າຄຳນວນອັດຕະໂນມັດ',
     gicaDeleteEmpSaved:     'ລຶບພະນັກງານແລ້ວ',
     gicaErrPrefix:          'ເກີດຂໍ້ຜິດພາດ',
     gicaCreateTitle:        'ເພີ່ມພະນັກງານໃໝ່',
@@ -1235,6 +1244,9 @@ const TRANSLATIONS = {
     gicaSaving:             'Đang lưu...',
     gicaSaved:              'Đã lưu',
     gicaSaveFail:           'Lưu thất bại',
+    gicaNextDateEditTip:    'Nhấn để chỉnh ngày đánh giá tiếp theo',
+    gicaNextDateOverrideTip:'Đặt thủ công (không phải tự tính)',
+    gicaNextDateResetTip:   'Đặt lại về ngày tự tính',
     gicaDeleteEmpSaved:     'Đã xóa nhân viên',
     gicaErrPrefix:          'Lỗi',
     gicaCreateTitle:        'Thêm nhân viên mới',
@@ -7401,7 +7413,7 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
   const buckets = _gicaSchedBuckets(today, timelineMode);
   const currentIdx = buckets.findIndex(b => today >= b.start && today <= b.end);
   const timeline = buckets.map(b => ({
-    label: b.label, isFuture: b.isFuture,
+    label: b.label, isFuture: b.isFuture, start: b.start, end: b.end,
     onTimePassed: 0, onTimeFailed: 0, upcoming: 0, overdue: 0,
     // Parallel employee lists collected at each count increment below — powers the
     // click-to-drill list (click a bar → see the people behind that number).
@@ -7414,8 +7426,10 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
     const testedBuckets = new Set();
     (e.history || []).forEach(h => {
       if (!h.date) return;
-      const actualIdx = _gicaSchedBucketIdx(h.date, buckets);
-      const schedIdx  = h.scheduledDate ? _gicaSchedBucketIdx(h.scheduledDate, buckets) : -1;
+      const actualIdx  = _gicaSchedBucketIdx(h.date, buckets);
+      const schedIdx   = h.scheduledDate ? _gicaSchedBucketIdx(h.scheduledDate, buckets) : -1;
+      const actualDate = _gicaParseDate(h.date);
+      const schedDate  = h.scheduledDate ? _gicaParseDate(h.scheduledDate) : null;
       if (actualIdx >= 0) {
         testedBuckets.add(actualIdx);
         const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
@@ -7425,11 +7439,15 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
         else               { timeline[actualIdx].onTimeFailed++; timeline[actualIdx].failEmps.push(e); }
       }
       // Late test → past is immutable: mark every missed bucket as overdue.
+      // GUARD: only cascade when person actually tested LATE (actualDate > schedDate).
+      // Without this guard, an initial test done EARLIER than the auto-scheduled date
+      // (e.g. startDate+1mo default) wrongly flags the intervening weeks as overdue.
       // Weekly: cascade from scheduled bucket through bucket-before-actual so a person who
       //         eventually tests still shows overdue for each week they skipped (matches the
       //         scheduledNext cascade above for still-overdue people).
       // Monthly: single-bucket mark to keep monthly's "count once" policy consistent.
-      if (schedIdx >= 0 && schedIdx !== actualIdx) {
+      const wasLate = schedDate && actualDate && actualDate > schedDate;
+      if (wasLate && schedIdx >= 0 && schedIdx !== actualIdx) {
         if (timelineMode === 'week') {
           for (let bi = schedIdx; bi < buckets.length; bi++) {
             if (actualIdx >= 0 && bi >= actualIdx) break;
@@ -7472,6 +7490,19 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
         if (idx >= 0 && !testedBuckets.has(idx)) { timeline[idx].upcoming++; timeline[idx].upcomingEmps.push(e); }
       }
     }
+  });
+
+  // Compute unique person count per bucket (union of the 4 lists de-duped).
+  // The Total bar shows this — not the naive sum of segment counts, which
+  // double-counts anyone appearing in multiple categories (e.g. overdue-cascaded
+  // through week X then also upcoming in a later week).
+  timeline.forEach(b => {
+    const seen = new Set();
+    [...b.passEmps, ...b.failEmps, ...b.overdueEmps, ...b.upcomingEmps].forEach(e => {
+      const k = `${e.bu}|${e.empid}`;
+      seen.add(k);
+    });
+    b.totalUnique = seen.size;
   });
 
   const weeklyBuCards = _computeGicaWeeklyBuCards(emps, today);
@@ -7968,7 +7999,7 @@ function _mountGicaSchedule(html, vm) {
         datasets: [
           {
             label: t('gicaLegendTotal'), stack: 'total',
-            data: vm.timeline.map(t => t.onTimePassed + t.onTimeFailed + t.overdue + t.upcoming),
+            data: vm.timeline.map(t => t.totalUnique),
             backgroundColor: '#64748b', borderRadius: 4,
             datalabels: { anchor: 'end', align: 'top', font: { size: 10, weight: '600' }, color: '#475569', formatter: v => v > 0 ? v : null, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 },
           },
@@ -8009,7 +8040,7 @@ function _mountGicaSchedule(html, vm) {
               title: ctx => vm.timeline[ctx[0].dataIndex].label,
               afterBody: ctx => {
                 const t = vm.timeline[ctx[0].dataIndex];
-                return [`รวมทั้งหมด: ${t.onTimePassed + t.onTimeFailed + t.overdue + t.upcoming} คน`, _clickHint];
+                return [`รวมทั้งหมด: ${t.totalUnique} คน`, _clickHint];
               },
             },
           },
@@ -8807,6 +8838,13 @@ function _gicaEmpTableHtml(rows, opts = {}) {
               const deleteTd = deletable
                 ? `<td class="td-c"><button class="gica-delete-emp-btn emp-act-btn" data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" data-name="${escapeHtml(e.name || '')}" title="${escapeHtml(t('gicaDeleteEmpTip'))}" style="opacity:1;color:#dc2626;border-color:#fca5a5;"><i class="ti ti-trash" aria-hidden="true"></i></button></td>`
                 : '';
+              const overrideMark = e.nextDateOverride
+                ? ` <span class="gica-next-date-mark" title="${escapeHtml(t('gicaNextDateOverrideTip'))}">*</span>`
+                : '';
+              const nextDateCls   = editable ? 'gica-next-date-cell' : '';
+              const nextDateAttrs = editable
+                ? ` data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" data-nextdate="${escapeHtml(e.nextDate || '')}" data-override="${e.nextDateOverride ? '1' : '0'}" title="${escapeHtml(t('gicaNextDateEditTip'))}"`
+                : '';
               return `<tr>
                 ${numTd}
                 <td>${escapeHtml(e.bu)}</td>
@@ -8819,7 +8857,7 @@ function _gicaEmpTableHtml(rows, opts = {}) {
                 <td class="td-c"><span class="emp-id-cell">${e.attempt}</span></td>
                 <td class="td-c">${_gicaFmtDate(e.lastDate)}</td>
                 <td class="td-c col-group-end">${_gicaEmpTableMonthDots(e)}</td>
-                <td class="td-c">${_gicaFmtDate(e.nextDate)}</td>
+                <td class="td-c ${nextDateCls}"${nextDateAttrs}>${_gicaFmtDate(e.nextDate)}${overrideMark}</td>
                 <td class="td-c">${_gicaDaysBadge(e.nextDate)}</td>
                 <td class="td-c">${_gicaTypeBadge(e.nextType)}</td>
                 ${deleteTd}
@@ -8877,7 +8915,10 @@ function renderGicaTable() {
   const editable  = ['qe_edit', 'gica_admin', 'admin'].includes(currentRole);
   const deletable = ['gica_admin', 'admin'].includes(currentRole);
   wrap.innerHTML = _gicaEmpTableHtml(pageRows, { sortable: true, editable, deletable });
-  if (editable)  _wireGicaEmpNameClicks(wrap);
+  if (editable) {
+    _wireGicaEmpNameClicks(wrap);
+    _wireGicaNextDateClicks(wrap);
+  }
   if (deletable) _wireGicaDeleteBtns(wrap);
 
   const countBadge = $('gica-count-badge');
@@ -8893,6 +8934,67 @@ function _wireGicaEmpNameClicks(wrap) {
   wrap.querySelectorAll('.gica-emp-name-cell[data-empid]').forEach(td => {
     td.addEventListener('click', () => _gicaOpenResultModal(td.dataset.bu, td.dataset.empid));
   });
+}
+
+// Inline-edit Next Date for qe_edit / gica_admin / admin.
+// Click cell → date input + Save/Cancel/Reset. Reset clears the manual override
+// so the auto-computed schedule kicks back in. Backend clears override
+// automatically when a new test result is added.
+function _wireGicaNextDateClicks(wrap) {
+  wrap.querySelectorAll('.gica-next-date-cell[data-empid]').forEach(td => {
+    td.style.cursor = 'pointer';
+    td.addEventListener('click', () => _gicaBeginNextDateEdit(td));
+  });
+}
+
+function _gicaBeginNextDateEdit(td) {
+  if (td._editing) return;
+  td._editing = true;
+  const { bu, empid, nextdate, override } = td.dataset;
+  const initial = nextdate || '';
+  const originalHtml = td.innerHTML;
+  const hasOverride = override === '1';
+  td.innerHTML = `
+    <div class="gica-ie-nextdate">
+      <input type="date" class="gica-ie-nextdate-input" value="${escapeHtml(initial)}">
+      <button type="button" class="btn-confirm-inline" title="Save">✓</button>
+      <button type="button" class="btn-cancel-inline" title="Cancel">✗</button>
+      ${hasOverride ? `<button type="button" class="gica-ie-nextdate-reset" title="${escapeHtml(t('gicaNextDateResetTip'))}">↺</button>` : ''}
+    </div>`;
+  const input = td.querySelector('.gica-ie-nextdate-input');
+  if (input) { try { input.focus(); } catch (_) {} }
+
+  const cleanup = () => {
+    td._editing = false;
+    if (td._escHandler) { document.removeEventListener('keydown', td._escHandler); td._escHandler = null; }
+  };
+  const cancel = () => { cleanup(); td.innerHTML = originalHtml; };
+  const save = async (newDate) => {
+    cleanup();
+    td.innerHTML = `<span style="opacity:0.55;">…</span>`;
+    try {
+      const body = newDate ? { date: newDate } : { clear: true };
+      await api(`/api/gica/${encodeURIComponent(bu)}/employees/${encodeURIComponent(empid)}/next-date`,
+        { method: 'PATCH', body: JSON.stringify(body) });
+      await _gicaRefreshData();
+      renderGicaTable();
+      if (typeof _gicaScheduleRendered !== 'undefined' && _gicaScheduleRendered) renderGicaSchedule();
+      showToast(t('gicaSaved'));
+    } catch (err) {
+      showToast(`${t('gicaSaveFail')}: ${err.message || ''}`);
+      td.innerHTML = originalHtml;
+    }
+  };
+  td.querySelector('.btn-confirm-inline').onclick = e => { e.stopPropagation(); save(input.value); };
+  td.querySelector('.btn-cancel-inline' ).onclick = e => { e.stopPropagation(); cancel(); };
+  const resetBtn = td.querySelector('.gica-ie-nextdate-reset');
+  if (resetBtn) resetBtn.onclick = e => { e.stopPropagation(); save(''); };
+
+  td._escHandler = e => {
+    if (e.key === 'Escape') cancel();
+    else if (e.key === 'Enter' && e.target === input) save(input.value);
+  };
+  document.addEventListener('keydown', td._escHandler);
 }
 
 function _wireGicaDeleteBtns(wrap) {
@@ -9444,7 +9546,8 @@ function _wireGicaCreateModal() {
 
 // Generic employee-list modal — reused by the weekly BU cohort cards and the
 // Assessment Schedule Timeline click-to-drill. `printOpts` sets the print header text.
-function _gicaShowEmpListModal(headingText, printOpts, employees) {
+// `dateRange` is optional — e.g. "6-12 July 2026" shown in parentheses after the heading.
+function _gicaShowEmpListModal(headingText, printOpts, employees, dateRange) {
   const modal = $('gica-buCohort-modal');
   const title = $('gica-buCohort-title');
   const body  = $('gica-buCohort-body');
@@ -9462,7 +9565,10 @@ function _gicaShowEmpListModal(headingText, printOpts, employees) {
     const buSpan = buFilter
       ? ` <span style="color:${GICA_BU_COLORS[buFilter] || 'var(--accent)'};">· ${escapeHtml(buFilter)}</span>`
       : '';
-    if (title) title.innerHTML = `${escapeHtml(headingText)} (${rows.length} ${escapeHtml(t('gicaPeople'))})${buSpan}`;
+    const rangePart = dateRange ? ` <span class="gica-modal-date-range">(${escapeHtml(dateRange)})</span>` : '';
+    const peopleIcon = `<svg class="gica-modal-people-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.33 0-8 1.67-8 5v2h16v-2c0-3.33-4.67-5-8-5Z"/></svg>`;
+    const countChip  = `<span class="gica-modal-people-count">${peopleIcon}${rows.length} ${escapeHtml(t('gicaPeople'))}</span>`;
+    if (title) title.innerHTML = `${escapeHtml(headingText)}${rangePart} ${countChip}${buSpan}`;
     body.innerHTML = _gicaSchedBuCardsHtml(employees, buFilter, 'gica-cohort-bu-bar')
       + `<div class="gica-sched-fail-stats no-print">${_gicaFailStatsHtml(rows)}</div>`
       + `<div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
@@ -9489,6 +9595,32 @@ function _gicaShowBuCohortModal(bu, employees) {
   );
 }
 
+// Format a bucket's start/end as a human-readable date range for the drill modal header.
+// Weekly: "6-12 July 2026" (same month) / "29 June - 5 July 2026" (crosses month)
+// Monthly: "July 2026" (full month) — otherwise falls back to day range
+function _gicaBucketDateRange(bucket) {
+  const start = bucket && bucket.start;
+  const end   = bucket && bucket.end;
+  if (!start || !end) return '';
+  const localeMap = { th: 'th-TH', en: 'en-US', lo: 'lo-LA', vi: 'vi-VN' };
+  const locale    = localeMap[currentLang] || 'en-US';
+  const yearAdj   = currentLang === 'th' ? 543 : 0;
+  const monthOf   = d => d.toLocaleDateString(locale, { month: 'long' });
+  const sameMonth = start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
+  const sameYear  = start.getFullYear() === end.getFullYear();
+  const endYear   = end.getFullYear() + yearAdj;
+  const startYear = start.getFullYear() + yearAdj;
+  if (sameMonth) {
+    const lastDay = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+    if (start.getDate() === 1 && end.getDate() === lastDay) return `${monthOf(end)} ${endYear}`;
+    return `${start.getDate()}-${end.getDate()} ${monthOf(end)} ${endYear}`;
+  }
+  if (sameYear) {
+    return `${start.getDate()} ${monthOf(start)} - ${end.getDate()} ${monthOf(end)} ${endYear}`;
+  }
+  return `${start.getDate()} ${monthOf(start)} ${startYear} - ${end.getDate()} ${monthOf(end)} ${endYear}`;
+}
+
 // Click-to-drill from an Assessment Schedule Timeline bar → list the people behind it.
 // datasetIndex: 0 = Total, 1 = On-time Pass, 2 = On-time Fail, 3 = Overdue.
 function _gicaShowSchedTimelineDrill(bucket, datasetIndex) {
@@ -9506,11 +9638,13 @@ function _gicaShowSchedTimelineDrill(bucket, datasetIndex) {
     catLabel = t('gicaLegendTotal');
   }
   if (!emps.length) return;
-  const heading = `${catLabel} · ${bucket.label}`;
+  const heading   = `${catLabel} · ${bucket.label}`;
+  const dateRange = _gicaBucketDateRange(bucket);
   _gicaShowEmpListModal(
     heading,
-    { printTitle: t('gicaEmpListForAssessment'), printSub: heading },
+    { printTitle: t('gicaEmpListForAssessment'), printSub: `${heading}${dateRange ? ` (${dateRange})` : ''}` },
     emps,
+    dateRange,
   );
 }
 
