@@ -2250,11 +2250,18 @@ tbody tr:hover { filter: brightness(.97); }
   grid-column: span 3;          /* ยึดพื้นที่เต็ม 3 คอลัมน์ขนานไปด้านบน */
 }
 
-.quad-grid       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
-.quad-card       { background: var(--surface); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; }
+.quad-grid       { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.quad-card       { background: var(--surface); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; min-width: 0; }
 .quad-card__title { font-size: 0.75rem; font-weight: 600; color: var(--text); }
 .quad-card__sub   { font-size: 0.65rem; margin: 2px 0 8px; }
-.quad-chart-wrap  { position: relative; height: 220px; }
+.quad-chart-wrap  { position: relative; height: 220px; width: 100%; }
+@media (max-width: 1024px) {
+  .quad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .quad-grid { grid-template-columns: 1fr; }
+  .quad-chart-wrap { height: 260px; }
+}
 
 /* — Expectation Matrix dark mode — */
 [data-theme="dark"] .exp-badge--A    { background: #052e16; color: #4ade80; }
@@ -2331,6 +2338,14 @@ tbody tr:hover { filter: brightness(.97); }
 .mini-bar__bu--lg { min-width:32px; font-size:0.8rem; font-weight:700; }
 .mini-bar__track--lg { height:10px; }
 .mini-bar__count--lg { min-width:34px; }
+/* — GICA Schedule row-1 cards — header + body split for cross-card alignment — */
+.row1-card { display:flex; flex-direction:column; }
+.row1-head { min-height:10px; display:flex; flex-direction:column; }
+.row1-body { display:flex; flex-direction:column; gap:3px; }
+.row1-body--divided { border-top:1px solid var(--border-light); padding-top:12px; margin-top:8px; }
+.row1-body .mini-bar__row--lg { min-height:24px; }
+.row1-legend { margin-top:10px; padding-top:8px; border-top:1px dashed var(--border-light); font-size:0.66rem; color:var(--text-muted); }
+.row1-legend__dot { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; vertical-align:middle; }
 /* — GICA Sub-tab bar — */
 /* ─── 1. แผงถาดรองแท็บ (Sub-tab Bar Container) ─── */
 /* GICA Employee List — filter bar + fail stats on one row */
@@ -2439,6 +2454,159 @@ tbody tr:hover { filter: brightness(.97); }
   background: var(--warn, #f59e0b);
   color: #fff;
   border-color: transparent;
+}
+
+/* ── KPI × BU drill-down modal ─────────────────────────────────────── */
+.gica-kpi-bu-detail-modal__panel {
+  max-width: 900px !important;
+  width: 92% !important;
+  max-height: 94vh !important;
+}
+.gica-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  background: var(--surface2, #f1f5f9);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.gica-mini-btn:hover { background: var(--hover-bg, #e2e8f0); }
+.gica-mini-btn--png   { color: var(--accent, #2563eb); border-color: var(--accent, #2563eb); }
+.gica-mini-btn--png:hover   { background: var(--accent, #2563eb); color: #fff; }
+.gica-mini-btn--print { color: #475569; }
+.gica-mini-btn--print:hover { background: #475569; color: #fff; }
+
+.kpi-bu-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  /* html2canvas can't parse color-mix(); use a plain accent-tinted surface instead */
+  background: var(--surface2, #f1f5f9);
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--kpi-bu-color, #6b7280);
+  margin-bottom: 12px;
+}
+.kpi-bu-detail-hero__ring { position: relative; width: 116px; height: 116px; flex-shrink: 0; }
+.kpi-bu-detail-hero__ring-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.kpi-bu-detail-hero__pct { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+.kpi-bu-detail-hero__frac { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
+.kpi-bu-detail-hero__meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.kpi-bu-detail-hero__eyebrow {
+  font-size: 0.82rem; font-weight: 600; color: var(--text-muted);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.kpi-bu-detail-hero__badge {
+  color: #fff; font-weight: 800; padding: 3px 10px; border-radius: 6px;
+  font-size: 0.78rem; letter-spacing: 0.03em;
+}
+.kpi-bu-detail-hero__stats {
+  display: flex; flex-wrap: wrap; gap: 8px 14px;
+  font-size: 0.78rem;
+}
+
+.kpi-bu-detail-section-title {
+  font-size: 0.82rem; font-weight: 700; color: var(--text); margin: 12px 0 6px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+/* Grid: Level(name) | Target | Actual(bar) | % | Counts(stats) | Status
+   Actual narrower, Counts wider per user request. */
+.kpi-bu-lv-header, .kpi-bu-lv-row {
+  display: grid;
+  grid-template-columns: 130px 70px 150px 60px 1fr 90px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+}
+.kpi-bu-lv-header {
+  font-size: 0.68rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-light);
+}
+.kpi-bu-lv-header > div:nth-child(2),
+.kpi-bu-lv-header > div:nth-child(3),
+.kpi-bu-lv-header > div:nth-child(4),
+.kpi-bu-lv-header > div:nth-child(5),
+.kpi-bu-lv-header > div:nth-child(6) { text-align: center; }
+.kpi-bu-lv-list { display: flex; flex-direction: column; gap: 3px; }
+.kpi-bu-lv-row {
+  background: var(--surface); border: 1px solid var(--border-light);
+  border-radius: 6px; font-size: 0.8rem;
+}
+.kpi-bu-lv-row--empty { opacity: 0.55; }
+.kpi-bu-lv-row__name { font-weight: 600; color: var(--text); }
+.kpi-bu-lv-row__kpi {
+  text-align: center; font-weight: 700; color: var(--accent, #2563eb);
+  font-family: 'Geist Mono', ui-monospace, monospace;
+}
+.kpi-bu-lv-row__bar-wrap { padding: 0 4px; }
+.kpi-bu-lv-row__bar {
+  position: relative; height: 12px; background: var(--border-light);
+  border-radius: 6px; overflow: visible;
+}
+.kpi-bu-lv-row__fill {
+  position: absolute; top: 0; left: 0; height: 100%;
+  border-radius: 6px; transition: width 0.4s;
+}
+.kpi-bu-lv-row__kpi-marker {
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
+  background: var(--text); box-shadow: 0 0 0 1px var(--surface);
+}
+.kpi-bu-lv-row__empty {
+  font-size: 0.72rem; color: var(--text-muted); font-style: italic;
+}
+.kpi-bu-lv-row__pct {
+  text-align: center; font-weight: 800; font-size: 0.9rem;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+}
+.kpi-bu-lv-row__stats {
+  display: flex; gap: 6px; justify-content: center;
+  font-size: 0.72rem; font-weight: 700;
+}
+.kpi-bu-lv-row__stat {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--surface2, #f1f5f9); color: var(--text-muted);
+  min-width: 26px; justify-content: center;
+}
+.kpi-bu-lv-row__stat--pass    { color: #16a34a; background: #dcfce7; }
+.kpi-bu-lv-row__stat--fail    { color: #dc2626; background: #fee2e2; }
+.kpi-bu-lv-row__stat--pending { color: #94a3b8; background: #f1f5f9; }
+.kpi-bu-lv-row__stat--total   { color: var(--text); background: transparent; border: 1px solid var(--border-light); }
+.kpi-bu-lv-row__badge {
+  text-align: center; font-size: 0.7rem; font-weight: 700;
+  padding: 4px 8px; border-radius: 6px;
+}
+.kpi-bu-lv-row__badge--pass  { background: #dcfce7; color: #16a34a; }
+.kpi-bu-lv-row__badge--fail  { background: #fee2e2; color: #dc2626; }
+.kpi-bu-lv-row__badge-plain {
+  text-align: center; font-size: 0.78rem; font-weight: 600;
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .kpi-bu-lv-header, .kpi-bu-lv-row {
+    grid-template-columns: 90px 55px 1fr 50px;
+    grid-template-areas:
+      "name kpi bar pct"
+      "stats stats stats badge";
+  }
+  .kpi-bu-lv-row__name   { grid-area: name; }
+  .kpi-bu-lv-row__kpi    { grid-area: kpi; }
+  .kpi-bu-lv-row__bar-wrap { grid-area: bar; }
+  .kpi-bu-lv-row__pct    { grid-area: pct; }
+  .kpi-bu-lv-row__stats  { grid-area: stats; justify-content: flex-start; }
+  .kpi-bu-lv-row__badge  { grid-area: badge; }
 }
 .gica-sched-bu-bar {
   display: grid;

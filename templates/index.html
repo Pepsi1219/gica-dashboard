@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=196" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=201" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -38,7 +38,8 @@
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
         <span id="roleBadge" class="role-badge hidden"></span>
-        <div id="authBox" class="auth-box"></div>
+        <div id="authBox" class="auth-box" style="display:none;"></div>
+        <a href="#" id="logoutLinkStandalone" class="auth-box hidden" data-i18n="logout">Logout</a>
       </div>
     </div>
   </header>
@@ -1048,6 +1049,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=447"></script>
+  <script src="/static/js/app.js?v=457"></script>
 </body>
 </html>

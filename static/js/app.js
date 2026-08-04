@@ -207,8 +207,23 @@ const TRANSLATIONS = {
     gicaKpiPending:         'ยังไม่ประเมิน',
     gicaKpiTested:          'ประเมินแล้ว',
     gicaKpiNoDataBu:        'ยังไม่มีข้อมูล',
+    gicaKpiNoLevelData:     'ยังไม่มีพนักงานในระดับนี้',
     gicaKpiAchieved:        'ผ่าน KPI',
     gicaKpiNotAchieved:     'ไม่ผ่าน KPI',
+    gicaKpiBuDetailTip:     'คลิกดูรายละเอียด KPI ต่อระดับใน BU นี้',
+    gicaKpiBuDetailTitle:   'รายละเอียด KPI ต่อระดับ',
+    gicaKpiBuDetailSubtitle:'สรุปผลการประเมินต่อระดับ',
+    gicaKpiPerLevel:        'KPI ต่อระดับ',
+    gicaKpiTargetShort:     'เป้าหมาย',
+    gicaKpiActualPct:       'ผลจริง',
+    gicaKpiCounts:          'ผ่าน / ไม่ผ่าน / รอ / รวม',
+    gicaKpiResult:          'สถานะ',
+    gicaKpiMet:             'ถึงเป้า',
+    gicaKpiMissed:          'ต่ำกว่าเป้า',
+    gicaKpiAvgTarget:       'KPI เป้าเฉลี่ย',
+    gicaKpiLevelsMeeting:   'ระดับที่ถึงเป้า',
+    gicaKpiSavePng:         'บันทึกเป็น PNG',
+    gicaKpiPrint:           'พิมพ์',
     gicaKpiModalDesc:       'กำหนด KPI target (%) สำหรับแต่ละระดับ',
     gicaClickToView:        'คลิกดูรายชื่อ',
     gicaClickToViewDept:    'คลิกดูรายชื่อทั้งแผนก',
@@ -547,8 +562,23 @@ const TRANSLATIONS = {
     gicaKpiPending:         'Not Assessed',
     gicaKpiTested:          'Assessed',
     gicaKpiNoDataBu:        'No data',
+    gicaKpiNoLevelData:     'No employees at this level',
     gicaKpiAchieved:        'KPI Achieved',
     gicaKpiNotAchieved:     'KPI Not Achieved',
+    gicaKpiBuDetailTip:     'Click to view KPI details per level in this BU',
+    gicaKpiBuDetailTitle:   'KPI Detail per Level',
+    gicaKpiBuDetailSubtitle:'Assessment result summary per level',
+    gicaKpiPerLevel:        'KPI per Level',
+    gicaKpiTargetShort:     'Target',
+    gicaKpiActualPct:       'Actual',
+    gicaKpiCounts:          'Pass / Fail / Pending / Total',
+    gicaKpiResult:          'Status',
+    gicaKpiMet:             'Achieve KPI',
+    gicaKpiMissed:          'Below Target',
+    gicaKpiAvgTarget:       'Avg Target',
+    gicaKpiLevelsMeeting:   'Levels meeting KPI',
+    gicaKpiSavePng:         'Save as PNG',
+    gicaKpiPrint:           'Print',
     gicaKpiModalDesc:       'Define KPI target (%) for each level',
     gicaClickToView:        'Click to see names',
     gicaClickToViewDept:    'Click to see all names in this department',
@@ -3515,9 +3545,9 @@ let _adminBtnAllowedByRole = false;
 function _roleBadgeText(role) {
   switch (role) {
     case 'csa_user':   return 'CSA';
-    case 'qe_edit':    return 'QE (GICA Edit)';
-    case 'qe_read':    return 'QE (GICA Read)';
-    case 'gica_admin': return 'GICA Admin';
+    case 'qe_edit':    return 'GICA Edit Mode';
+    case 'qe_read':    return 'GICA View Mode';
+    case 'gica_admin': return 'GICA Admin Mode';
     case 'qe_audit':   return 'QE (Auditor)';
     case 'qe_auditee': return 'QE (Auditee)';
     case 'admin':      return 'Admin';
@@ -3941,6 +3971,15 @@ async function init() {
   $('authBox').innerHTML = `${userLabel ? userLabel + ' · ' : ''}` +
     `<a href="#" id="logoutLink">${t('logout')}</a>`;
   $('logoutLink')?.addEventListener('click', e => { e.preventDefault(); _doLogout(); });
+
+  // Standalone logout link — visible replacement while authBox is hidden.
+  // Remove the .hidden inline swap when re-enabling authBox.
+  const logoutStandalone = $('logoutLinkStandalone');
+  if (logoutStandalone) {
+    logoutStandalone.classList.remove('hidden');
+    logoutStandalone.textContent = t('logout');
+    logoutStandalone.onclick = e => { e.preventDefault(); _doLogout(); };
+  }
   show($('mainTabBar'));
   // Admin panel is a write surface (holidays) — hide it for any view-only session,
   // and switchTab() additionally hides it while on the GICA tab (see initTabBar).
@@ -6092,7 +6131,7 @@ function _gicaKpiSummaryHtml(vm) {
     const buColor = (typeof GICA_BU_COLORS !== 'undefined' && GICA_BU_COLORS[s.bu]) || '#6b7280';
     if (s.total === 0) {
       return `
-        <div class="kpi-sum-bu-card kpi-sum-bu-card--empty" style="--kpi-bu-color:${buColor};">
+        <div class="kpi-sum-bu-card kpi-sum-bu-card--empty" data-bu="${escapeHtml(s.bu)}" style="--kpi-bu-color:${buColor};">
           <div class="kpi-sum-bu-card__head">
             <span class="kpi-sum-bu-badge">${escapeHtml(s.bu)}</span>
           </div>
@@ -6103,7 +6142,7 @@ function _gicaKpiSummaryHtml(vm) {
     const pctTxt = pct == null ? '—' : pct.toFixed(1) + '%';
     const color = pctColor(pct);
     return `
-      <div class="kpi-sum-bu-card" style="--kpi-bu-color:${buColor};">
+      <div class="kpi-sum-bu-card" data-bu="${escapeHtml(s.bu)}" title="${escapeHtml(t('gicaKpiBuDetailTip'))}" style="--kpi-bu-color:${buColor};cursor:pointer;">
         <div class="kpi-sum-bu-card__head">
           <span class="kpi-sum-bu-badge">${escapeHtml(s.bu)}</span>
           <span class="kpi-sum-bu-card__total"><i class="ti ti-users" aria-hidden="true"></i> ${s.total}</span>
@@ -6133,6 +6172,187 @@ function _gicaKpiSummaryHtml(vm) {
     ${hero}
     <div class="kpi-sum-section-title">${t('gicaKpiBuSection')}</div>
     <div class="kpi-sum-bu-grid">${buCards}</div>`;
+}
+
+// ── KPI × BU drill-down ───────────────────────────────────────────────────────
+// Click a BU card in the KPI Summary modal → opens this per-level breakdown.
+// Shows every level in GICA_LEVEL_ORDER (minus Department Head), whether or not
+// the BU has anyone at that level — matches the user's request for a fixed
+// 10-row layout (QEDM → Worker).
+function _computeGicaKpiBuDetail(emps, bu, kpiTargets) {
+  const inBu   = emps.filter(e => e.bu === bu);
+  const levels = GICA_LEVEL_ORDER.filter(lv => lv !== 'Department Head');
+  const map    = {};
+  levels.forEach(lv => { map[lv] = { level: lv, total: 0, tested: 0, passed: 0, failed: 0, pending: 0 }; });
+  inBu.forEach(e => {
+    if (!e.level || !map[e.level]) return;
+    const s = map[e.level];
+    s.total++;
+    if (e.passed === true)       { s.passed++; s.tested++; }
+    else if (e.passed === false) { s.failed++; s.tested++; }
+    else                         { s.pending++; }
+  });
+  const kpiFor = lv => {
+    const t = kpiTargets[lv];
+    if (!t) return null;
+    return t[bu] ?? t.all ?? null;
+  };
+  const rows = levels.map(lv => {
+    const s = map[lv];
+    const kpi = kpiFor(lv);
+    const passRate = s.tested > 0 ? (s.passed / s.tested * 100) : null;
+    const meetsKpi = kpi != null && passRate != null && passRate >= kpi;
+    return { ...s, kpi, passRate, meetsKpi };
+  });
+  const totals = {
+    total:   inBu.length,
+    tested:  inBu.filter(e => e.passed === true || e.passed === false).length,
+    passed:  inBu.filter(e => e.passed === true).length,
+    failed:  inBu.filter(e => e.passed === false).length,
+    pending: inBu.filter(e => e.passed !== true && e.passed !== false).length,
+  };
+  totals.passRate = totals.tested > 0 ? (totals.passed / totals.tested * 100) : null;
+  const scored = rows.filter(r => r.kpi != null && r.tested > 0);
+  const meetingKpi = scored.filter(r => r.meetsKpi).length;
+  let sumW = 0, sumWK = 0;
+  scored.forEach(r => { sumW += r.tested; sumWK += r.kpi * r.tested; });
+  const avgKpi = sumW > 0 ? (sumWK / sumW) : null;
+  return { bu, totals, rows, avgKpi, meetingKpi, scoredCount: scored.length };
+}
+
+function _gicaKpiBuDetailHtml(vm) {
+  const buColor  = (typeof GICA_BU_COLORS !== 'undefined' && GICA_BU_COLORS[vm.bu]) || '#6b7280';
+  const pctColor = pct => (pct == null) ? '#94a3b8' : (pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626');
+  const pctFmt   = v => v == null ? '—' : v.toFixed(1) + '%';
+  const heroColor = pctColor(vm.totals.passRate);
+  const ring = (pct, color, size = 100, sw = 10) => {
+    const r = (size - sw) / 2, cx = size / 2, cy = size / 2;
+    const circ = 2 * Math.PI * r;
+    const p = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+    const dash = (p / 100) * circ;
+    return `
+      <svg class="kpi-sum-ring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border-light)" stroke-width="${sw}"></circle>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}"
+                stroke-linecap="round" stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}"
+                transform="rotate(-90 ${cx} ${cy})"></circle>
+      </svg>`;
+  };
+
+  const hero = `
+    <div class="kpi-bu-detail-hero" style="--kpi-bu-color:${buColor};">
+      <div class="kpi-bu-detail-hero__ring">${ring(vm.totals.passRate ?? 0, heroColor, 116, 11)}
+        <div class="kpi-bu-detail-hero__ring-center">
+          <div class="kpi-bu-detail-hero__pct" style="color:${heroColor};">${pctFmt(vm.totals.passRate)}</div>
+          <div class="kpi-bu-detail-hero__frac">${vm.totals.passed}/${vm.totals.tested}</div>
+        </div>
+      </div>
+      <div class="kpi-bu-detail-hero__meta">
+        <div class="kpi-bu-detail-hero__eyebrow"><span class="kpi-bu-detail-hero__badge" style="background:${buColor};">${escapeHtml(vm.bu)}</span> ${escapeHtml(t('gicaKpiBuDetailSubtitle'))}</div>
+        <div class="kpi-bu-detail-hero__stats">
+          <div class="kpi-sum-stat"><span class="kpi-sum-stat__dot" style="background:#16a34a;"></span><strong>${vm.totals.passed}</strong> ${t('gicaKpiPassed')}</div>
+          <div class="kpi-sum-stat"><span class="kpi-sum-stat__dot" style="background:#dc2626;"></span><strong>${vm.totals.failed}</strong> ${t('gicaKpiFailed')}</div>
+          <div class="kpi-sum-stat"><span class="kpi-sum-stat__dot" style="background:#94a3b8;"></span><strong>${vm.totals.pending}</strong> ${t('gicaKpiPending')}</div>
+          <div class="kpi-sum-stat kpi-sum-stat--tot"><i class="ti ti-users" aria-hidden="true"></i> <strong>${vm.totals.total}</strong> Total</div>
+          <div class="kpi-sum-stat kpi-sum-stat--kpi"><i class="ti ti-target" aria-hidden="true"></i> ${escapeHtml(t('gicaKpiAvgTarget'))}: <strong>${vm.avgKpi == null ? '—' : vm.avgKpi.toFixed(0) + '%'}</strong></div>
+          <div class="kpi-sum-stat kpi-sum-stat--meet"><i class="ti ti-checks" aria-hidden="true"></i> ${escapeHtml(t('gicaKpiLevelsMeeting'))}: <strong>${vm.meetingKpi}/${vm.scoredCount}</strong></div>
+        </div>
+      </div>
+    </div>`;
+
+  const rowsHtml = vm.rows.map(r => {
+    if (r.total === 0) {
+      return `
+        <div class="kpi-bu-lv-row kpi-bu-lv-row--empty">
+          <div class="kpi-bu-lv-row__name">${escapeHtml(r.level)}</div>
+          <div class="kpi-bu-lv-row__kpi">${r.kpi == null ? '—' : r.kpi + '%'}</div>
+          <div class="kpi-bu-lv-row__bar-wrap"><div class="kpi-bu-lv-row__empty">${escapeHtml(t('gicaKpiNoLevelData'))}</div></div>
+          <div class="kpi-bu-lv-row__pct">—</div>
+          <div class="kpi-bu-lv-row__stats"><span class="kpi-bu-lv-row__stat"><i class="ti ti-users" aria-hidden="true"></i> 0</span></div>
+          <div class="kpi-bu-lv-row__badge-plain">—</div>
+        </div>`;
+    }
+    const color = pctColor(r.passRate);
+    const barPct = r.passRate == null ? 0 : Math.max(0, Math.min(100, r.passRate));
+    const kpiMarker = r.kpi != null
+      ? `<div class="kpi-bu-lv-row__kpi-marker" style="left:${Math.max(0, Math.min(100, r.kpi))}%;" title="KPI ${r.kpi}%"></div>`
+      : '';
+    // Only 2 badge states: Pass / Fail — when there's no KPI target or nothing has
+    // been tested yet, show a plain "—" (no colored badge) instead of a 3rd state.
+    const hasResult = r.kpi != null && r.tested > 0;
+    const badgeHtml = hasResult
+      ? `<div class="kpi-bu-lv-row__badge ${r.meetsKpi ? 'kpi-bu-lv-row__badge--pass' : 'kpi-bu-lv-row__badge--fail'}">${r.meetsKpi ? `✓ ${t('gicaKpiMet')}` : `✗ ${t('gicaKpiMissed')}`}</div>`
+      : `<div class="kpi-bu-lv-row__badge-plain">—</div>`;
+    return `
+      <div class="kpi-bu-lv-row">
+        <div class="kpi-bu-lv-row__name">${escapeHtml(r.level)}</div>
+        <div class="kpi-bu-lv-row__kpi">${r.kpi == null ? '—' : r.kpi + '%'}</div>
+        <div class="kpi-bu-lv-row__bar-wrap">
+          <div class="kpi-bu-lv-row__bar">
+            <div class="kpi-bu-lv-row__fill" style="width:${barPct}%;background:${color};"></div>
+            ${kpiMarker}
+          </div>
+        </div>
+        <div class="kpi-bu-lv-row__pct" style="color:${color};">${pctFmt(r.passRate)}</div>
+        <div class="kpi-bu-lv-row__stats">
+          <span class="kpi-bu-lv-row__stat kpi-bu-lv-row__stat--pass" title="${escapeHtml(t('gicaKpiPassed'))}">${r.passed}</span>
+          <span class="kpi-bu-lv-row__stat kpi-bu-lv-row__stat--fail" title="${escapeHtml(t('gicaKpiFailed'))}">${r.failed}</span>
+          <span class="kpi-bu-lv-row__stat kpi-bu-lv-row__stat--pending" title="${escapeHtml(t('gicaKpiPending'))}">${r.pending}</span>
+          <span class="kpi-bu-lv-row__stat kpi-bu-lv-row__stat--total" title="Total"><i class="ti ti-users" aria-hidden="true"></i> ${r.total}</span>
+        </div>
+        ${badgeHtml}
+      </div>`;
+  }).join('');
+
+  return `
+    ${hero}
+    <div class="kpi-bu-detail-section-title">${escapeHtml(t('gicaKpiPerLevel'))}</div>
+    <div class="kpi-bu-lv-header">
+      <div>${escapeHtml(t('gicaColLevel'))}</div>
+      <div>${escapeHtml(t('gicaKpiTargetShort'))}</div>
+      <div>${escapeHtml(t('gicaKpiActualPct'))}</div>
+      <div>%</div>
+      <div>${escapeHtml(t('gicaKpiCounts'))}</div>
+      <div>${escapeHtml(t('gicaKpiResult'))}</div>
+    </div>
+    <div class="kpi-bu-lv-list">${rowsHtml}</div>`;
+}
+
+function _gicaOpenKpiBuDetailModal(bu) {
+  const modal = $('gica-kpi-bu-detail-modal');
+  const title = $('gica-kpi-bu-detail-title');
+  const body  = $('gica-kpi-bu-detail-body');
+  if (!modal || !body) return;
+  const vm = _computeGicaKpiBuDetail(_gicaData.employees || [], bu, _gicaKpiTargets);
+  const buColor = GICA_BU_COLORS[bu] || 'var(--accent)';
+  if (title) title.innerHTML = `<span style="color:${buColor};font-weight:800;">${escapeHtml(bu)}</span> · ${escapeHtml(t('gicaKpiBuDetailTitle'))}`;
+  body.innerHTML = _gicaKpiBuDetailHtml(vm);
+  modal.dataset.bu = bu;
+  modal.classList.remove('hidden');
+}
+
+function _gicaExportKpiBuDetailPng() {
+  const body = $('gica-kpi-bu-detail-body');
+  const modal = $('gica-kpi-bu-detail-modal');
+  if (!body || typeof html2canvas === 'undefined') { showToast('html2canvas not loaded'); return; }
+  const bu = modal?.dataset?.bu || 'BU';
+  const bg = getComputedStyle(document.body).getPropertyValue('--surface').trim() || '#ffffff';
+  // html2canvas 1.4 can't parse color-mix() / oklch() / lab() — keep options
+  // minimal and rely on plain colors in the KPI drill markup.
+  html2canvas(body, { backgroundColor: bg, scale: 2, logging: false, useCORS: true })
+    .then(canvas => {
+      const link = document.createElement('a');
+      link.download = `KPI-${bu}-${new Date().toISOString().slice(0,10)}.png`;
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    })
+    .catch(err => { showToast('PNG export failed: ' + (err.message || err)); });
+}
+
+function _gicaPrintKpiBuDetail() {
+  _gicaPrint('gica-kpi-bu-detail-body');
 }
 
 function _gicaSummaryHtml(vm) {
@@ -6645,6 +6865,20 @@ function _gicaSummaryHtml(vm) {
           ${_gicaKpiSummaryHtml(_computeGicaKpiSummary(vm.emps || []))}
         </div>
       </div>
+    </div>
+    <div id="gica-kpi-bu-detail-modal" class="gica-modal hidden">
+      <div class="gica-modal__backdrop" id="gica-kpi-bu-detail-backdrop"></div>
+      <div class="gica-modal__panel gica-kpi-bu-detail-modal__panel">
+        <div class="gica-modal__head">
+          <h4 id="gica-kpi-bu-detail-title" style="margin:0;font-size:1rem;"></h4>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button id="gica-kpi-bu-detail-png" class="gica-mini-btn gica-mini-btn--png" title="${escapeHtml(t('gicaKpiSavePng'))}"><i class="ti ti-photo-down" aria-hidden="true"></i> PNG</button>
+            <button id="gica-kpi-bu-detail-print" class="gica-mini-btn gica-mini-btn--print" title="${escapeHtml(t('gicaKpiPrint'))}"><i class="ti ti-printer" aria-hidden="true"></i> ${escapeHtml(t('gicaKpiPrint'))}</button>
+            <button class="gica-modal__close" id="gica-kpi-bu-detail-close" aria-label="ปิด">✕</button>
+          </div>
+        </div>
+        <div class="gica-modal__body" id="gica-kpi-bu-detail-body"></div>
+      </div>
     </div>`;
 
   const quadSection = `
@@ -6995,6 +7229,23 @@ function _mountGicaSummary(html, vm) {
     });
     container.querySelector('#gica-kpi-summary-close')?.addEventListener('click', closeKpiSumModal);
     container.querySelector('#gica-kpi-summary-backdrop')?.addEventListener('click', closeKpiSumModal);
+    // Click any BU card in the summary → open per-BU per-level drill-down modal.
+    // Delegated so it survives body innerHTML rebuild on every open.
+    kpiSumModal.addEventListener('click', e => {
+      const card = e.target.closest('.kpi-sum-bu-card[data-bu]:not(.kpi-sum-bu-card--empty)');
+      if (!card) return;
+      _gicaOpenKpiBuDetailModal(card.dataset.bu);
+    });
+  }
+
+  // KPI × BU drill-down modal — opens from KPI Summary card click.
+  const kpiBuDetailModal = container.querySelector('#gica-kpi-bu-detail-modal');
+  const closeKpiBuDetail = () => kpiBuDetailModal && kpiBuDetailModal.classList.add('hidden');
+  if (kpiBuDetailModal) {
+    container.querySelector('#gica-kpi-bu-detail-close')?.addEventListener('click', closeKpiBuDetail);
+    container.querySelector('#gica-kpi-bu-detail-backdrop')?.addEventListener('click', closeKpiBuDetail);
+    container.querySelector('#gica-kpi-bu-detail-png')?.addEventListener('click', _gicaExportKpiBuDetailPng);
+    container.querySelector('#gica-kpi-bu-detail-print')?.addEventListener('click', _gicaPrintKpiBuDetail);
   }
 
   // Expectation matrix drill-down
@@ -7006,7 +7257,19 @@ function _mountGicaSummary(html, vm) {
     modal.querySelectorAll('[data-close="1"]').forEach(el => el.addEventListener('click', closeModal));
   }
   if (window._gicaEscHandler) document.removeEventListener('keydown', window._gicaEscHandler);
-  window._gicaEscHandler = e => { if (e.key === 'Escape') { closeModal(); closeKpiModal(); closeFreqModal(); closeKpiSumModal(); } };
+  window._gicaEscHandler = e => {
+    if (e.key !== 'Escape') return;
+    // Layered close: if the KPI BU detail modal is open, close ONLY that one so
+    // the underlying KPI Summary stays visible (drill-down back-navigation).
+    if (kpiBuDetailModal && !kpiBuDetailModal.classList.contains('hidden')) {
+      closeKpiBuDetail();
+      return;
+    }
+    closeModal();
+    closeKpiModal();
+    closeFreqModal();
+    closeKpiSumModal();
+  };
   document.addEventListener('keydown', window._gicaEscHandler);
 
   const _showModal = (list, title) => {
@@ -7750,6 +8013,55 @@ function _gicaScheduleHtml(vm) {
       ${donutFailStreakLg(failStreakCounts, failStreakTotal)}
     </div>`;
 
+  // Per-BU segmented bar variant of the fail-streak card — replaces the donut in row 1.
+  const failStreakBuMap = {};
+  vm.employees.filter(e => e.passed === false).forEach(e => {
+    const bu = e.bu; if (!bu) return;
+    const s = _gicaFailStreak(e);
+    if (!failStreakBuMap[bu]) failStreakBuMap[bu] = { bu, fail1: 0, fail2: 0, fail3: 0 };
+    if (s === 1) failStreakBuMap[bu].fail1++;
+    else if (s === 2) failStreakBuMap[bu].fail2++;
+    else if (s >= 3) failStreakBuMap[bu].fail3++;
+  });
+  const failStreakBuRows = BU_ORDER.map(bu => {
+    const c = failStreakBuMap[bu];
+    const buColor = GICA_BU_COLORS[bu] || '#6b7280';
+    if (!c || (c.fail1 + c.fail2 + c.fail3) === 0) {
+      return `<div class="mini-bar__row mini-bar__row--lg">
+        <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(bu)}</span>
+        <span class="u-muted" style="font-size:0.68rem;">${escapeHtml(t('gicaNoData'))}</span>
+      </div>`;
+    }
+    const tot = c.fail1 + c.fail2 + c.fail3;
+    const p1 = Math.round(c.fail1 / tot * 100);
+    const p2 = Math.round(c.fail2 / tot * 100);
+    const p3 = Math.max(100 - p1 - p2, 0);
+    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(bu)} — ${failStreakLabels.fail1}: ${c.fail1}, ${failStreakLabels.fail2}: ${c.fail2}, ${failStreakLabels.fail3}: ${c.fail3} (Total ${tot})">
+      <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(bu)}</span>
+      <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
+        ${p1 > 0 ? `<div style="width:${p1}%;background:${failStreakColors.fail1};height:100%;"></div>` : ''}
+        ${p2 > 0 ? `<div style="width:${p2}%;background:${failStreakColors.fail2};height:100%;"></div>` : ''}
+        ${p3 > 0 ? `<div style="width:${p3}%;background:${failStreakColors.fail3};height:100%;"></div>` : ''}
+      </div>
+      <span class="mini-bar__count mini-bar__count--lg">${tot}</span>
+    </div>`;
+  }).join('');
+  const failStreakLegend = `
+    <div class="row1-legend u-between">
+      <span><span class="row1-legend__dot" style="background:${failStreakColors.fail1};"></span>${failStreakLabels.fail1}</span>
+      <span><span class="row1-legend__dot" style="background:${failStreakColors.fail2};"></span>${failStreakLabels.fail2}</span>
+      <span><span class="row1-legend__dot" style="background:${failStreakColors.fail3};"></span>${failStreakLabels.fail3}</span>
+    </div>`;
+  const failStreakStatCard = `
+    <div class="stat-card row1-card">
+      <div class="row1-head">
+        <div class="stat-card__label">${t('gicaFailStatusStreak')}</div>
+        <div class="stat-card__value" style="color:${failStreakTotal > 0 ? failStreakColors.fail3 : 'var(--text)'};">${failStreakTotal}</div>
+      </div>
+      <div class="row1-body row1-body--divided">${failStreakBuRows}</div>
+      ${failStreakLegend}
+    </div>`;
+
   const weekCards    = vm.weeklyBuCards.filter(c => !c.empty);
   const weekTotal    = weekCards.reduce((s, c) => s + c.total, 0);
   const weekAttended = weekCards.reduce((s, c) => s + c.attended, 0);
@@ -7813,19 +8125,21 @@ function _gicaScheduleHtml(vm) {
   }).join('');
 
   const dueWeekCard = `
-    <div class="stat-card">
-      <div style="display:flex;gap:0;">
-        <div style="flex:1;min-width:0;padding-right:12px;">
-          <div class="stat-card__label">${t('gicaDueThisWeek')}</div>
-          <div class="stat-card__value">${weekAttended}/${weekTotal}</div>
-        </div>
-        <div style="width:1px;background:var(--border-light);flex-shrink:0;"></div>
-        <div style="flex:1;min-width:0;padding-left:12px;">
-          <div class="stat-card__label">${t('gicaEarlyAssessment')}</div>
-          <div class="stat-card__value" style="color:${earlyTotal > 0 ? '#2563eb' : 'var(--text)'};">${earlyTotal}</div>
+    <div class="stat-card row1-card">
+      <div class="row1-head">
+        <div style="display:flex;gap:0;">
+          <div style="flex:1;min-width:0;padding-right:12px;">
+            <div class="stat-card__label">${t('gicaDueThisWeek')}</div>
+            <div class="stat-card__value">${weekAttended}/${weekTotal}</div>
+          </div>
+          <div style="width:1px;background:var(--border-light);flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;padding-left:12px;">
+            <div class="stat-card__label">${t('gicaEarlyAssessment')}</div>
+            <div class="stat-card__value" style="color:${earlyTotal > 0 ? '#2563eb' : 'var(--text)'};">${earlyTotal}</div>
+          </div>
         </div>
       </div>
-      <div style="border-top:1px solid var(--border-light);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px;">${combinedBuRows || `<span class="u-muted" style="font-size:0.74rem;">${t('gicaMatrixEmpty')}</span>`}</div>
+      <div class="row1-body row1-body--divided">${combinedBuRows || `<span class="u-muted" style="font-size:0.74rem;">${t('gicaMatrixEmpty')}</span>`}</div>
     </div>`;
 
   // On-time Rate = attended this week / required this week — pass/fail doesn't matter
@@ -7851,18 +8165,19 @@ function _gicaScheduleHtml(vm) {
     </div>`;
   }).join('');
   const onTimeRateCard = `
-    <div class="stat-card">
-      <div class="stat-card__label">${t('gicaOverallOnTime')}</div>
-      <div class="stat-card__value" style="color:${onTimePctColor(overallOnTimePct)};">${overallOnTimePct != null ? overallOnTimePct + '%' : '—'}</div>
-      <div style="display:flex;flex-direction:column;gap:9px;margin-top:8px;">${onTimeBuRows}</div>
+    <div class="stat-card row1-card">
+      <div class="row1-head">
+        <div class="stat-card__label">${t('gicaOverallOnTime')}</div>
+        <div class="stat-card__value" style="color:${onTimePctColor(overallOnTimePct)};">${overallOnTimePct != null ? overallOnTimePct + '%' : '—'}</div>
+      </div>
+      <div class="row1-body row1-body--divided">${onTimeBuRows}</div>
     </div>`;
 
   const row1 = `
-    <div class="stat-grid stat-grid--4">
-      ${gaugeStatCard}
-      ${donutStatCard}
+    <div class="stat-grid stat-grid--3">
       ${dueWeekCard}
       ${onTimeRateCard}
+      ${failStreakStatCard}
     </div>`;
 
   const calendarCard = `

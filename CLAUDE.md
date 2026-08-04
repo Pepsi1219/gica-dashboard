@@ -22,14 +22,19 @@ New Operator Monitoring/
 ├── .env                    # Secrets (ห้าม commit — อยู่ใน .gitignore แล้ว)
 ├── .env.example            # Template สำหรับ .env
 ├── migrations/
-│   ├── 001_profiles.sql    # profiles table + RLS + trigger auto-insert on auth.users
-│   └── 002_audit.sql       # audit_templates / audit_plans / audit_findings + RLS + indexes
+│   ├── 001_profiles.sql                     # profiles table + RLS + trigger auto-insert on auth.users
+│   ├── 002_audit.sql                        # audit_templates / audit_plans / audit_findings + RLS + indexes
+│   ├── 003_csa.sql                          # csa_employees (6 BU + bu column)
+│   ├── 004_gica.sql                         # gica_employees / gica_freq / gica_kpi
+│   └── 005_gica_next_date_override.sql      # add next_date_override column for manual pin
 ├── migrate_audit.py        # One-time migration: Audit_Monitoring.xlsx → Supabase (รันครั้งเดียว)
+├── migrate_csa.py          # One-time migration: 6 CSA workbooks → Supabase (รันครั้งเดียว)
+├── migrate_gica.py         # One-time migration: GICA.xlsx → Supabase (รันครั้งเดียว, done)
 ├── templates/
 │   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab)
 ├── static/
-│   ├── css/styles.css      # Styles ทั้งหมด (~3050+ บรรทัด)  [?v=184]
-│   └── js/app.js           # Frontend logic ทั้งหมด (~10500+ บรรทัด)  [?v=421]
+│   ├── css/styles.css      # Styles ทั้งหมด (~3060+ บรรทัด)  [?v=201]
+│   └── js/app.js           # Frontend logic ทั้งหมด (~10600+ บรรทัด)  [?v=457]
 └── docs/                   # เอกสาร guide สำหรับ CSA Manager
 ```
 
@@ -118,6 +123,7 @@ New Operator Monitoring/
 | Audit Create Form modal | `.audit-form-modal__panel`, `.audit-form-modal__body`, `.audit-form-modal__footer`, `.audit-btn`, `.audit-btn--cancel`, `.audit-btn--confirm` — **เจตนาแยกจาก `.gica-kpi-*`** ไม่ใช้ปนกัน แม้หน้าตาคล้าย KPI Setup modal |
 | Audit Trend KPI Setup | `.audit-kpi-setup-btn`, `.audit-kpi-modal__panel`, `.audit-kpi-modal__body`, `.audit-kpi-modal__desc`, `.audit-kpi-row`, `.audit-kpi-row__label`, `.audit-kpi-row__val`, `.audit-kpi-slider` — เหตุผลเดียวกับ Create Form modal (ของตัวเอง ไม่ปนกับ `.gica-kpi-*`) |
 | Stat card sub list modifier | `.stat-card__sub--flush` (ไม่มี border-top/margin-top) — ใช้เมื่อ `.stat-card__sub` เป็น element แรกในการ์ด |
+| GICA Schedule row-1 cards | `.row1-card`, `.row1-head`, `.row1-body`, `.row1-body--divided`, `.row1-legend`, `.row1-legend__dot` — โครง header/body/legend ที่บังคับให้ header ทั้ง 3 การ์ดสูงเท่ากัน (`min-height:110px`) และแถว BU (G1/G3/G2/G4/TRM/EA) เรียงตรงกันแนวนอนข้ามการ์ด (`.mini-bar__row--lg { min-height:24px }`) |
 | Container | `#gica-summary`, `#jtp-summary`, `#trainer-summary` (layout เป็น CSS ไม่ใช่ JS) |
 | **Employee table** | `.emp-table`, `.emp-toolbar`, `.emp-search-box`, `.emp-filter-chip`, `.emp-table-wrap`, `.emp-footer`, `.emp-count-badge`, `.emp-row-num`, `.emp-id-cell`, `.emp-name-cell`, `.emp-date-empty`, `.emp-act-btn`, `.emp-pg-btn`, `.emp-pg-btn--active`, `.emp-pg-ellipsis` |
 | Type pill | `.type-pill`, `.type-pill--sewing`, `.type-pill--qcqa`, `.type-pill--technic` |
@@ -173,7 +179,7 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 ### 4. Cache-busting (สำคัญ — ลืมบ่อย)
 
 ทุกครั้งที่แก้ `app.js` หรือ `styles.css` ต้อง **bump `?v=` ใน `index.html`**
-(ปัจจุบัน `styles.css?v=193`, `app.js?v=441`) ไม่งั้น browser cache ไฟล์เก่า
+(ปัจจุบัน `styles.css?v=201`, `app.js?v=457`) ไม่งั้น browser cache ไฟล์เก่า
 
 ---
 
@@ -227,6 +233,7 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 - GICA routes ใน `app.py` เขียนใหม่ — `/api/gica-excel` → `_fetch_gica_supabase_data()` (parallel 3 tables) → `_build_gica_payload()`; ตัด `_fetch_gica_excel_data()`/Graph API/KV ออก
 - POST/PATCH/DELETE ใช้ `sb_select`/`sb_insert`/`sb_update`/`sb_delete` บน `gica_employees`
 - API response shape เดิม (`{employees, bus, freqTable, kpiDefaults}`) ยังเหมือนเดิม — frontend ไม่ต้องแก้
+- `migrations/005_gica_next_date_override.sql` — เพิ่ม column `next_date_override TEXT` ใน `gica_employees` สำหรับ manual Next Date pin (qe_edit/gica_admin/admin) — **ต้องรันใน Supabase SQL Editor ก่อน feature จะทำงาน**; new test result ล้าง override อัตโนมัติ
 
 **รอดำเนินการ:**
 ```
@@ -488,9 +495,18 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 - Wire ใน `_mountGicaSummary` — rebuild body ทุกครั้งที่เปิด (ไม่แคชค่าเก่า)
 - CSS: `.kpi-sum-hero`, `.kpi-sum-bu-card`, `.kpi-sum-ring` — ธีม BU ใช้ `--kpi-bu-color` custom property จาก `GICA_BU_COLORS`
 
+### KPI Detail per Level (drill-down จาก KPI Summary BU card)
+- คลิก BU card ใน KPI Summary → เปิด `#gica-kpi-bu-detail-modal` (panel `.gica-kpi-bu-detail-modal__panel`, `max-height:94vh`) — Summary ยังโผล่ข้างหลัง
+- แสดง Hero card (BU + Organization avg %) + per-level rows (grid `130px 70px 150px 60px 1fr 90px`: Level / Target / Actual / % / Counts / Status)
+- Status มี 2 ค่าเท่านั้น: **Pass / Fail** (ถ้าไม่มีผลสอบ → `—` plain text ไม่ใช่ badge)
+- ปุ่ม PNG (html2canvas) + Print — hero card **ห้ามใช้ `color-mix()`** (html2canvas 1.4 parse ไม่ได้) — ใช้ `border-left: 4px solid var(--kpi-bu-color)` แทน
+- **Layered ESC**: กด ESC ที่ Detail → ปิดเฉพาะ Detail modal, Summary ยังอยู่ (back-navigation) — logic ใน `_mountGicaSummary` → `window._gicaEscHandler` เช็ค `kpiBuDetailModal` hidden ก่อนตัดสินว่าจะปิดชั้นไหน
+- ฟังก์ชัน: `_computeGicaKpiBuDetail(emps, bu, kpiTargets)` (pure) + `_gicaKpiBuDetailHtml(vm)` (pure) + `_gicaOpenKpiBuDetailModal(bu)` + `_gicaExportKpiBuDetailPng` + `_gicaPrintKpiBuDetail`
+
 ### Quadrant Analysis
 - `quad` determination uses raw scores (`rx`/`ry`) ไม่ใช่ jittered coordinates (`x`/`y`)
 - Jitter ±1.5% ใช้แค่สำหรับ visual scatter ป้องกันจุดซ้อน
+- Responsive: `.quad-grid` ใช้ `minmax(0, 1fr)` ป้องกัน overflow; ≤1024px → 2 col; ≤640px → 1 col ต่อแถว
 
 ### Assessment History Modal
 - **3 Chart.js line charts** แถวบน: Measurement / Inspection / Average
@@ -518,6 +534,21 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 - Editable (qe_edit/admin): ชื่อพนักงานคลิกได้ → `class="gica-emp-name-cell" data-empid data-bu`
 - Deletable (admin only): icon trash `.gica-delete-emp-btn`
 - `_gicaEmpTableHtml(rows, opts)` ใช้ร่วมกัน main table + drill-down modal (`sortable: false`)
+
+### Assessment Schedule — Row 1 Cards (โครง 3 การ์ด)
+
+Row 1 เหลือ **3 การ์ด** เรียง: **Due this week → Overall On-time Rate → Failure Status by Consecutive Attempts**
+(ใช้ grid `stat-grid--3` แทน `stat-grid--4`; การ์ด "Assessment Required" เดิมยังอยู่ในโค้ด — `gaugeStatCard` + `failedBuBarChart` — แต่ไม่ได้ render ใน row 1 แล้ว เก็บไว้เผื่อใช้ในอนาคต)
+
+ทุกการ์ดในแถวนี้ใช้โครง `.row1-card > .row1-head + .row1-body.row1-body--divided` เพื่อให้:
+- Header สูงเท่ากันด้วย `.row1-head { min-height:110px }` — แม้เนื้อหา header ไม่เท่ากัน (Due week มี 2-col split, On-time มี label+value, Failure มี label+value)
+- แถว BU (G1/G3/G2/G4/TRM/EA) เรียงระดับเดียวกันแนวนอนข้ามการ์ดด้วย `.row1-body .mini-bar__row--lg { min-height:24px }`
+
+**Failure Status by Consecutive Attempts** (การ์ดที่ 3):
+- คำนวณ per-BU: `vm.employees.filter(passed===false)` → group by `bu` → นับ fail streak ด้วย `_gicaFailStreak(e)` แยกเป็น fail1/fail2/fail3
+- แต่ละ BU row = bar แบ่ง 3 segments proportional (เหลือง/ส้ม/แดง) + total count
+- Legend `.row1-legend` วางท้ายการ์ด (ใต้ BU rows) — มีเส้นแบ่ง dashed คั่นจาก BU rows
+- โค้ดเดิม `donutStatCard` + `donutFailStreakLg` ยังอยู่ ไม่ได้ลบ (ถูก replace โดย `failStreakStatCard`)
 
 ### Assessment Schedule — "Due this week" Logic ⚠️
 
@@ -854,12 +885,19 @@ python app.py
 -- รันใน Supabase SQL Editor ตามลำดับ:
 -- 1. migrations/001_profiles.sql
 -- 2. migrations/002_audit.sql
+-- 3. migrations/003_csa.sql
+-- 4. migrations/004_gica.sql
+-- 5. migrations/005_gica_next_date_override.sql
 
 -- Grant service_role access (ถ้ายังไม่ได้ทำ):
 GRANT ALL ON public.profiles TO service_role;
 GRANT ALL ON public.audit_templates TO service_role;
 GRANT ALL ON public.audit_plans TO service_role;
 GRANT ALL ON public.audit_findings TO service_role;
+GRANT ALL ON public.csa_employees TO service_role;
+GRANT ALL ON public.gica_employees TO service_role;
+GRANT ALL ON public.gica_freq TO service_role;
+GRANT ALL ON public.gica_kpi TO service_role;
 ```
 
 ---
