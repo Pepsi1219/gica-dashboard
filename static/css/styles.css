@@ -2162,16 +2162,16 @@ tbody tr:hover { filter: brightness(.97); }
    of each other. Each modal keeps its own backdrop/close handling as-is. */
 .gica-modal--paired-left { justify-content: flex-start; padding-left: max(2vw, 12px); }
 .gica-modal--paired-right { justify-content: flex-end; padding-right: max(2vw, 12px); }
-.gica-modal__panel { 
-  position: relative; 
-  background: var(--surface); 
-  border: 1px solid var(--border); 
-  border-radius: 12px; 
-  padding: 16px 20px; 
-  max-width: 1200px; 
-  width: 95%; 
-  max-height: 80vh; 
-  overflow: auto; 
+.gica-modal__panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  max-width: 1400px;
+  width: 96%;
+  max-height: 80vh;
+  overflow: auto;
   box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
 .gica-modal__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px; }
 .gica-modal__close { background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
