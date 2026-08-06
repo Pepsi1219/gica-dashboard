@@ -26,6 +26,7 @@
   --text-muted:      #9e9db2;
   --border:          #d4d2e8;
   --border-light:    #e8e7f5;
+  --gica-untested-fill: #cbd5e1;
 
   --btn-bg:          #d9edf3;
   --btn-text:        #0b4e63;
@@ -68,6 +69,7 @@
   --text-muted:      #7872b0;
   --border:          #2e2858;
   --border-light:    #1e1a3a;
+  --gica-untested-fill: #475569;
   --accent-bg:       rgba(102, 126, 234, .14);
   --accent-border:   rgba(102, 126, 234, .35);
   --purple:          #a78bfa;
@@ -2255,6 +2257,24 @@ tbody tr:hover { filter: brightness(.97); }
 .quad-card__title { font-size: 0.75rem; font-weight: 600; color: var(--text); }
 .quad-card__sub   { font-size: 0.65rem; margin: 2px 0 8px; }
 .quad-chart-wrap  { position: relative; height: 220px; width: 100%; }
+
+/* — Quadrant card flip (per-card, click to toggle) — */
+.quad-card-wrap        { perspective: 900px; cursor: pointer; min-width: 0; position: relative; }
+.quad-card-wrap:focus  { outline: none; }
+.quad-card-wrap:focus-visible .quad-flip-inner { box-shadow: 0 0 0 2px var(--accent); border-radius: 8px; }
+.quad-flip-inner       { position: relative; transform-style: preserve-3d; transition: transform 0.42s ease; }
+.quad-card-wrap.is-flipped .quad-flip-inner { transform: rotateY(180deg); }
+.quad-card--front, .quad-card--back { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.quad-card--back       { position: absolute; inset: 0; transform: rotateY(180deg); display: flex; flex-direction: column; overflow: hidden; }
+.quad-back__sub-label  { color: var(--accent); font-weight: 600; }
+.quad-back-body        { flex: 1; overflow-y: auto; font-size: 0.72rem; line-height: 1.5; scrollbar-width: none; -ms-overflow-style: none; }
+.quad-back-body::-webkit-scrollbar { display: none; }
+.quad-back-dept        { font-weight: 600; color: var(--text); margin-top: 6px; }
+.quad-back-dept:first-child { margin-top: 0; }
+.quad-back-dept--missing { color: var(--text-muted); font-style: italic; font-weight: 500; }
+.quad-back-level       { padding-left: 12px; color: var(--text-muted); }
+.quad-back-pos         { padding-left: 26px; color: var(--text-muted); font-size: 0.68rem; opacity: 0.85; }
+.quad-back-empty       { color: var(--text-muted); font-size: 0.72rem; }
 @media (max-width: 1024px) {
   .quad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -570,8 +570,8 @@ Row 1 เหลือ **3 การ์ด** เรียง: **Due this week →
 
 **Due this week — flip card** (การ์ดที่ 1):
 - คลิกที่ตัวการ์ด (ไม่มีปุ่มปิดบน) → พลิกด้วย `.flip-card-wrap` / `.is-flipped`
-- **หน้าหน้า**: header 2 คอลัม (Due this week + Early Assessment) + horizontal `combinedBuRows` (Pass/Fail/Awaiting stack)
-- **หน้าหลัง**: header เดียวกัน + **vertical SVG bar chart** (`dueWeekBarChart(vm.weeklyBuCards)`) — ความสูงเต็ม = `attended + earlyN + overdue`, สีเข้ม = คนที่มาสอบแล้ว, สีอ่อน (opacity 0.25) = overdue; label "done/total" เหนือแท่ง
+- **หน้าหน้า**: header 2 คอลัม (Due this week + Early Assessment) + **vertical SVG bar chart** (`dueWeekBarChart(vm.weeklyBuCards)`) — ความสูงเต็ม = `attended + earlyN + overdue`, สีเข้ม = คนที่มาสอบแล้ว, สีอ่อน (opacity 0.25) = overdue; label "done/total" เหนือแท่ง
+- **หน้าหลัง**: header เดียวกัน + horizontal `combinedBuRows` (Pass/Fail/Awaiting stack)
 - Pattern SVG bar เดียวกับ `buBarChart` (Total employees ใน Performance tab)
 
 ### Assessment Schedule — "Due this week" Logic ⚠️

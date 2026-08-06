@@ -308,6 +308,8 @@ const TRANSLATIONS = {
     gicaFail1:              'ไม่ผ่าน 1 ครั้ง',
     gicaFail2:              'ไม่ผ่าน 2 ครั้ง',
     gicaFail3:              'ไม่ผ่าน 3+ ครั้ง',
+    gicaNotTested:          'ยังไม่ได้สอบ',
+    gicaPassed:             'สอบผ่าน',
 
     // ── GICA Phase 4: Assessment Schedule tab ─────────────────────────
     gicaSchedTimeline:      'ตารางเวลาการประเมิน',
@@ -594,7 +596,7 @@ const TRANSLATIONS = {
     gicaFreqDeptLevel:      'Dept / Level',
     gicaFreqRole:           'Role',
     gicaFreqFreq:           'Frequency',
-    gicaFreqEveryNMos:      'Every {n} mos',
+    gicaFreqEveryNMos:      'Every {n} months',
     gicaFreqEmpty:          'No Table_freq data',
     cancel:                 'Cancel',
     confirm:                'Confirm',
@@ -667,6 +669,8 @@ const TRANSLATIONS = {
     gicaFail1:              'Fail 1',
     gicaFail2:              'Fail 2',
     gicaFail3:              'Fail 3+',
+    gicaNotTested:          'Not tested',
+    gicaPassed:             'Passed',
 
     // ── GICA Phase 4: Assessment Schedule tab ─────────────────────────
     gicaSchedTimeline:      'Assessment Schedule Timeline',
@@ -1001,6 +1005,8 @@ const TRANSLATIONS = {
     gicaFail1:              'ບໍ່ຜ່ານ 1 ຄັ້ງ',
     gicaFail2:              'ບໍ່ຜ່ານ 2 ຄັ້ງ',
     gicaFail3:              'ບໍ່ຜ່ານ 3+ ຄັ້ງ',
+    gicaNotTested:          'ຍັງບໍ່ໄດ້ສອບ',
+    gicaPassed:             'ສອບຜ່ານ',
 
     // ── GICA Phase 4 (best-effort Lao) ────────────────────────────────
     gicaSchedTimeline:      'ຕາຕະລາງເວລາການປະເມີນ',
@@ -1335,6 +1341,8 @@ const TRANSLATIONS = {
     gicaFail1:              'Không đạt 1',
     gicaFail2:              'Không đạt 2',
     gicaFail3:              'Không đạt 3+',
+    gicaNotTested:          'Chưa kiểm tra',
+    gicaPassed:             'Đạt',
 
     // ── GICA Phase 4 (best-effort Vietnamese) ─────────────────────────
     gicaSchedTimeline:      'Lịch trình đánh giá',
@@ -5787,6 +5795,58 @@ async function initGicaTab() {
 //   _gicaSummaryHtml    → html string (pure: viewModel in → string out; no DOM, no globals)
 //   _mountGicaSummary   → DOM         (imperative shell: the only DOM touch)
 //   renderGicaSummary   → orchestrator that wires the three together
+// Coverage list for the FLIP-BACK of each Quadrant card.
+// Rules (locked by user 2026-08-06):
+//   • Show every level in group.levels — even levels with zero employees anywhere.
+//   • Ignore the section's BU/Dept filters (always full dataset).
+//   • Group by department (levels listed as children); levels with no matching
+//     employee anywhere collect under a "(no data)" bucket at the bottom.
+// Source of truth for dept↔level↔role mapping is `gica_freq` (freqTable),
+// NOT actual employee rows. Freq defines the org structure (which dept has
+// which levels + role labels); employees are just instances of those slots.
+function _computeGicaQuadCoverage(freqTable, group) {
+  // dept -> level -> Set<role>
+  const deptMap = new Map();
+  const seenLevels = new Set();
+  (freqTable || []).forEach(r => {
+    if (!r || !r.level || !r.department) return;
+    if (!group.levels.includes(r.level)) return;
+    if (!deptMap.has(r.department)) deptMap.set(r.department, new Map());
+    const lvMap = deptMap.get(r.department);
+    if (!lvMap.has(r.level)) lvMap.set(r.level, new Set());
+    if (r.role) lvMap.get(r.level).add(r.role);
+    seenLevels.add(r.level);
+  });
+  const depts = [...deptMap.keys()].sort((a, b) => a.localeCompare(b)).map(d => {
+    const lvMap = deptMap.get(d);
+    const levels = [...lvMap.keys()]
+      .sort((a, b) => group.levels.indexOf(a) - group.levels.indexOf(b))
+      .map(lv => ({
+        level: lv,
+        roles: [...lvMap.get(lv)].sort((a, b) => a.localeCompare(b)),
+      }));
+    return { dept: d, levels };
+  });
+  const missingLevels = group.levels.filter(l => !seenLevels.has(l));
+  return { depts, missingLevels };
+}
+
+function _gicaQuadBackHtml(group, coverage) {
+  const renderLevel = lv => `
+    <div class="quad-back-level">- ${escapeHtml(lv.level)}</div>
+    ${lv.roles.map(r => `<div class="quad-back-pos">* ${escapeHtml(r)}</div>`).join('')}
+  `;
+  const rows = coverage.depts.map(d => `
+    <div class="quad-back-dept">${escapeHtml(d.dept)}</div>
+    ${d.levels.map(renderLevel).join('')}
+  `).join('');
+  const missing = coverage.missingLevels.length ? `
+    <div class="quad-back-dept quad-back-dept--missing">(ไม่พบข้อมูล)</div>
+    ${coverage.missingLevels.map(lv => `<div class="quad-back-level">- ${escapeHtml(lv)}</div>`).join('')}
+  ` : '';
+  return `${rows}${missing}` || '<div class="quad-back-empty">—</div>';
+}
+
 function _computeGicaQuadrant(emps, groupId, buSet, deptSet) {
   const grp = GICA_QUAD_GROUPS.find(g => g.id === groupId) || GICA_QUAD_GROUPS[0];
   const xT  = grp.expM ? GICA_GRADE_THRESH[grp.expM] : null;
@@ -6514,20 +6574,25 @@ function _gicaSummaryHtml(vm) {
       }
       const totalH = Math.max(Math.round(c.count / maxN * CH), 3);
       const scale  = c.count ? totalH / c.count : 0;
-      const passH  = c.passN > 0 ? Math.max(Math.round(c.passN * scale), 2) : 0;
-      const failH  = c.failN > 0 ? Math.max(Math.round(c.failN * scale), 2) : 0;
-      const untestedH = Math.max(totalH - passH - failH, 0);
+      // Each segment claims min 2px if the underlying count > 0 so tiny cohorts
+      // don't disappear from rounding. stackH is the actual drawn total (may
+      // exceed totalH by 1-2px on small bars — acceptable, keeps every non-zero
+      // segment visible).
+      const passH     = c.passN     > 0 ? Math.max(Math.round(c.passN     * scale), 2) : 0;
+      const failH     = c.failN     > 0 ? Math.max(Math.round(c.failN     * scale), 2) : 0;
+      const untestedH = c.untestedN > 0 ? Math.max(Math.round(c.untestedN * scale), 2) : 0;
+      const stackH    = passH + failH + untestedH;
       const color = GICA_BU_COLORS[c.bu] || '#6b7280';
-      const topY = TPAD + CH - totalH;
+      const topY       = TPAD + CH - stackH;
       const passY      = TPAD + CH - passH;
       const failY      = passY - failH;
       const untestedY  = failY - untestedH;
       const clipId = `gica-bu-bar-clip-${c.bu}`;
       return `<g>
         <title>${escapeHtml(c.bu)} — Pass: ${c.passN}, Fail: ${c.failN}, Not tested: ${c.untestedN} (Total ${c.count})</title>
-        <defs><clipPath id="${clipId}"><rect x="${x}" y="${topY}" width="${bw}" height="${totalH}" rx="3"></rect></clipPath></defs>
+        <defs><clipPath id="${clipId}"><rect x="${x}" y="${topY}" width="${bw}" height="${stackH}" rx="3"></rect></clipPath></defs>
         <g clip-path="url(#${clipId})">
-          ${untestedH > 0 ? `<rect x="${x}" y="${untestedY}" width="${bw}" height="${untestedH}" fill="var(--border-light)"></rect>` : ''}
+          ${untestedH > 0 ? `<rect x="${x}" y="${untestedY}" width="${bw}" height="${untestedH}" fill="var(--gica-untested-fill)"></rect>` : ''}
           ${failH > 0 ? `<rect x="${x}" y="${failY}" width="${bw}" height="${failH}" fill="${color}" opacity="0.25"></rect>` : ''}
           ${passH > 0 ? `<rect x="${x}" y="${passY}" width="${bw}" height="${passH}" fill="${color}"></rect>` : ''}
         </g>
@@ -6920,13 +6985,24 @@ function _gicaSummaryHtml(vm) {
         </div>
       </div>
       <div class="quad-grid">
-        ${GICA_QUAD_GROUPS.map(g => `
-          <div class="quad-card">
-            <div class="quad-card__title">${escapeHtml(g.label)}</div>
-            <div class="quad-card__sub">${expBadge(g.expM)}&nbsp;/&nbsp;${expBadge(g.expI)}</div>
-            <div class="quad-chart-wrap"><canvas id="gica-quad-canvas-${g.id}"></canvas></div>
-          </div>`
-        ).join('')}
+        ${GICA_QUAD_GROUPS.map(g => {
+          const cov = _computeGicaQuadCoverage(vm.freqTable || [], g);
+          return `
+          <div class="quad-card-wrap" data-quad-flip data-group="${g.id}" role="button" tabindex="0" aria-label="พลิกดู Departments &amp; Levels">
+            <div class="quad-flip-inner">
+              <div class="quad-card quad-card--front">
+                <div class="quad-card__title">${escapeHtml(g.label)}</div>
+                <div class="quad-card__sub">${expBadge(g.expM)}&nbsp;/&nbsp;${expBadge(g.expI)}</div>
+                <div class="quad-chart-wrap"><canvas id="gica-quad-canvas-${g.id}"></canvas></div>
+              </div>
+              <div class="quad-card quad-card--back">
+                <div class="quad-card__title">${escapeHtml(g.label)}</div>
+                <div class="quad-card__sub quad-back__sub-label">Departments &amp; Levels</div>
+                <div class="quad-back-body">${_gicaQuadBackHtml(g, cov)}</div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
 
@@ -7104,6 +7180,20 @@ function _mountGicaQuadrant(container, emps) {
 
   wirePanelFilter('quad-bu-panel',   'bu',   _buSet,   'quad-bu-trigger',   'BU');
   wirePanelFilter('quad-dept-panel', 'dept', _deptSet, 'quad-dept-trigger', 'แผนก');
+
+  // Flip each Quadrant card on click / Enter / Space. Click bubbles from
+  // canvas too — that's intentional (Chart.js tooltip is hover-only, so a
+  // deliberate click flips the card either way). Dropdown buttons live
+  // outside the wrap so they don't trigger flip.
+  section.querySelectorAll('.quad-card-wrap[data-quad-flip]').forEach(wrap => {
+    wrap.addEventListener('click', () => wrap.classList.toggle('is-flipped'));
+    wrap.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        wrap.classList.toggle('is-flipped');
+      }
+    });
+  });
 
   buildAll();
 }
@@ -8090,53 +8180,155 @@ function _gicaScheduleHtml(vm) {
       ${donutFailStreakLg(failStreakCounts, failStreakTotal)}
     </div>`;
 
-  // Per-BU segmented bar variant of the fail-streak card — replaces the donut in row 1.
-  const failStreakBuMap = {};
-  vm.employees.filter(e => e.passed === false).forEach(e => {
-    const bu = e.bu; if (!bu) return;
-    const s = _gicaFailStreak(e);
-    if (!failStreakBuMap[bu]) failStreakBuMap[bu] = { bu, fail1: 0, fail2: 0, fail3: 0 };
-    if (s === 1) failStreakBuMap[bu].fail1++;
-    else if (s === 2) failStreakBuMap[bu].fail2++;
-    else if (s >= 3) failStreakBuMap[bu].fail3++;
+  // Failure Status card — per-BU 5-category breakdown (locked 2026-08-06):
+  //   Not tested • Passed • Fail 1 • Fail 2 • Fail 3+
+  // Front  = vertical stacked SVG bar chart (counts)  — mirrors dueWeekBarChart
+  // Back   = horizontal ratio bars per BU              — mirrors combinedBuRows
+  // Header keeps `failStreakTotal` (failing count) as the summary metric —
+  // the card's headline story is "how many are failing"; the bar breaks it
+  // down. Denominator for ratios is per-BU population INCLUDING untested.
+  const failCatColors = {
+    pass:      '#16a34a',
+    fail1:     failStreakColors.fail1,
+    fail2:     failStreakColors.fail2,
+    fail3:     failStreakColors.fail3,
+    notTested: 'var(--gica-untested-fill)',
+  };
+  const failCatLabels = {
+    pass:      t('gicaPassed'),
+    fail1:     failStreakLabels.fail1,
+    fail2:     failStreakLabels.fail2,
+    fail3:     failStreakLabels.fail3,
+    notTested: t('gicaNotTested'),
+  };
+  const failStreakStackOrder = ['pass', 'fail1', 'fail2', 'fail3', 'notTested'];
+  const failStreakBuBreakdown = BU_ORDER.map(bu => {
+    const inBu = vm.employees.filter(e => e.bu === bu);
+    if (!inBu.length) return { bu, empty: true, total: 0, notTested: 0, pass: 0, fail1: 0, fail2: 0, fail3: 0 };
+    let notTested = 0, pass = 0, fail1 = 0, fail2 = 0, fail3 = 0;
+    inBu.forEach(e => {
+      if (e.passed === true) { pass++; return; }
+      if (e.passed === false) {
+        const s = _gicaFailStreak(e);
+        if (s >= 3) fail3++;
+        else if (s === 2) fail2++;
+        else fail1++;
+        return;
+      }
+      notTested++;
+    });
+    const total = notTested + pass + fail1 + fail2 + fail3;
+    return { bu, empty: total === 0, total, notTested, pass, fail1, fail2, fail3 };
   });
-  const failStreakBuRows = BU_ORDER.map(bu => {
-    const c = failStreakBuMap[bu];
-    const buColor = GICA_BU_COLORS[bu] || '#6b7280';
-    if (!c || (c.fail1 + c.fail2 + c.fail3) === 0) {
+
+  const failStreakTooltip = c =>
+    `${c.bu} — ${failCatLabels.pass}: ${c.pass}, ${failCatLabels.fail1}: ${c.fail1}, ${failCatLabels.fail2}: ${c.fail2}, ${failCatLabels.fail3}: ${c.fail3}, ${failCatLabels.notTested}: ${c.notTested} (Total ${c.total})`;
+
+  // Vertical stacked bar per BU — bottom→top: pass, fail1, fail2, fail3,
+  // notTested. Matches the Performance-tab "Total employees" card convention
+  // (positive at bottom, untested at top). Each visible segment claims min
+  // 2px so tiny cohorts don't disappear from rounding (stackH may exceed
+  // proportional totalH by 1-2px — acceptable, mirrors buBarChart).
+  const failStreakBarChart = cards => {
+    const totals = cards.map(c => c.total || 0);
+    const maxN = Math.max(...totals, 1);
+    const W = 300, CH = 70, PAD = 4, LH = 16, TPAD = 14;
+    const n = cards.length;
+    const slot = (W - PAD * 2) / n;
+    const bw = Math.round(slot * 0.72);
+    const bo = (slot - bw) / 2;
+    const bars = cards.map((c, i) => {
+      const x  = Math.round(PAD + i * slot + bo);
+      const cx = Math.round(x + bw / 2);
+      if (!c.total) {
+        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="5" fill="var(--text-muted)">${escapeHtml(t('gicaNoData'))}</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="5.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
+      }
+      const totalH = Math.max(Math.round(c.total / maxN * CH), 3);
+      const scale  = totalH / c.total;
+      const heights = {};
+      failStreakStackOrder.forEach(k => { heights[k] = c[k] > 0 ? Math.max(Math.round(c[k] * scale), 2) : 0; });
+      const stackH = failStreakStackOrder.reduce((s, k) => s + heights[k], 0);
+      const topY = TPAD + CH - stackH;
+      let cursorY = TPAD + CH;
+      const segs = failStreakStackOrder.map(k => {
+        const h = heights[k];
+        if (!h) return '';
+        cursorY -= h;
+        return `<rect x="${x}" y="${cursorY}" width="${bw}" height="${h}" fill="${failCatColors[k]}"></rect>`;
+      }).join('');
+      const buColor = GICA_BU_COLORS[c.bu] || 'var(--text)';
+      const clipId = `gica-failstreak-bar-clip-${c.bu}`;
+      return `<g>
+        <title>${escapeHtml(failStreakTooltip(c))}</title>
+        <defs><clipPath id="${clipId}"><rect x="${x}" y="${topY}" width="${bw}" height="${stackH}" rx="3"></rect></clipPath></defs>
+        <g clip-path="url(#${clipId})">${segs}</g>
+        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="6" font-weight="700" fill="${buColor}">${c.total}</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="5.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
+      </g>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" preserveAspectRatio="xMidYMid meet"
+      style="display:block;width:100%;height:100%;">
+      <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
+      ${bars}
+    </svg>`;
+  };
+
+  // Horizontal ratio bars per BU — same 5 segments as the vertical bar.
+  // Largest-remainder rounding so segment widths sum to exactly 100%.
+  const failStreakRatioBuRows = failStreakBuBreakdown.map(c => {
+    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
+    if (c.empty) {
       return `<div class="mini-bar__row mini-bar__row--lg">
-        <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(bu)}</span>
+        <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
         <span class="u-muted" style="font-size:0.68rem;">${escapeHtml(t('gicaNoData'))}</span>
       </div>`;
     }
-    const tot = c.fail1 + c.fail2 + c.fail3;
-    const p1 = Math.round(c.fail1 / tot * 100);
-    const p2 = Math.round(c.fail2 / tot * 100);
-    const p3 = Math.max(100 - p1 - p2, 0);
-    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(bu)} — ${failStreakLabels.fail1}: ${c.fail1}, ${failStreakLabels.fail2}: ${c.fail2}, ${failStreakLabels.fail3}: ${c.fail3} (Total ${tot})">
-      <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(bu)}</span>
-      <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
-        ${p1 > 0 ? `<div style="width:${p1}%;background:${failStreakColors.fail1};height:100%;"></div>` : ''}
-        ${p2 > 0 ? `<div style="width:${p2}%;background:${failStreakColors.fail2};height:100%;"></div>` : ''}
-        ${p3 > 0 ? `<div style="width:${p3}%;background:${failStreakColors.fail3};height:100%;"></div>` : ''}
-      </div>
-      <span class="mini-bar__count mini-bar__count--lg">${tot}</span>
+    const raw = failStreakStackOrder.map(k => (c[k] / c.total) * 100);
+    const floor = raw.map(v => Math.floor(v));
+    const remainder = 100 - floor.reduce((s, v) => s + v, 0);
+    const ordered = raw.map((v, i) => ({ i, r: v - floor[i] })).sort((a, b) => b.r - a.r);
+    for (let j = 0; j < remainder && j < ordered.length; j++) floor[ordered[j].i]++;
+    const segs = failStreakStackOrder.map((k, i) => floor[i] > 0
+      ? `<div style="width:${floor[i]}%;background:${failCatColors[k]};height:100%;" title="${failCatLabels[k]}: ${c[k]} (${floor[i]}%)"></div>`
+      : ''
+    ).join('');
+    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(failStreakTooltip(c))}">
+      <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
+      <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">${segs}</div>
+      <span class="mini-bar__count mini-bar__count--lg">${c.total}</span>
     </div>`;
   }).join('');
+
   const failStreakLegend = `
-    <div class="row1-legend" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:flex-start;">
-      <span><span class="row1-legend__dot" style="background:${failStreakColors.fail1};"></span>${failStreakLabels.fail1}</span>
-      <span><span class="row1-legend__dot" style="background:${failStreakColors.fail2};"></span>${failStreakLabels.fail2}</span>
-      <span><span class="row1-legend__dot" style="background:${failStreakColors.fail3};"></span>${failStreakLabels.fail3}</span>
+    <div class="row1-legend" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-start;">
+      <span><span class="row1-legend__dot" style="background:${failCatColors.pass};"></span>${failCatLabels.pass}</span>
+      <span><span class="row1-legend__dot" style="background:${failCatColors.fail1};"></span>${failCatLabels.fail1}</span>
+      <span><span class="row1-legend__dot" style="background:${failCatColors.fail2};"></span>${failCatLabels.fail2}</span>
+      <span><span class="row1-legend__dot" style="background:${failCatColors.fail3};"></span>${failCatLabels.fail3}</span>
+      <span><span class="row1-legend__dot" style="background:${failCatColors.notTested};"></span>${failCatLabels.notTested}</span>
+    </div>`;
+  const failStreakHeader = `
+    <div class="row1-head">
+      <div class="stat-card__label">${t('gicaFailStatusStreak')}</div>
+      <div class="stat-card__value" style="color:${failStreakTotal > 0 ? failCatColors.fail3 : 'var(--text)'};">${failStreakTotal}</div>
     </div>`;
   const failStreakStatCard = `
-    <div class="stat-card row1-card">
-      <div class="row1-head">
-        <div class="stat-card__label">${t('gicaFailStatusStreak')}</div>
-        <div class="stat-card__value" style="color:${failStreakTotal > 0 ? failStreakColors.fail3 : 'var(--text)'};">${failStreakTotal}</div>
+    <div class="stat-card row1-card flip-card-wrap" id="gica-failstreak-flip" style="perspective:1200px;cursor:pointer;">
+      <div class="flip-card-inner" style="height:100%;">
+        <div class="flip-card-front" style="display:flex;flex-direction:column;height:100%;">
+          ${failStreakHeader}
+          <div class="row1-body" style="flex:1;min-height:0;overflow:hidden;">
+            ${failStreakBarChart(failStreakBuBreakdown)}
+          </div>
+          ${failStreakLegend}
+        </div>
+        <div class="flip-card-back" style="display:flex;flex-direction:column;background:var(--surface);overflow:hidden;">
+          ${failStreakHeader}
+          <div class="row1-body row1-body--divided" style="flex:1;">${failStreakRatioBuRows}</div>
+          ${failStreakLegend}
+        </div>
       </div>
-      <div class="row1-body row1-body--divided">${failStreakBuRows}</div>
-      ${failStreakLegend}
     </div>`;
 
   const weekCards    = vm.weeklyBuCards.filter(c => !c.empty);
@@ -8190,9 +8382,6 @@ function _gicaScheduleHtml(vm) {
     const passPct  = grandTotal ? Math.round(totalPass / grandTotal * 100) : 0;
     const failPct  = grandTotal ? Math.round(totalFail / grandTotal * 100) : 0;
     const awaitPct = Math.max(100 - passPct - failPct, 0);
-    // Attendance % = คนที่มาสอบแล้ว / ทั้งหมด (pass+fail คู่กัน) — color เข้มขึ้นตาม pct
-    const attendPct = grandTotal ? Math.round(totalDone / grandTotal * 100) : 0;
-    const pctColor  = attendPct >= 80 ? '#16a34a' : attendPct >= 50 ? '#f59e0b' : '#dc2626';
     return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Pass: ${totalPass}, Fail: ${totalFail}, Awaiting: ${notYet} (Total ${grandTotal})">
       <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
       <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
@@ -8200,7 +8389,7 @@ function _gicaScheduleHtml(vm) {
         ${failPct  > 0 ? `<div style="width:${failPct}%;background:#86efac;height:100%;"></div>`  : ''}
         ${awaitPct > 0 ? `<div style="width:${awaitPct}%;background:var(--border-light);height:100%;"></div>` : ''}
       </div>
-      <span class="mini-bar__count mini-bar__count--lg" style="color:${pctColor};font-weight:700;">${attendPct}%</span>
+      <span class="mini-bar__count mini-bar__count--lg">${totalDone}/${grandTotal}</span>
     </div>`;
   }).join('');
 
@@ -8277,13 +8466,13 @@ function _gicaScheduleHtml(vm) {
   const dueWeekCard = `
     <div class="stat-card row1-card flip-card-wrap" id="gica-dueweek-flip" style="perspective:1200px;cursor:pointer;">
       <div class="flip-card-inner" style="height:100%;">
-        <div class="flip-card-front" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+        <div class="flip-card-front" style="display:flex;flex-direction:column;height:100%;">
           ${dueWeekHeader}
           <div class="row1-body" style="flex:1;min-height:0;overflow:hidden;">
             ${dueWeekBarChart(vm.weeklyBuCards)}
           </div>
         </div>
-        <div class="flip-card-back" style="display:flex;flex-direction:column;background:var(--surface);">
+        <div class="flip-card-back" style="display:flex;flex-direction:column;background:var(--surface);overflow:hidden;">
           ${dueWeekHeader}
           <div class="row1-body row1-body--divided" style="flex:1;">${combinedBuRows || `<span class="u-muted" style="font-size:0.74rem;">${t('gicaMatrixEmpty')}</span>`}</div>
         </div>
@@ -8370,6 +8559,15 @@ function _mountGicaSchedule(html, vm) {
   if (dueFlip) {
     dueFlip.addEventListener('click', () => {
       dueFlip.classList.toggle('is-flipped');
+    });
+  }
+
+  // Failure Status card — click to flip between vertical stacked bar (front)
+  // and horizontal 5-segment ratio bars (back). Same pattern as dueweek-flip.
+  const failStreakFlip = container.querySelector('#gica-failstreak-flip');
+  if (failStreakFlip) {
+    failStreakFlip.addEventListener('click', () => {
+      failStreakFlip.classList.toggle('is-flipped');
     });
   }
 
