@@ -26,15 +26,16 @@ New Operator Monitoring/
 │   ├── 002_audit.sql                        # audit_templates / audit_plans / audit_findings + RLS + indexes
 │   ├── 003_csa.sql                          # csa_employees (6 BU + bu column)
 │   ├── 004_gica.sql                         # gica_employees / gica_freq / gica_kpi
-│   └── 005_gica_next_date_override.sql      # add next_date_override column for manual pin
+│   ├── 005_gica_next_date_override.sql      # add next_date_override column for manual pin
+│   └── 006_profiles_bu.sql                  # add nullable profiles.bu (BU scope) — see BU-Scoped Users
 ├── migrate_audit.py        # One-time migration: Audit_Monitoring.xlsx → Supabase (รันครั้งเดียว)
 ├── migrate_csa.py          # One-time migration: 6 CSA workbooks → Supabase (รันครั้งเดียว)
 ├── migrate_gica.py         # One-time migration: GICA.xlsx → Supabase (รันครั้งเดียว, done)
 ├── templates/
 │   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab)
 ├── static/
-│   ├── css/styles.css      # Styles ทั้งหมด (~3060+ บรรทัด)  [?v=201]
-│   └── js/app.js           # Frontend logic ทั้งหมด (~10600+ บรรทัด)  [?v=457]
+│   ├── css/styles.css      # Styles ทั้งหมด (~3060+ บรรทัด)  [?v=203]
+│   └── js/app.js           # Frontend logic ทั้งหมด (~11000+ บรรทัด)  [?v=470]
 └── docs/                   # เอกสาร guide สำหรับ CSA Manager
 ```
 
@@ -49,6 +50,7 @@ New Operator Monitoring/
   - Supabase issue **ES256 JWT** (asymmetric) — verify ด้วย JWKS endpoint (`/auth/v1/.well-known/jwks.json`)
   - JWT เก็บใน `localStorage` (`sb_jwt`) ฝั่ง frontend, inject เป็น `Authorization: Bearer` ทุก API call
   - `require_writable(allowed_roles)` — extract Bearer → `verify_jwt()` → `get_user_role()` (profiles table)
+  - `require_bu_scope(url_bu)` — เรียกหลัง `require_writable` ใน GICA write endpoints; ถ้า user มี `profiles.bu` ต้องตรงกับ BU ใน URL ไม่งั้น 403 (NULL bu = full access ผ่านเสมอ)
   - `MANAGER_REFRESH_TOKEN` **ยังอยู่** — เป็น service credential สำหรับ Microsoft Graph API (Jumper/Trainer/CSA/GICA Excel) เท่านั้น ไม่ใช่ auth ผู้ใช้แล้ว
 - **Session storage**: ไม่ใช้ Flask-Session แล้ว — auth state อยู่ใน client-side JWT + `localStorage` ทั้งหมด
 - **Caching: L1 (in-process) → L2 (shared KV) → live fetch** — module **Jumper/Trainer** (Excel) ยังเดินตาม pattern นี้ TTL 300 วินาที; module ที่อยู่บน Supabase (CSA/GICA/Audit) อ่านตรง ไม่ใช้ L2 KV แล้ว (Supabase เร็วพอ):
@@ -117,6 +119,7 @@ New Operator Monitoring/
 | GICA history | `.gica-attempt-dots-modal__panel`, `.gica-attempt-charts-container`, `.gica-attempt-chart-block`, `.gica-attempt-stats`, `.gica-attempt-stats__col` |
 | GICA compare | `.gica-compare-grid`, `.gica-compare-header`, `.gica-compare-cell` (div+grid ไม่ใช่ `<table>` เพื่อหลีกเลี่ยง global CSS leak) |
 | GICA paired | `.gica-modal--paired-left`, `.gica-modal--paired-right` (side-by-side modal layout) |
+| GICA cohort modal toolbar | `.gica-cohort-toolbar` (flex row: fail-stats ซ้าย / filters ขวา), `.gica-cohort-filters` (Dept/Level/Attempt/Status/Search inline) — ใช้ใน `_gicaShowEmpListModal` |
 | KPI BU tabs | `.gica-kpi-bu-tabs`, `.gica-kpi-bu-tab`, `.gica-kpi-bu-tab--active` |
 | GICA KPI Summary modal | `.gica-kpi-summary-modal__panel`, `.kpi-sum-hero`, `.kpi-sum-hero__ring`, `.kpi-sum-hero__pct/frac/meta/eyebrow/title/stats`, `.kpi-sum-stat`, `.kpi-sum-stat__dot`, `.kpi-sum-section-title`, `.kpi-sum-bu-grid`, `.kpi-sum-bu-card`, `.kpi-sum-bu-badge`, `.kpi-sum-bu-card__ring-wrap/center/pct/frac`, `.kpi-sum-bu-card__pill--pass/fail/pending`, `.kpi-sum-ring` — ธีมสีต่อ BU ผ่าน `--kpi-bu-color` custom property |
 | Login password toggle | `.login-pw-wrap`, `.login-pw-input`, `.login-pw-toggle` — ปุ่มตาเปิด/ปิด password (absolute positioned inside input wrap) |
@@ -235,6 +238,15 @@ renderXxx()             → orchestrator [Public] ชื่อเดิม, ท�
 - API response shape เดิม (`{employees, bus, freqTable, kpiDefaults}`) ยังเหมือนเดิม — frontend ไม่ต้องแก้
 - `migrations/005_gica_next_date_override.sql` — เพิ่ม column `next_date_override TEXT` ใน `gica_employees` สำหรับ manual Next Date pin (qe_edit/gica_admin/admin) — **ต้องรันใน Supabase SQL Editor ก่อน feature จะทำงาน**; new test result ล้าง override อัตโนมัติ
 
+**✅ BU-Scoped Users (2026-08-06) — GICA per-BU access control:**
+- `migrations/006_profiles_bu.sql` — เพิ่ม column `bu TEXT` ใน `profiles` (nullable + CHECK 6 BU); NULL = full access (พฤติกรรมเดิม), value เช่น `'G1'` = user เห็น/แก้ได้แค่ BU นั้น
+- `supabase_auth.get_user_bu(user_id)` — cached 5 นาที เหมือน `get_user_role`; `invalidate_role_cache` เคลียร์ทั้ง 2 cache
+- `GET /api/me` return field `bu` ด้วย
+- `require_bu_scope(url_bu)` guard — reject 403 ถ้า user มี `bu` แต่ URL BU ไม่ตรง; ใช้กับ 5 GICA write endpoints (POST create, PATCH result, PATCH next-date, DELETE results, DELETE employee)
+- Frontend: module var `_currentUserBu` ตั้งจาก `/api/me`; **Option B** — Dashboard/KPI/Charts/Schedule เห็นทุก BU ตามเดิม แต่ Employee List filter (`gica-filterBu`) + Add-employee modal ล็อกไว้ที่ BU ตัวเอง (Dept/Level options ก็ narrow ตาม)
+- **⚠️ ข้อจำกัด Option B**: payload `/api/gica-excel` ยังส่งข้อมูลทุก BU ให้ frontend (Dashboard ต้องคำนวณจริง) — เปิด DevTools เห็น raw ได้ ถ้าต้องการปิดสนิทต้อง refactor dashboard ให้ backend ส่ง aggregated stats แทน
+- 6 accounts BU-scoped: `gicabug1..4@manu.local` (G1/G2/G3/G4), `gicabuea@manu.local` (EA), `gicabutrm@manu.local` (TRM) — ทุกคน `role='gica_admin'` + `bu` ต่างกัน; password = ตัว empid
+
 **รอดำเนินการ:**
 ```
 Phase 4 — Jumper/Trainer: พักไว้ก่อน ยังไม่ตัดสินใจ ต้องแก้ repo CSA co NiSE ด้วย
@@ -293,12 +305,14 @@ User กรอกค่าเดียว (raw)
 | `qe_edit` | Supabase Auth | GICA tab | ✓ (GICA write: add employee, add result — **ลบไม่ได้** ต้องเป็น admin/gica_admin) |
 | `qe_read` | Supabase Auth | GICA tab | อ่านอย่างเดียว (ไม่มีปุ่มแก้ไข) |
 | `gica_admin` | Supabase Auth | GICA tab เท่านั้น | ✓ ทุกอย่างใน GICA (add/edit/delete employee, delete score) — ทำหน้าที่เหมือน admin แต่จำกัดโมดูล GICA |
+| `gica_admin` + `bu` set | Supabase Auth | GICA tab, dashboard เห็นทุก BU แต่ Employee List เห็นแค่ BU ตัวเอง | ✓ เฉพาะ BU ตัวเอง (backend enforce ด้วย `require_bu_scope`) |
 | `qe_audit` | Supabase Auth | Audit tab — ทุก sub-tab | ✓ (ทุก route ยกเว้น Respond ที่ auditee ก็ทำได้) |
 | `qe_auditee` | Supabase Auth | Audit tab — Dashboard/Plan/Finding-CAR (ไม่เห็น Template) | ✓ เฉพาะ `POST /api/audit/plans/<id>/respond` |
 | `admin` | Supabase Auth | ทุก tab | ✓ (รวม delete employee GICA) |
 | `viewer` | fallback (ไม่มี role ใน profiles) | อ่านได้ตามที่ endpoint อนุญาต | ❌ |
 
 > ⚠️ `qe_user` ถูกแบ่งเป็น `qe_edit` + `qe_read` แล้วต่อมาเพิ่ม `gica_admin` — อัปเดต `profiles_role_check` constraint ใน Supabase ตามลำดับ
+> ⚠️ **Frontend delete gate** = `['admin', 'gica_admin'].includes(currentRole)` — ครอบคลุมทั้ง full gica_admin และ BU-scoped variant (backend เพิ่มเช็ค `require_bu_scope` ต่อ)
 
 ### Key Backend Functions
 
@@ -306,8 +320,10 @@ User กรอกค่าเดียว (raw)
 |---|---|
 | `verify_jwt(token)` | Decode ES256/HS256 JWT ผ่าน JWKS public key (ES256 = default สำหรับ Supabase project ใหม่) |
 | `get_user_role(user_id)` | ดึง role จาก `profiles` table — cached in-process 5 นาที |
+| `get_user_bu(user_id)` | ดึง `bu` scope จาก `profiles` — NULL = full access; cached 5 นาที |
 | `extract_bearer(request)` | Parse `Authorization: Bearer <token>` header |
 | `require_writable(allowed_roles)` | Decorator guard: ตรวจ JWT + role ก่อน route handler ทำงาน |
+| `require_bu_scope(url_bu)` | Post-role guard สำหรับ GICA write endpoints: ถ้า user มี `bu` set ต้องตรงกับ URL BU ไม่งั้น 403 |
 | `_get_manager_access_token()` | ดึง Microsoft AT สำหรับ Graph API (ใช้ MANAGER_REFRESH_TOKEN, cached 5 นาที) |
 | `_get_request_actor(jwt_payload)` | แยก display name จาก JWT payload ใช้เป็น created_by/executed_by |
 
@@ -446,8 +462,10 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 | `renderGicaSummary()` | Orchestrator | ต่อ 3 ชั้น |
 | `renderGicaGradeDistChart()` | Chart | Dual-canvas grade distribution |
 | `renderGicaInsideChart(mode)` | Chart | Inside data — 4 modes |
-| `renderGicaScheduleChart()` | Chart | Upcoming test schedule stacked bar |
-| `renderGicaTable()` | Table | Employee table paginated + filtered; `deletable = currentRole==='admin'`; อัปเดต `#gica-count-badge` ตามผลกรอง |
+| `renderGicaScheduleChart()` | Chart | Upcoming test schedule — 2 summary cards (คลิกได้เปิด shared modal) + chart: `all` mode = grouped bars ใน canvas เดียว (retest light + review solid), Retest/Review mode = single dataset |
+| `renderGicaScheduleDrill()` | Delegator | Thin wrapper — เรียก `_gicaShowEmpListModal(...)` โดยตรง เมื่อ `_gicaSchedDate` set (จาก click chart bar); legacy inline HTML render ตัดออกแล้ว |
+| `_gicaShowEmpListModal(headingText, printOpts, employees, dateRange?, initialBu?)` | Modal | Shared cohort/drill modal — เห็น BU bar + filter toolbar (Dept/Level/Attempt/Status/Search) + fail-stats + emp table; รับ `initialBu` optional เพื่อ preselect BU |
+| `renderGicaTable()` | Table | Employee table paginated + filtered; `deletable = ['gica_admin','admin'].includes(currentRole)`; อัปเดต `#gica-count-badge` ตามผลกรอง; BU-scoped user เห็นแค่ BU ตัวเอง (filter ที่ `_gicaFilteredEmployees` ด้วย `_currentUserBu`) |
 | `_wireGicaControls()` | Wire | Event handlers ทั้งหมดสำหรับ filter/toggle/pagination |
 | `_wireGicaDeleteBtns(wrap)` | Wire | Wire delete buttons → confirm → `DELETE` API → refresh |
 | `_gicaEmpTableMonthDots(e)` | Table | Monthly assessment dots — แบ่ง 2 แถว ×6 ถ้า > 6 dots |
@@ -550,6 +568,12 @@ Row 1 เหลือ **3 การ์ด** เรียง: **Due this week →
 - Legend `.row1-legend` วางท้ายการ์ด (ใต้ BU rows) — มีเส้นแบ่ง dashed คั่นจาก BU rows
 - โค้ดเดิม `donutStatCard` + `donutFailStreakLg` ยังอยู่ ไม่ได้ลบ (ถูก replace โดย `failStreakStatCard`)
 
+**Due this week — flip card** (การ์ดที่ 1):
+- คลิกที่ตัวการ์ด (ไม่มีปุ่มปิดบน) → พลิกด้วย `.flip-card-wrap` / `.is-flipped`
+- **หน้าหน้า**: header 2 คอลัม (Due this week + Early Assessment) + horizontal `combinedBuRows` (Pass/Fail/Awaiting stack)
+- **หน้าหลัง**: header เดียวกัน + **vertical SVG bar chart** (`dueWeekBarChart(vm.weeklyBuCards)`) — ความสูงเต็ม = `attended + earlyN + overdue`, สีเข้ม = คนที่มาสอบแล้ว, สีอ่อน (opacity 0.25) = overdue; label "done/total" เหนือแท่ง
+- Pattern SVG bar เดียวกับ `buBarChart` (Total employees ใน Performance tab)
+
 ### Assessment Schedule — "Due this week" Logic ⚠️
 
 **G3 ขึ้น "no data" ใน Due this week / On-time Rate / BU cards แถว 2 = พฤติกรรมปกติ ไม่ใช่ bug**
@@ -565,7 +589,12 @@ BU ที่วันนัดสอบยังอยู่ในอนาค�
 
 ### Assessment Schedule Timeline — Calculation Logic ⚠️ ห้ามแก้โดยไม่อ่านส่วนนี้ก่อน
 
-กราฟแสดง 12 buckets (−5 ถึง +6 จากปัจจุบัน) ในโหมด รายสัปดาห์ หรือ รายเดือน
+กราฟแสดง buckets ใน **3 mode**:
+- **Day**: 22 buckets (−7 ถึง +14 วัน จากวันนี้) — granularity แคบสุด, replace concept "Upcoming Assessments per-day"
+- **Week**: 12 buckets (−5 ถึง +6 สัปดาห์)
+- **Month**: 12 buckets (−5 ถึง +6 เดือน)
+
+`_gicaSchedBuckets(today, mode)` เป็น branch เดียวจัดการทั้ง 3 modes — `compute` และ `render` ที่เหลือ generic ผ่าน `timelineMode`
 
 #### กฎธุรกิจ
 1. พนักงานใหม่ → ต้องสอบภายใน 1 สัปดาห์หลังเข้างาน
@@ -597,6 +626,32 @@ const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
 | `_computeGicaSchedule(emps, today, mode)` | คำนวณ timeline viewModel — **pure** |
 | `_gicaScheduleHtml(vm)` | สร้าง HTML — **pure** |
 | `_mountGicaSchedule(html, vm)` | mount DOM + Chart.js |
+
+### Upcoming Assessments — Merged chart + Clickable summary
+
+- **2 summary cards** ด้านบน — Failed (`retestEmps` = `passed===false && nextDate`) กับ Passed (`reviewEmps` = `passed===true && nextDate`) — **คลิกได้** (cursor:pointer + hover bg + role=button + Enter/Space keyboard) → เปิด `_gicaShowEmpListModal` แสดง cohort เต็ม
+- **Mode `All`** → **1 chart** (`_makeMergedChart`) มี 2 datasets grouped bars: retest ใช้สี BU opacity 0.4 (light), review ใช้สี BU solid; sort by date asc → BU rank (`BU_ORDER`)
+- **Mode `Retest`/`Review`** → single chart (`_makeChart(..., variant)`); canvas ขวาซ่อนไว้
+- Click แท่งใดๆ → `onPick({date, bu})` → set `_gicaSchedDate/Bu` → `renderGicaScheduleDrill()` → shared modal ผ่าน delegator
+
+### Shared Cohort/Drill Modal (`_gicaShowEmpListModal`)
+
+**Entry points ที่ใช้ modal นี้ร่วมกัน:**
+- คลิก BU card ใน Due-this-week (Assessment Schedule row 1)
+- คลิกแท่งใน Upcoming Assessments chart (Retest/Review)
+- คลิกแท่งใน Assessment Schedule Timeline chart
+- คลิก 2 summary count cards (Failed / Passed) ใน Upcoming section
+
+**Signature:** `(headingText, printOpts, employees, dateRange?, initialBu?)` — `initialBu` optional เพื่อ pre-select BU filter
+
+**Filter toolbar (right side, same row as fail-stats):**
+- `Dept ▾` / `Level ▾` / `Attempt ▾` / `Status ▾` (= `nextType`: Initial/Retest/Review) / `Search box`
+- Options narrow ตาม BU filter ปัจจุบัน; state reset ทุกครั้งที่ modal เปิด
+- Search focus survive per-key re-render — capture `document.activeElement.id === 'gica-cohort-filterSearch'` ก่อน `body.innerHTML =` แล้ว restore ทันที
+- Class layout: `.gica-cohort-toolbar` (flex row space-between) + `.gica-cohort-filters` (flex right)
+- Modal panel max-width = **1400px** (ขยายจาก 1200px)
+
+**Legacy DOM ที่ลบไปแล้ว:** `<div id="gica-scheduleDrill-modal">` block + `_gicaDrillEscHandler` state + `renderGicaScheduleDrill`'s inline HTML render — ทุก entry point ใช้ shared modal อันเดียว
 
 ---
 
@@ -888,6 +943,7 @@ python app.py
 -- 3. migrations/003_csa.sql
 -- 4. migrations/004_gica.sql
 -- 5. migrations/005_gica_next_date_override.sql
+-- 6. migrations/006_profiles_bu.sql
 
 -- Grant service_role access (ถ้ายังไม่ได้ทำ):
 GRANT ALL ON public.profiles TO service_role;

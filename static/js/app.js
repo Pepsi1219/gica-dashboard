@@ -7454,7 +7454,6 @@ let _gicaCalMonthOffset = 0;        // 0 = current month, ±N = N months away
 let _gicaCalBuFilter    = new Set();
 let _gicaCalTypeFilter  = new Set();
 let _gicaCalSidebarOpen = false;
-let _gicaCalDrillEscHandler = null;
 
 function _gicaSchedBuckets(today, mode) {
   const buckets = [];
@@ -8125,7 +8124,7 @@ function _gicaScheduleHtml(vm) {
     </div>`;
   }).join('');
   const failStreakLegend = `
-    <div class="row1-legend u-between">
+    <div class="row1-legend" style="display:flex;gap:16px;flex-wrap:wrap;justify-content:flex-start;">
       <span><span class="row1-legend__dot" style="background:${failStreakColors.fail1};"></span>${failStreakLabels.fail1}</span>
       <span><span class="row1-legend__dot" style="background:${failStreakColors.fail2};"></span>${failStreakLabels.fail2}</span>
       <span><span class="row1-legend__dot" style="background:${failStreakColors.fail3};"></span>${failStreakLabels.fail3}</span>
@@ -8191,6 +8190,9 @@ function _gicaScheduleHtml(vm) {
     const passPct  = grandTotal ? Math.round(totalPass / grandTotal * 100) : 0;
     const failPct  = grandTotal ? Math.round(totalFail / grandTotal * 100) : 0;
     const awaitPct = Math.max(100 - passPct - failPct, 0);
+    // Attendance % = คนที่มาสอบแล้ว / ทั้งหมด (pass+fail คู่กัน) — color เข้มขึ้นตาม pct
+    const attendPct = grandTotal ? Math.round(totalDone / grandTotal * 100) : 0;
+    const pctColor  = attendPct >= 80 ? '#16a34a' : attendPct >= 50 ? '#f59e0b' : '#dc2626';
     return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Pass: ${totalPass}, Fail: ${totalFail}, Awaiting: ${notYet} (Total ${grandTotal})">
       <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
       <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
@@ -8198,7 +8200,7 @@ function _gicaScheduleHtml(vm) {
         ${failPct  > 0 ? `<div style="width:${failPct}%;background:#86efac;height:100%;"></div>`  : ''}
         ${awaitPct > 0 ? `<div style="width:${awaitPct}%;background:var(--border-light);height:100%;"></div>` : ''}
       </div>
-      <span class="mini-bar__count mini-bar__count--lg">${totalDone}/${grandTotal}</span>
+      <span class="mini-bar__count mini-bar__count--lg" style="color:${pctColor};font-weight:700;">${attendPct}%</span>
     </div>`;
   }).join('');
 
@@ -8223,18 +8225,22 @@ function _gicaScheduleHtml(vm) {
   const dueWeekBarChart = cards => {
     const totals = cards.map(c => (c.attended || 0) + (c.earlyN || 0) + (c.overdue || 0));
     const maxN = Math.max(...totals, 1);
-    const W = 220, CH = 70, PAD = 8, LH = 16, TPAD = 14;
+    // Wider viewBox (300 vs 220) → aspect 3:1 which is closer to the actual body
+    // aspect on wide cards, so preserveAspectRatio="meet" leaves less empty side
+    // space and the chart appears to fill the card. Smaller font-sizes keep text
+    // readable — not oversized — after the SVG scales up on large screens.
+    const W = 300, CH = 70, PAD = 4, LH = 16, TPAD = 14;
     const n = cards.length;
     const slot = (W - PAD * 2) / n;
-    const bw = Math.round(slot * 0.62);
+    const bw = Math.round(slot * 0.72);
     const bo = (slot - bw) / 2;
     const bars = cards.map((c, i) => {
       const x  = Math.round(PAD + i * slot + bo);
       const cx = Math.round(x + bw / 2);
       const total = (c.attended || 0) + (c.earlyN || 0) + (c.overdue || 0);
       if (!total) {
-        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6.5" fill="var(--text-muted)">${escapeHtml(t('gicaNoData'))}</text>
-        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
+        return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="5" fill="var(--text-muted)">${escapeHtml(t('gicaNoData'))}</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="5.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
       }
       const totalH = Math.max(Math.round(total / maxN * CH), 3);
       const scale  = totalH / total;
@@ -8253,11 +8259,16 @@ function _gicaScheduleHtml(vm) {
           ${waitH > 0 ? `<rect x="${x}" y="${waitY}" width="${bw}" height="${waitH}" fill="${color}" opacity="0.25"></rect>` : ''}
           ${doneH > 0 ? `<rect x="${x}" y="${doneY}" width="${bw}" height="${doneH}" fill="${color}"></rect>` : ''}
         </g>
-        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="8" font-weight="700" fill="${color}">${done}/${total}</text>
-        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
+        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="6" font-weight="700" fill="${color}">${done}/${total}</text>
+        <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="5.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
       </g>`;
     }).join('');
-    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
+    // SVG fills the flex body via width/height 100% + preserveAspectRatio meet.
+    // "meet" scales content to fit the box while preserving aspect ratio, centered —
+    // so on wide cards content grows to fill nicely, on narrow cards it shrinks;
+    // it never overflows the box, so nothing bleeds into the header.
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" preserveAspectRatio="xMidYMid meet"
+      style="display:block;width:100%;height:100%;">
       <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
       ${bars}
     </svg>`;
@@ -8266,15 +8277,15 @@ function _gicaScheduleHtml(vm) {
   const dueWeekCard = `
     <div class="stat-card row1-card flip-card-wrap" id="gica-dueweek-flip" style="perspective:1200px;cursor:pointer;">
       <div class="flip-card-inner" style="height:100%;">
-        <div class="flip-card-front" style="display:flex;flex-direction:column;height:100%;">
+        <div class="flip-card-front" style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
           ${dueWeekHeader}
-          <div class="row1-body row1-body--divided" style="flex:1;">${combinedBuRows || `<span class="u-muted" style="font-size:0.74rem;">${t('gicaMatrixEmpty')}</span>`}</div>
-        </div>
-        <div class="flip-card-back" style="display:flex;flex-direction:column;padding:16px;background:var(--surface);border-radius:inherit;">
-          ${dueWeekHeader}
-          <div class="row1-body" style="flex:1;display:flex;align-items:center;justify-content:center;">
+          <div class="row1-body" style="flex:1;min-height:0;overflow:hidden;">
             ${dueWeekBarChart(vm.weeklyBuCards)}
           </div>
+        </div>
+        <div class="flip-card-back" style="display:flex;flex-direction:column;background:var(--surface);">
+          ${dueWeekHeader}
+          <div class="row1-body row1-body--divided" style="flex:1;">${combinedBuRows || `<span class="u-muted" style="font-size:0.74rem;">${t('gicaMatrixEmpty')}</span>`}</div>
         </div>
       </div>
     </div>`;
@@ -8596,43 +8607,34 @@ function _gicaCalendarHtml(vm) {
         <div class="gica-cal-grid" id="gica-cal-grid">${vm.weeks.map(week => `<div class="gica-cal-weeknum"><span>${escapeHtml(t('gicaCalWeekPrefix'))} ${week.weekNumber}</span></div>${week.days.map(cellHtml).join('')}`).join('')}</div>
       </div>
     </div>
-    <div id="gica-cal-drill-modal" class="gica-modal hidden">
-      <div class="gica-modal__backdrop" data-calclose="1"></div>
-      <div class="gica-modal__panel">
-        <div id="gica-cal-panel"></div>
-      </div>
-    </div>`;
+  `;
 }
 
-// Reuses the same _gicaEmpTableHtml component as the row-2 BU cohort drill-down
-// modal (_gicaShowBuCohortModal), scoped to one day + one BU.
-function _gicaCalDrillHtml(dayKey, bu, entries) {
-  // Entries are {emp, kind} from _computeGicaCalendar; dedupe by empid so a person
-  // appearing under multiple event kinds on the same day shows once in the drill list.
+// Calendar cell click → delegate to the shared cohort/drill modal
+// (_gicaShowEmpListModal). Passes ALL employees scheduled on that day (all BUs)
+// with the clicked BU preselected — so users can switch BU inside the modal.
+function _gicaCalShowDayDrill(dayKey, initialBu, dayEvents) {
   const seen = new Set();
   const rows = [];
-  entries.forEach(entry => {
+  (dayEvents || []).forEach(entry => {
     const e = entry.emp;
-    if (!e || e.bu !== bu) return;
-    const key = e.empid || `${e.name}|${e.deptname}`;
+    if (!e) return;
+    const key = `${e.bu || ''}|${e.empid || e.name || ''}`;
     if (seen.has(key)) return;
     seen.add(key);
     rows.push(e);
   });
-  rows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  const printDate = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-  return `
-    <div class="gica-print-header">
-      <div style="font-size:1rem;font-weight:700;">${escapeHtml(t('gicaEmpListForAssessmentSchedule'))}</div>
-      <div style="font-size:0.78rem;color:#555;margin-top:3px;">${escapeHtml(t('gicaAssessmentDateLbl'))}: ${_gicaFmtDate(dayKey)} · ${escapeHtml(t('gicaColBu'))} ${escapeHtml(bu)} · ${escapeHtml(t('gicaTotalWord'))}: ${rows.length} ${escapeHtml(t('gicaEmpsWord'))} · ${escapeHtml(t('gicaReportDate'))}: ${printDate}</div>
-    </div>
-    <div class="no-print" style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <span>${_gicaFmtDate(dayKey)} · <span style="color:${GICA_BU_COLORS[bu] || 'var(--accent)'};">${escapeHtml(bu)}</span> — ${rows.length} ${escapeHtml(t('gicaParticipants'))}</span>
-      <button id="gica-cal-panel-close" type="button" style="font-size:0.72rem;padding:2px 8px;">✕ ${escapeHtml(t('gicaClose'))}</button>
-      <button onclick="_gicaPrint('gica-cal-panel');" type="button" style="font-size:0.72rem;padding:2px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">${escapeHtml(t('gicaPrintPdf'))}</button>
-    </div>
-    ${_gicaFailStatsHtml(rows)}
-    <div class="gica-drill-table-wrap">${_gicaEmpTableHtml(rows, { sortable: false })}</div>`;
+  if (!rows.length) return;
+  _gicaShowEmpListModal(
+    _gicaFmtDate(dayKey),
+    {
+      printTitle: t('gicaEmpListForAssessmentSchedule'),
+      printSub:   `${t('gicaAssessmentDateLbl')}: ${_gicaFmtDate(dayKey)}`,
+    },
+    rows,
+    '',
+    initialBu || '',
+  );
 }
 
 function _mountGicaCalendar(html, vm) {
@@ -8663,39 +8665,15 @@ function _mountGicaCalendar(html, vm) {
     renderGicaCalendar();
   });
 
-  if (_gicaCalDrillEscHandler) {
-    document.removeEventListener('keydown', _gicaCalDrillEscHandler);
-    _gicaCalDrillEscHandler = null;
-  }
-  const panel = $('gica-cal-panel');
-  const drillModal = $('gica-cal-drill-modal');
-  const grid  = $('gica-cal-grid');
+  const grid = $('gica-cal-grid');
   const dayByKey = {};
   vm.weeks.forEach(week => week.days.forEach(d => { dayByKey[d.key] = d; }));
-  const closeDrill = () => {
-    if (drillModal) drillModal.classList.add('hidden');
-    if (panel) panel.innerHTML = '';
-    if (_gicaCalDrillEscHandler) {
-      document.removeEventListener('keydown', _gicaCalDrillEscHandler);
-      _gicaCalDrillEscHandler = null;
-    }
-  };
-  const showDrill = (dayKey, bu) => {
-    if (!panel) return;
-    const day = dayByKey[dayKey];
-    panel.innerHTML = day ? _gicaCalDrillHtml(dayKey, bu, day.events) : '';
-    if (drillModal) drillModal.classList.remove('hidden');
-    panel.querySelector('#gica-cal-panel-close')?.addEventListener('click', closeDrill);
-    if (_gicaCalDrillEscHandler) document.removeEventListener('keydown', _gicaCalDrillEscHandler);
-    _gicaCalDrillEscHandler = e => { if (e.key === 'Escape') closeDrill(); };
-    document.addEventListener('keydown', _gicaCalDrillEscHandler);
-  };
   grid?.addEventListener('click', e => {
     const chip = e.target.closest('.gica-cal-evt[data-bu]');
     if (!chip) return;
-    showDrill(chip.dataset.dayKey, chip.dataset.bu);
+    const day = dayByKey[chip.dataset.dayKey];
+    _gicaCalShowDayDrill(chip.dataset.dayKey, chip.dataset.bu, day ? day.events : []);
   });
-  drillModal?.querySelectorAll('[data-calclose="1"]').forEach(el => el.addEventListener('click', closeDrill));
 }
 
 function renderGicaCalendar() {
