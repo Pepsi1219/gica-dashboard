@@ -17,6 +17,10 @@ _ROLE_CACHE: dict = {}
 _ROLE_CACHE_TTL = 300
 MAX_ROLE_CACHE_SIZE = 500
 
+# in-process bu cache: user_id → {"bu": str | None, "exp": float}
+_BU_CACHE: dict = {}
+_BU_CACHE_TTL = 300
+
 
 def _get_jwks_key(kid: str | None = None):
     """Fetch Supabase JWKS and return the matching public key object."""
@@ -122,8 +126,28 @@ def get_user_role(user_id: str) -> str | None:
     return role
 
 
+def get_user_bu(user_id: str) -> str | None:
+    """Look up the user's BU scope from profiles.
+    NULL bu = no scope (full access). Cached 5 minutes."""
+    if not user_id:
+        return None
+    cached = _BU_CACHE.get(user_id)
+    if cached and time.time() < cached["exp"]:
+        return cached["bu"]
+    try:
+        rows = sb_select("profiles", filters={"id": user_id}, columns="bu")
+        bu = rows[0].get("bu") if rows else None
+    except Exception:
+        bu = None
+    _BU_CACHE[user_id] = {"bu": bu, "exp": time.time() + _BU_CACHE_TTL}
+    if len(_BU_CACHE) > MAX_ROLE_CACHE_SIZE:
+        _BU_CACHE.clear()
+    return bu
+
+
 def invalidate_role_cache(user_id: str):
     _ROLE_CACHE.pop(user_id, None)
+    _BU_CACHE.pop(user_id, None)
 
 
 def extract_bearer(request) -> str | None:

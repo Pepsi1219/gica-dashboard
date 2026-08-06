@@ -1412,6 +1412,7 @@ function monthAbbr(idx) {
 }
 let currentUser       = null;
 let currentRole       = 'user';  // 'user' | 'manager' (view-only)
+let _currentUserBu    = null;    // null = no scope (all BUs); 'G1'..'TRM' = BU-scoped user
 let lastCalc          = null;
 let currentLang       = localStorage.getItem('lang')  || 'th';
 let currentTheme      = localStorage.getItem('theme') || 'light';
@@ -3951,8 +3952,9 @@ async function init() {
     return;
   }
 
-  currentUser = me.user;
-  currentRole = me.role || 'viewer';
+  currentUser    = me.user;
+  currentRole    = me.role || 'viewer';
+  _currentUserBu = me.bu || null;
 
   const VIEW_ONLY_ROLES = ['viewer'];
   const QE_ROLES        = ['qe_edit', 'qe_read'];
@@ -9250,6 +9252,9 @@ function _gicaFilteredEmployees() {
   const f = _gicaTableState.filters;
   const q = f.search.trim().toLowerCase();
   let rows = (_gicaData.employees || []).filter(e => {
+    // BU-scoped user: Employee List only shows own BU (backend still returns all
+    // BUs so dashboards can aggregate — this is Option B behaviour).
+    if (_currentUserBu && e.bu !== _currentUserBu) return false;
     if (f.bu && e.bu !== f.bu) return false;
     if (f.grade && e.grade !== f.grade) return false;
     if (f.dept && e.deptname !== f.dept) return false;
@@ -9831,6 +9836,13 @@ function _gicaOpenCreateModal() {
   const today = new Date().toISOString().slice(0, 10);
   $('gica-create-startdate').value = today;
   _gicaUpdateStartDateLabel(today);
+  // BU-scoped user: lock BU dropdown to their own BU
+  const buSel = $('gica-create-bu');
+  if (buSel && _currentUserBu) {
+    buSel.value = _currentUserBu;
+    buSel.disabled = true;
+    buSel.title = `จำกัดสิทธิ์: ${_currentUserBu} เท่านั้น`;
+  }
   $('gica-create-error').classList.add('hidden');
   $('gica-create-modal').classList.remove('hidden');
 }
@@ -10070,10 +10082,22 @@ function _wireGicaControls() {
       sel.appendChild(o);
     });
   };
-  fillSelect('gica-filterBu', sortBus(_gicaData.bus || []));
+  // BU-scoped user: only their own BU is a legal filter value. Force-select it
+  // and disable the dropdown so they can't switch away (backend also rejects
+  // writes to other BUs; this is the UI half).
+  const buOptions = _currentUserBu ? [_currentUserBu] : sortBus(_gicaData.bus || []);
+  fillSelect('gica-filterBu', buOptions);
+  const buSel = $('gica-filterBu');
+  if (buSel && _currentUserBu) {
+    buSel.value = _currentUserBu;
+    buSel.disabled = true;
+    buSel.title = `จำกัดสิทธิ์: ${_currentUserBu} เท่านั้น`;
+    _gicaTableState.filters.bu = _currentUserBu;
+  }
   fillSelect('gica-filterGrade', GICA_GRADES);
-  fillSelect('gica-filterDept', [...new Set(emps.map(e => e.deptname).filter(Boolean))].sort());
-  fillSelect('gica-filterLevel', GICA_LEVEL_ORDER.filter(lv => emps.some(e => e.level === lv)));
+  const scopedEmps = _currentUserBu ? emps.filter(e => e.bu === _currentUserBu) : emps;
+  fillSelect('gica-filterDept', [...new Set(scopedEmps.map(e => e.deptname).filter(Boolean))].sort());
+  fillSelect('gica-filterLevel', GICA_LEVEL_ORDER.filter(lv => scopedEmps.some(e => e.level === lv)));
   fillSelect('gica-filterType', ['Retest', 'Review']);
 
   const bind = (id, key) => {

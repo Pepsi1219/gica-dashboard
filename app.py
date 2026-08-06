@@ -43,7 +43,7 @@ from graph_excel import (
     graph_request,
 )
 from supabase_client import SupabaseError, sb_insert, sb_select, sb_update, sb_delete, sb_auth_sign_in
-from supabase_auth import extract_bearer, get_user_role, invalidate_role_cache, verify_jwt
+from supabase_auth import extract_bearer, get_user_bu, get_user_role, invalidate_role_cache, verify_jwt
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -130,6 +130,22 @@ def _get_request_actor() -> str:
     return payload.get("email", "") or payload.get("sub", "")
 
 
+def require_bu_scope(url_bu: str):
+    """After require_writable passes, enforce that a BU-scoped user only touches
+    their own BU. NULL bu on the profile = no scope = allow. Returns error
+    response tuple or None."""
+    token_str = extract_bearer(request)
+    if not token_str:
+        return None  # require_writable already guards; this is defence-in-depth
+    payload = verify_jwt(token_str)
+    if not payload:
+        return None
+    user_bu = get_user_bu(payload.get("sub", ""))
+    if user_bu and str(url_bu or "").strip().upper() != user_bu:
+        return jsonify({"error": "Forbidden — outside your BU scope"}), 403
+    return None
+
+
 def get_department_or_404(department_key):
     dep = DEPARTMENTS.get(str(department_key or "").upper())
     if not dep:
@@ -201,6 +217,7 @@ def api_me():
         return jsonify({"authenticated": False, "user": None, "role": "viewer"})
     user_id = jwt_payload.get("sub", "")
     role    = get_user_role(user_id) or "viewer"
+    bu      = get_user_bu(user_id)
     email   = jwt_payload.get("email", "")
     meta    = jwt_payload.get("user_metadata") or {}
     name    = meta.get("display_name", "") or (email.split("@")[0] if email else "")
@@ -208,6 +225,7 @@ def api_me():
         "authenticated": True,
         "user":          {"name": name, "email": email},
         "role":          role,
+        "bu":            bu,
     })
 
 
@@ -987,8 +1005,9 @@ def api_gica_excel():
 def api_gica_create_employee(bu):
     deny = require_writable(("qe_edit", "gica_admin", "admin"))
     if deny: return deny
-
     bu      = str(bu or "").strip().upper()
+    deny = require_bu_scope(bu)
+    if deny: return deny
     payload = request.json or {}
     empid   = str(payload.get("empid", "")).strip()
     if not empid or not empid.isdigit():
@@ -1022,8 +1041,9 @@ def api_gica_create_employee(bu):
 def api_gica_add_result(bu, empid):
     deny = require_writable(("qe_edit", "gica_admin", "admin"))
     if deny: return deny
-
     bu      = str(bu or "").strip().upper()
+    deny = require_bu_scope(bu)
+    if deny: return deny
     payload = request.json or {}
     try:
         meas_pct = float(payload.get("measurementResult"))
@@ -1076,8 +1096,9 @@ def api_gica_set_next_date(bu, empid):
     to reset back to the auto-computed schedule."""
     deny = require_writable(("qe_edit", "gica_admin", "admin"))
     if deny: return deny
-
     bu    = str(bu or "").strip().upper()
+    deny = require_bu_scope(bu)
+    if deny: return deny
     empid = str(empid or "").strip()
     if not bu or not empid:
         return jsonify({"error": "bu and empid are required"}), 400
@@ -1112,8 +1133,9 @@ def api_gica_delete_results(bu, empid):
     them to a fresh 'needs Initial assessment' state."""
     deny = require_writable(("gica_admin", "admin"))
     if deny: return deny
-
     bu    = str(bu or "").strip().upper()
+    deny = require_bu_scope(bu)
+    if deny: return deny
     empid = str(empid or "").strip()
     if not bu or not empid:
         return jsonify({"error": "bu and empid are required"}), 400
@@ -1153,8 +1175,9 @@ def api_gica_delete_results(bu, empid):
 def api_gica_delete_employee(bu, empid):
     deny = require_writable(("gica_admin", "admin"))
     if deny: return deny
-
     bu    = str(bu or "").strip().upper()
+    deny = require_bu_scope(bu)
+    if deny: return deny
     empid = str(empid or "").strip()
     if not bu or not empid:
         return jsonify({"error": "bu and empid are required"}), 400
