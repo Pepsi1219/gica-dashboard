@@ -1989,6 +1989,14 @@ tbody tr:hover { filter: brightness(.97); }
 .flip-card-wrap.is-flipped .flip-card-inner { transform: rotateY(180deg); }
 .flip-card-front, .flip-card-back { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .flip-card-back { position: absolute; inset: 0; transform: rotateY(180deg); }
+/* Row-1 flip cards (Total employees, Avg Score) must fill their stretched
+   grid cell so their backgrounds visually line up with plain .stat-card
+   siblings even when the inner content (e.g. a short bar chart) is
+   naturally shorter than the sibling donuts. */
+.stat-grid > .flip-card-wrap { height: 100%; }
+.stat-grid > .flip-card-wrap > .flip-card-inner { height: 100%; }
+.stat-grid > .flip-card-wrap > .flip-card-inner > .flip-card-front,
+.stat-grid > .flip-card-wrap > .flip-card-inner > .flip-card-back { height: 100%; box-sizing: border-box; }
 .flip-card-type { font-size: 0.7rem; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
 .flip-indicator { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text-muted); margin-top: 8px; justify-content: flex-end; }
 .gica-bu-row { display: flex; align-items: stretch; gap: 10px; }
@@ -2366,6 +2374,24 @@ tbody tr:hover { filter: brightness(.97); }
 .row1-body .mini-bar__row--lg { min-height:24px; }
 .row1-legend { margin-top:10px; padding-top:8px; border-top:1px dashed var(--border-light); font-size:0.66rem; color:var(--text-muted); }
 .row1-legend__dot { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+/* — Weekly Assessment Load heatmap grid (Assessment Schedule row 1) — */
+/* Compact sizing so the card height matches the old failStreak card (~230px)
+   after we drop the 60-item legend. Each row is ~18px total (padding + font). */
+.wl-grid       { display:grid; gap:2px; margin-top:6px; font-family:'Geist Mono', monospace; font-variant-numeric:tabular-nums; }
+.wl-hdr        { font-size:0.68rem; font-weight:600; text-align:center; padding:2px 2px; letter-spacing:0.02em; }
+.wl-hdr--corner{ }
+.wl-hdr--bu    { border-bottom:2px solid currentColor; }
+.wl-lvl        { font-size:0.68rem; color:var(--text); padding:2px 6px 2px 0; display:flex; align-items:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wl-lvl--dim   { color:var(--text-muted); opacity:0.55; }
+.wl-cell       { font-size:0.7rem; font-weight:600; color:var(--text); text-align:center; padding:2px 2px; border-radius:3px; display:flex; align-items:center; justify-content:center; min-height:16px; transition:transform 0.12s ease, box-shadow 0.12s ease; }
+.wl-cell[data-wl-lv] { cursor:pointer; }
+.wl-cell[data-wl-lv]:hover,
+.wl-cell[data-wl-lv]:focus-visible { transform:scale(1.10); box-shadow:0 0 0 1px var(--border); outline:none; z-index:1; position:relative; }
+.wl-cell--zero { color:var(--text-muted); font-weight:400; }
+/* "+N" suffix for the early-assessment count inside heatmap cells and the
+   header total. Blue to match the Due-this-week "Early Assessment" accent. */
+.wl-cell__early    { color:#2563eb; font-weight:700; font-size:0.62rem; margin-left:1px; vertical-align:baseline; }
+.wl-header__early  { color:#2563eb; font-weight:700; font-size:0.9rem; margin-left:4px; vertical-align:top; }
 /* — GICA Sub-tab bar — */
 /* ─── 1. แผงถาดรองแท็บ (Sub-tab Bar Container) ─── */
 /* GICA Employee List — filter bar + fail stats on one row */
