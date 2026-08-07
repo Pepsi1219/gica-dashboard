@@ -2456,6 +2456,126 @@ tbody tr:hover { filter: brightness(.97); }
   color: var(--accent, #2563eb);
   flex-shrink: 0;
 }
+/* BU shortcut badges above the search bar — one per BU with employee count.
+   `--bu-badge-color` per-badge from GICA_BU_COLORS; active variant fills with
+   the BU color, inactive stays neutral with a colored left dot. */
+.gica-bu-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gica-bu-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--text, #111827);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s;
+  position: relative;
+}
+.gica-bu-badge::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bu-badge-color, #6b7280);
+}
+.gica-bu-badge:hover {
+  border-color: var(--bu-badge-color, #6b7280);
+  transform: translateY(-1px);
+}
+.gica-bu-badge__label {
+  font-weight: 600;
+}
+.gica-bu-badge__count {
+  font-size: 0.72rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+  font-weight: 600;
+}
+.gica-bu-badge--active {
+  background: var(--bu-badge-color, #6b7280);
+  border-color: var(--bu-badge-color, #6b7280);
+  color: #fff;
+}
+.gica-bu-badge--active::before {
+  background: rgba(255, 255, 255, 0.9);
+}
+.gica-bu-badge--active .gica-bu-badge__count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* Info panel at top of Add Assessment Result modal — read-only context
+   (dept/level/position/expectation/freq) so the user knows what they're
+   grading against. Compact label:value rows, indented block. */
+.gica-result-empinfo {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light, #eef0f4);
+  border-left: 3px solid var(--accent, #6366f1);
+  background: var(--surface-2, #f8fafc);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gica-result-empinfo:empty { display: none; }
+.gica-result-empinfo__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.gica-result-empinfo__label {
+  color: var(--text-muted, #6b7280);
+  flex-shrink: 0;
+}
+.gica-result-empinfo__value {
+  color: var(--text, #111827);
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.gica-emp-role-cell {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.gica-emp-role-cell:hover {
+  background: var(--hover-bg, #eef2ff) !important;
+  outline: 1px dashed var(--accent, #6366f1);
+  outline-offset: -2px;
+}
+/* Narrow score columns — header uses an icon, cell shows grade badge + %.
+   Keep numeric values on one line so the column can be tight without wrapping. */
+.gica-emp-table th.gica-score-th {
+  width: 68px;
+  min-width: 68px;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}
+.gica-emp-table td.gica-score-td {
+  width: 68px;
+  min-width: 68px;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  white-space: nowrap;
+}
+.gica-emp-table td.gica-score-td .gica-grade-score {
+  margin-left: 2px;
+  font-size: 0.72rem;
+}
 .gica-next-date-cell {
   transition: background 0.12s;
 }

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=212" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=216" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -640,8 +640,11 @@
 
         <div id="gica-emplist-panel" class="hidden">
           <div class="card card--section">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;flex-wrap:wrap;gap:8px;">
-              <h3 style="margin:0;font-size:1rem;color:var(--text);display:flex;align-items:center;gap:8px;"><span data-i18n="gicaEmpListTitle">Employee List</span> <span id="gica-count-badge" class="emp-count-badge">0</span></h3>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;flex-wrap:wrap;gap:12px;">
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <h3 style="margin:0;font-size:1rem;color:var(--text);display:flex;align-items:center;gap:8px;"><span data-i18n="gicaEmpListTitle">Employee List</span> <span id="gica-count-badge" class="emp-count-badge">0</span></h3>
+                <div id="gica-bu-badges" class="gica-bu-badge-row"></div>
+              </div>
               <div style="display:flex;gap:8px;">
                 <button id="gica-create-operator-btn" class="hidden" data-i18n="gicaCreateOp" style="font-size:0.72rem;padding:4px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer;">+ Create new operator</button>
                 <button onclick="_gicaEmpListPrint();" data-i18n="gicaPrint" style="font-size:0.72rem;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print</button>
@@ -702,6 +705,8 @@
               <button class="gica-modal__close" id="gica-result-close" aria-label="ปิด">✕</button>
             </div>
             <div class="gica-kpi-modal__body">
+              <!-- Populated by _gicaOpenResultModal — shows dept/level/position/expectation/freq for the selected employee -->
+              <div id="gica-result-empinfo" class="gica-result-empinfo"></div>
               <div class="gica-form-row">
                 <label class="gica-form-label" data-i18n="gicaMeasResultPct">Measurement Result (%)</label>
                 <input type="number" id="gica-result-meas" class="gica-form-input" min="0" max="100" step="0.01" placeholder="0-100">
@@ -792,6 +797,44 @@
             <div class="gica-kpi-modal__footer">
               <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-create-cancel" data-i18n="cancel">Cancel</button>
               <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-create-confirm" data-i18n="confirm">Confirm</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Edit Employee Role modal (gica_admin/admin) — change Department / Level / Position -->
+        <div id="gica-editrole-modal" class="gica-modal hidden">
+          <div class="gica-modal__backdrop" id="gica-editrole-backdrop"></div>
+          <div class="gica-modal__panel gica-kpi-modal__panel">
+            <div class="gica-modal__head">
+              <h4 style="margin:0;font-size:1rem;">Edit Department / Level / Position</h4>
+              <button class="gica-modal__close" id="gica-editrole-close" aria-label="ปิด">✕</button>
+            </div>
+            <div class="gica-kpi-modal__body">
+              <div class="gica-form-row">
+                <label class="gica-form-label" data-i18n="gicaEmpId">Employee ID</label>
+                <input type="text" id="gica-editrole-empid" class="gica-form-input" readonly style="background:var(--surface-2,#f3f4f6);">
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label" data-i18n="gicaEmpName">Employee Name</label>
+                <input type="text" id="gica-editrole-name" class="gica-form-input" readonly style="background:var(--surface-2,#f3f4f6);">
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label" data-i18n="gicaColDept">Department</label>
+                <select id="gica-editrole-dept" class="gica-form-input"></select>
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label" data-i18n="gicaColLevel">Level</label>
+                <select id="gica-editrole-level" class="gica-form-input"></select>
+              </div>
+              <div class="gica-form-row">
+                <label class="gica-form-label" data-i18n="gicaPosition">Position</label>
+                <select id="gica-editrole-position" class="gica-form-input"></select>
+              </div>
+              <p id="gica-editrole-error" class="login-error hidden" style="margin-top:8px;color:var(--danger,#dc2626);background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.3);"></p>
+            </div>
+            <div class="gica-kpi-modal__footer">
+              <button class="gica-kpi-btn gica-kpi-btn--cancel" id="gica-editrole-cancel" data-i18n="cancel">Cancel</button>
+              <button class="gica-kpi-btn gica-kpi-btn--confirm" id="gica-editrole-confirm" data-i18n="confirm">Confirm</button>
             </div>
           </div>
         </div>
@@ -1049,6 +1092,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=494"></script>
+  <script src="/static/js/app.js?v=499"></script>
 </body>
 </html>

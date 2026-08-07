@@ -5785,6 +5785,9 @@ async function initGicaTab() {
       _wireGicaCreateModal();
       $('gica-create-operator-btn')?.classList.remove('hidden');
     }
+    if (['gica_admin', 'admin'].includes(currentRole)) {
+      _wireGicaEditRoleModal();
+    }
     // Score History delete is admin-only, but wiring the modal is harmless for others
     // (the button that opens it is hidden unless admin).
     if (['gica_admin', 'admin'].includes(currentRole)) _wireGicaScoreHistoryModal();
@@ -9661,18 +9664,23 @@ function _gicaEmpTableHtml(rows, opts = {}) {
   const editable  = !!opts.editable;
   const deletable = !!opts.deletable;
   const showNum   = false;
-  const cols      = (showNum ? 1 : 0) + 13 + (deletable ? 1 : 0);
+  const cols      = (showNum ? 1 : 0) + 14 + (deletable ? 1 : 0);
   const st = _gicaTableState;
 
   const arrow = k => {
     if (!sortable || st.sortKey !== k) return '';
     return ` <span class="gica-sort-arrow">${st.sortDir === 1 ? '▲' : '▼'}</span>`;
   };
-  const TH = (k, label, cls = '') => {
+  const TH = (k, label, cls = '', titleAttr = '') => {
     const sortCls = sortable ? ' gica-th-sort' : '';
     const onclick = sortable ? ` onclick="_gicaSort('${k}')"` : '';
-    return `<th class="${cls}${sortCls}"${onclick}>${label}${arrow(k)}</th>`;
+    const title   = titleAttr ? ` title="${escapeHtml(titleAttr)}"` : '';
+    return `<th class="${cls}${sortCls}"${onclick}${title}>${label}${arrow(k)}</th>`;
   };
+  // Compact icon headers for the two score columns — keeps the columns narrow
+  // (values stay: grade badge + %), text moves to a tooltip so meaning isn't lost.
+  const measIconHtml = `<i class="ti ti-ruler-measure" aria-hidden="true" style="font-size:1.05rem;line-height:1;"></i>`;
+  const inspIconHtml = `<i class="ti ti-eye-check"      aria-hidden="true" style="font-size:1.05rem;line-height:1;"></i>`;
 
   const gradeCell = (g, s) => {
     if (!g) return '<span class="emp-date-empty">—</span>';
@@ -9685,16 +9693,17 @@ function _gicaEmpTableHtml(rows, opts = {}) {
 
   return `
     <div class="gica-emp-table-wrap">
-    <table class="emp-table gica-emp-table" style="min-width:1080px;">
+    <table class="emp-table gica-emp-table" style="min-width:1200px;">
       <thead><tr>
         ${numTh}
         ${TH('bu', t('gicaColBu'))}
         ${TH('empid', t('gicaColEmpId'))}
         ${TH('name', t('gicaColName'))}
         ${TH('deptname', t('gicaColDept'))}
-        ${TH('level', t('gicaColLevel'), 'col-group-end td-c')}
-        ${TH('grade1', t('gicaColMeas'), 'td-c')}
-        ${TH('grade2', t('gicaColInsp'), 'td-c')}
+        ${TH('level', t('gicaColLevel'), 'td-c')}
+        ${TH('position', t('gicaPosition'), 'col-group-end')}
+        ${TH('grade1', measIconHtml, 'td-c gica-score-th', t('gicaColMeas'))}
+        ${TH('grade2', inspIconHtml, 'td-c gica-score-th', t('gicaColInsp'))}
         ${TH('attempt', t('gicaColAttempt'), 'td-c')}
         ${TH('lastDate', t('gicaColLastDate'), 'td-c')}
         ${TH('passed', t('gicaColHistory'), 'td-c col-group-end')}
@@ -9713,6 +9722,14 @@ function _gicaEmpTableHtml(rows, opts = {}) {
                 ? ` data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" title="${escapeHtml(t('gicaEmpNameTip'))}"`
                 : '';
               const nameStyle = editable ? ' style="cursor:pointer;color:var(--primary,#6366f1);text-decoration:underline;"' : '';
+              // Dept + Level cells: editable ONLY for gica_admin/admin (not qe_edit).
+              // Same reason as delete: changing role changes freq_months / expectations,
+              // which affects downstream schedule/pass/fail — higher-trust operation.
+              const roleEditable = deletable;
+              const roleCellAttrs = roleEditable
+                ? ` data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" data-dept="${escapeHtml(e.deptname || '')}" data-level="${escapeHtml(e.level || '')}" data-position="${escapeHtml(e.position || '')}" data-name="${escapeHtml(e.name || '')}" title="Click to edit role"`
+                : '';
+              const roleCellCls = roleEditable ? ' gica-emp-role-cell' : '';
               const deleteTd = deletable
                 ? `<td class="td-c"><button class="gica-delete-emp-btn emp-act-btn" data-empid="${escapeHtml(e.empid || '')}" data-bu="${escapeHtml(e.bu || '')}" data-name="${escapeHtml(e.name || '')}" title="${escapeHtml(t('gicaDeleteEmpTip'))}" style="opacity:1;color:#dc2626;border-color:#fca5a5;"><i class="ti ti-trash" aria-hidden="true"></i></button></td>`
                 : '';
@@ -9728,10 +9745,11 @@ function _gicaEmpTableHtml(rows, opts = {}) {
                 <td>${escapeHtml(e.bu)}</td>
                 <td><span class="emp-id-cell">${escapeHtml(e.empid || '')}</span></td>
                 <td class="${nameCls}"${nameAttrs}${nameStyle}>${escapeHtml(e.name)}</td>
-                <td>${escapeHtml(e.deptname)}</td>
-                <td class="td-c col-group-end">${escapeHtml(e.level || '')}</td>
-                <td class="td-c">${gradeCell(e.grade1, e.score1)}</td>
-                <td class="td-c">${gradeCell(e.grade2, e.score2)}</td>
+                <td class="${roleCellCls}"${roleCellAttrs}>${escapeHtml(e.deptname)}</td>
+                <td class="td-c${roleCellCls}"${roleCellAttrs}>${escapeHtml(e.level || '')}</td>
+                <td class="col-group-end${roleCellCls}"${roleCellAttrs}>${escapeHtml(e.position || '')}</td>
+                <td class="td-c gica-score-td">${gradeCell(e.grade1, e.score1)}</td>
+                <td class="td-c gica-score-td">${gradeCell(e.grade2, e.score2)}</td>
                 <td class="td-c"><span class="emp-id-cell">${e.attempt}</span></td>
                 <td class="td-c">${_gicaFmtDate(e.lastDate)}</td>
                 <td class="td-c col-group-end">${_gicaEmpTableMonthDots(e)}</td>
@@ -9800,7 +9818,10 @@ function renderGicaTable() {
     _wireGicaEmpNameClicks(wrap);
     _wireGicaNextDateClicks(wrap);
   }
-  if (deletable) _wireGicaDeleteBtns(wrap);
+  if (deletable) {
+    _wireGicaDeleteBtns(wrap);
+    _wireGicaRoleCellClicks(wrap);
+  }
 
   const countBadge = $('gica-count-badge');
   if (countBadge) countBadge.textContent = total;
@@ -9878,6 +9899,14 @@ function _gicaBeginNextDateEdit(td) {
   document.addEventListener('keydown', td._escHandler);
 }
 
+// Click Department or Level cell → open Edit Role modal (gica_admin/admin only).
+// The two cells share the same handler + dataset (bu, empid, dept, level, position, name).
+function _wireGicaRoleCellClicks(wrap) {
+  wrap.querySelectorAll('.gica-emp-role-cell[data-empid]').forEach(td => {
+    td.addEventListener('click', () => _gicaOpenEditRoleModal(td.dataset));
+  });
+}
+
 function _wireGicaDeleteBtns(wrap) {
   wrap.querySelectorAll('.gica-delete-emp-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -9953,6 +9982,35 @@ function _gicaOpenResultModal(bu, empid) {
       </strong>
     `;
   }
+  // Employee info panel — shows what the score inputs are being entered against,
+  // and what grade thresholds define pass/fail (expectation + freq come from gica_freq).
+  const infoEl = $('gica-result-empinfo');
+  if (infoEl) {
+    if (emp) {
+      const freqTxt = emp.freqMonths
+        ? t('gicaFreqEveryNMos', { n: emp.freqMonths })
+        : '—';
+      const expTxt = (emp.exp1 || emp.exp2)
+        ? `${emp.exp1 || '—'} / ${emp.exp2 || '—'}`
+        : '—';
+      const row = (label, value) => `
+        <div class="gica-result-empinfo__row">
+          <span class="gica-result-empinfo__label">${escapeHtml(label)}</span>
+          <span class="gica-result-empinfo__value">${escapeHtml(value)}</span>
+        </div>`;
+      infoEl.innerHTML =
+        row(t('gicaColDept'),   emp.deptname || '—') +
+        row(t('gicaColLevel'),  emp.level    || '—') +
+        row(t('gicaPosition'),  emp.position || '—') +
+        row(`${t('gicaColMeas')} / ${t('gicaColInsp')} — Expectation`, expTxt) +
+        row(t('gicaFreqFreq'),  freqTxt);
+      infoEl.classList.remove('hidden');
+    } else {
+      infoEl.innerHTML = '';
+      infoEl.classList.add('hidden');
+    }
+  }
+
   $('gica-result-meas').value = '';
   $('gica-result-insp').value = '';
   const today = new Date().toISOString().slice(0, 10);
@@ -10432,6 +10490,157 @@ function _wireGicaCreateModal() {
   });
 }
 
+// ── Edit Role modal (gica_admin/admin) ─────────────────────────────────────
+// Change dept/level/position for an existing employee. Same cascading-dropdown
+// pattern as Create modal: dropdown options come from _gicaData.freqTable, so
+// only combinations that exist in gica_freq are pickable — no orphaned rows.
+let _gicaEditRoleCtx = null; // {bu, empid, name, dept, level, position} — set by open
+
+function _gicaPopulateEditRoleDropdowns(preselect) {
+  const freq    = _gicaData.freqTable || [];
+  const deptSel = $('gica-editrole-dept');
+  const lvlSel  = $('gica-editrole-level');
+  const posSel  = $('gica-editrole-position');
+  if (!deptSel || !lvlSel || !posSel) return;
+
+  const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+  const placeholder = `<option value="">— Select —</option>`;
+
+  const depts = [...new Set(freq.map(r => r.department).filter(Boolean))].sort();
+  deptSel.innerHTML = placeholder + depts.map(opt).join('');
+  if (preselect?.dept && depts.includes(preselect.dept)) deptSel.value = preselect.dept;
+
+  _gicaFilterEditRoleLevel(deptSel.value, preselect?.level);
+  _gicaFilterEditRolePosition(deptSel.value, lvlSel.value, preselect?.position);
+}
+
+function _gicaFilterEditRoleLevel(dept, preselectLevel) {
+  const freq   = _gicaData.freqTable || [];
+  const lvlSel = $('gica-editrole-level');
+  const posSel = $('gica-editrole-position');
+  if (!lvlSel || !posSel) return;
+
+  const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+  const placeholder = `<option value="">— Select —</option>`;
+
+  posSel.innerHTML = placeholder;
+  posSel.disabled  = true;
+
+  if (!dept) {
+    lvlSel.innerHTML = placeholder;
+    lvlSel.disabled  = true;
+    return;
+  }
+  const levels = [...new Set(
+    freq.filter(r => r.department === dept).map(r => r.level).filter(Boolean)
+  )].sort((a, b) => {
+    const ia = GICA_LEVEL_ORDER.indexOf(a), ib = GICA_LEVEL_ORDER.indexOf(b);
+    if (ia !== ib) return (ia === -1 ? 1 : ib === -1 ? -1 : ia - ib);
+    return a.localeCompare(b);
+  });
+  lvlSel.innerHTML = placeholder + levels.map(opt).join('');
+  lvlSel.disabled  = levels.length === 0;
+  if (preselectLevel && levels.includes(preselectLevel)) lvlSel.value = preselectLevel;
+}
+
+function _gicaFilterEditRolePosition(dept, level, preselectPosition) {
+  const freq   = _gicaData.freqTable || [];
+  const posSel = $('gica-editrole-position');
+  if (!posSel) return;
+
+  const opt = v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+  const placeholder = `<option value="">— Select —</option>`;
+
+  if (!dept || !level) {
+    posSel.innerHTML = placeholder;
+    posSel.disabled  = true;
+    return;
+  }
+  const roles = [...new Set(
+    freq.filter(r => r.department === dept && r.level === level).map(r => r.role).filter(Boolean)
+  )].sort();
+  posSel.innerHTML = placeholder + roles.map(opt).join('');
+  posSel.disabled  = roles.length === 0;
+  if (preselectPosition && roles.includes(preselectPosition)) posSel.value = preselectPosition;
+}
+
+function _gicaOpenEditRoleModal(ds) {
+  _gicaEditRoleCtx = {
+    bu:       ds.bu       || '',
+    empid:    ds.empid    || '',
+    name:     ds.name     || '',
+    dept:     ds.dept     || '',
+    level:    ds.level    || '',
+    position: ds.position || '',
+  };
+  $('gica-editrole-empid').value = _gicaEditRoleCtx.empid;
+  $('gica-editrole-name').value  = _gicaEditRoleCtx.name;
+  $('gica-editrole-error').classList.add('hidden');
+  _gicaPopulateEditRoleDropdowns({
+    dept:     _gicaEditRoleCtx.dept,
+    level:    _gicaEditRoleCtx.level,
+    position: _gicaEditRoleCtx.position,
+  });
+  $('gica-editrole-modal').classList.remove('hidden');
+}
+
+function _gicaCloseEditRoleModal() {
+  $('gica-editrole-modal')?.classList.add('hidden');
+  _gicaEditRoleCtx = null;
+}
+
+async function _gicaSaveEditRole() {
+  const ctx = _gicaEditRoleCtx;
+  if (!ctx) return;
+  const errEl = $('gica-editrole-error');
+  const dept  = $('gica-editrole-dept').value;
+  const level = $('gica-editrole-level').value;
+  const position = $('gica-editrole-position').value;
+  if (!dept || !level || !position) {
+    errEl.textContent = 'กรุณาเลือก Department / Level / Position ให้ครบ';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (dept === ctx.dept && level === ctx.level && position === ctx.position) {
+    _gicaCloseEditRoleModal();
+    return;
+  }
+  _gicaCloseEditRoleModal();
+  showToast(t('gicaSaving'));
+  try {
+    await api(`/api/gica/${encodeURIComponent(ctx.bu)}/employees/${encodeURIComponent(ctx.empid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ deptname: dept, level, position }),
+    });
+    await _gicaRefreshData();
+    renderGicaSummary();
+    renderGicaTable();
+    if (_gicaScheduleRendered) renderGicaSchedule();
+    showToast(t('gicaSaved'));
+  } catch (err) {
+    showToast(`${t('gicaSaveFail')}: ${err.message || ''}`);
+  }
+}
+
+function _wireGicaEditRoleModal() {
+  $('gica-editrole-close')?.addEventListener('click', _gicaCloseEditRoleModal);
+  $('gica-editrole-backdrop')?.addEventListener('click', _gicaCloseEditRoleModal);
+  $('gica-editrole-cancel')?.addEventListener('click', _gicaCloseEditRoleModal);
+  $('gica-editrole-dept')?.addEventListener('change', e => {
+    _gicaFilterEditRoleLevel(e.target.value);
+  });
+  $('gica-editrole-level')?.addEventListener('change', e => {
+    const dept = $('gica-editrole-dept').value;
+    _gicaFilterEditRolePosition(dept, e.target.value);
+  });
+  $('gica-editrole-confirm')?.addEventListener('click', _gicaSaveEditRole);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('gica-editrole-modal')?.classList.contains('hidden')) {
+      _gicaCloseEditRoleModal();
+    }
+  });
+}
+
 // Generic employee-list modal — reused by the weekly BU cohort cards and the
 // Assessment Schedule Timeline click-to-drill. `printOpts` sets the print header text.
 // `dateRange` is optional — e.g. "6-12 July 2026" shown in parentheses after the heading.
@@ -10685,9 +10894,19 @@ function _wireGicaControls() {
   fillSelect('gica-filterLevel', GICA_LEVEL_ORDER.filter(lv => scopedEmps.some(e => e.level === lv)));
   fillSelect('gica-filterType', ['Retest', 'Review']);
 
+  // BU badges — shortcut filter row above the search bar. Click badge = filter,
+  // click active badge again = clear filter. Counts show raw per-BU totals so
+  // users can see BU distribution at a glance (unaffected by other filters).
+  _renderGicaBuBadges();
+
   const bind = (id, key) => {
     const el = $(id);
-    if (el) el.onchange = () => { _gicaTableState.filters[key] = el.value; _gicaTableState.page = 1; renderGicaTable(); };
+    if (el) el.onchange = () => {
+      _gicaTableState.filters[key] = el.value;
+      _gicaTableState.page = 1;
+      renderGicaTable();
+      if (key === 'bu') _renderGicaBuBadges(); // keep badge active-state in sync
+    };
   };
   bind('gica-filterBu', 'bu');
   bind('gica-filterGrade', 'grade');
@@ -10708,6 +10927,46 @@ function _wireGicaControls() {
     if (_gicaTableState.page < pages) { _gicaTableState.page++; renderGicaTable(); }
   };
 
+}
+
+// BU shortcut badges above the search bar. One badge per BU in the payload —
+// or just the scoped BU if the user is BU-scoped. Click toggles the BU filter
+// (click again while active = clear); dropdown + badges stay in sync.
+function _renderGicaBuBadges() {
+  const wrap = $('gica-bu-badges');
+  if (!wrap) return;
+  const emps = _gicaData.employees || [];
+  const bus  = _currentUserBu ? [_currentUserBu] : sortBus(_gicaData.bus || []);
+  const activeBu = _gicaTableState.filters.bu || '';
+  const countByBu = {};
+  emps.forEach(e => { if (e.bu) countByBu[e.bu] = (countByBu[e.bu] || 0) + 1; });
+
+  wrap.innerHTML = bus.map(bu => {
+    const color = (typeof GICA_BU_COLORS !== 'undefined' && GICA_BU_COLORS[bu]) || '#6b7280';
+    const n     = countByBu[bu] || 0;
+    const isActive = activeBu === bu;
+    return `<button type="button" class="gica-bu-badge${isActive ? ' gica-bu-badge--active' : ''}"
+              data-bu="${escapeHtml(bu)}" style="--bu-badge-color:${color};"
+              title="${escapeHtml(bu)} · ${n} ${escapeHtml(t('gicaPeople') || 'people')}">
+              <span class="gica-bu-badge__label">${escapeHtml(bu)}</span>
+              <span class="gica-bu-badge__count">${n}</span>
+            </button>`;
+  }).join('');
+
+  wrap.querySelectorAll('.gica-bu-badge[data-bu]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // BU-scoped user: badge exists but is a no-op (can't switch off own BU).
+      if (_currentUserBu) return;
+      const clicked = btn.dataset.bu;
+      const newVal  = (_gicaTableState.filters.bu === clicked) ? '' : clicked;
+      _gicaTableState.filters.bu = newVal;
+      _gicaTableState.page = 1;
+      const buSel = $('gica-filterBu');
+      if (buSel) buSel.value = newVal;
+      renderGicaTable();
+      _renderGicaBuBadges();
+    });
+  });
 }
 
 // =============================================================================

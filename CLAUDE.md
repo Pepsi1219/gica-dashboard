@@ -34,8 +34,8 @@ New Operator Monitoring/
 ├── templates/
 │   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab)
 ├── static/
-│   ├── css/styles.css      # Styles ทั้งหมด (~3060+ บรรทัด)  [?v=203]
-│   └── js/app.js           # Frontend logic ทั้งหมด (~11000+ บรรทัด)  [?v=470]
+│   ├── css/styles.css      # Styles ทั้งหมด (~3100+ บรรทัด)  [?v=216]
+│   └── js/app.js           # Frontend logic ทั้งหมด (~11200+ บรรทัด)  [?v=499]
 └── docs/                   # เอกสาร guide สำหรับ CSA Manager
 ```
 
@@ -134,6 +134,10 @@ New Operator Monitoring/
 | Status pill | `.status-pill`, `.status-pill__dot`, `.status-pill--{key}` (10 status keys) |
 | Inline edit | `.ie-date-pair`, `.ie-date-label`, `.ie-action-cell`, `.btn-confirm-inline`, `.btn-cancel-inline` |
 | GICA emp table | `.gica-emp-table-wrap`, `.gica-emp-table` (ใช้ร่วมกับ `.emp-table`), `.gica-th-sort`, `.gica-sort-arrow`, `.gica-grade-score`, `.emp-list-title-row`, `.emp-list-title` |
+| GICA emp editable cells | `.gica-emp-name-cell` (click → open Result modal), `.gica-emp-role-cell` (click → open Edit Role modal — gica_admin/admin only, applied to Dept/Level/Position cells), `.gica-next-date-cell` (inline date edit) — all share hover pattern (dashed outline + hover bg) |
+| GICA score columns | `.gica-score-th` / `.gica-score-td` — narrow width 68px + compact padding; header uses `<i class="ti ti-ruler-measure">` (Measurement) and `ti-eye-check` (Inspection), text label moved to `title` tooltip |
+| GICA BU badge row | `.gica-bu-badge-row`, `.gica-bu-badge`, `.gica-bu-badge__label`, `.gica-bu-badge__count`, `.gica-bu-badge--active` — pill filter shortcut อยู่แถวเดียวกับ Employee List title; sits on same row as `#gica-count-badge`; `--bu-badge-color` custom property drives dot + active-state fill from `GICA_BU_COLORS`; BU-scoped user เห็น badge เดียว (own BU, click = no-op) |
+| GICA Result modal info panel | `.gica-result-empinfo`, `.gica-result-empinfo__row`, `.gica-result-empinfo__label`, `.gica-result-empinfo__value` — indented block (border-left accent) แสดง Dept/Level/Position/Expectation/Freq ใน Add Assessment Result modal เหนือช่อง score inputs; `:empty { display:none; }` ซ่อนอัตโนมัติเมื่อ emp lookup fail |
 
 **Known Issue:** Global unscoped `table { min-width:1050px; } th { background:var(--blue); }` ที่ ~line 1593 leak เข้าไปใน `<table>` ทุกตัว — `.emp-table` และ `.gica-emp-table` ใช้ `!important` override แก้ปัญหานี้แล้ว; workaround อื่นด้วย div+grid (เช่น gica-compare)
 
@@ -355,6 +359,7 @@ User กรอกค่าเดียว (raw)
 | GET | `/api/gica-excel` | — | GICA assessment data จาก **Supabase** (`gica_employees`/`gica_freq`/`gica_kpi`) |
 | POST | `/api/gica/<bu>/employees` | ✓ writable | เพิ่มพนักงาน GICA ใหม่ |
 | PATCH | `/api/gica/<bu>/employees/<empid>/result` | ✓ writable | เพิ่ม/แก้ผลสอบ GICA |
+| **PATCH** | **`/api/gica/<bu>/employees/<empid>`** | ✓ `gica_admin`/`admin` | Update dept/level/position — validate `(dept, level, position)` triple ต้องมีอยู่ใน `gica_freq` (case-insensitive) ก่อนบันทึก ไม่งั้น 400 |
 | **DELETE** | **`/api/gica/<bu>/employees/<empid>/results`** | ✓ `gica_admin`/`admin` | ลบผลสอบ (ทั้งหมดหรือเลือก attempts) |
 | **DELETE** | **`/api/gica/<bu>/employees/<empid>`** | ✓ `gica_admin`/`admin` | ลบพนักงาน GICA |
 | GET | `/api/audit-excel` | — | Audit data จาก **Supabase** (cached in-process 60s) |
@@ -466,13 +471,17 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 | `renderGicaScheduleDrill()` | Delegator | Thin wrapper — เรียก `_gicaShowEmpListModal(...)` โดยตรง เมื่อ `_gicaSchedDate` set (จาก click chart bar); legacy inline HTML render ตัดออกแล้ว |
 | `_gicaShowEmpListModal(headingText, printOpts, employees, dateRange?, initialBu?)` | Modal | Shared cohort/drill modal — เห็น BU bar + filter toolbar (Dept/Level/Attempt/Status/Search) + fail-stats + emp table; รับ `initialBu` optional เพื่อ preselect BU |
 | `renderGicaTable()` | Table | Employee table paginated + filtered; `deletable = ['gica_admin','admin'].includes(currentRole)`; อัปเดต `#gica-count-badge` ตามผลกรอง; BU-scoped user เห็นแค่ BU ตัวเอง (filter ที่ `_gicaFilteredEmployees` ด้วย `_currentUserBu`) |
-| `_wireGicaControls()` | Wire | Event handlers ทั้งหมดสำหรับ filter/toggle/pagination |
+| `_wireGicaControls()` | Wire | Event handlers ทั้งหมดสำหรับ filter/toggle/pagination + เรียก `_renderGicaBuBadges()` ตอน init + sync badge state เมื่อ BU dropdown เปลี่ยน |
 | `_wireGicaDeleteBtns(wrap)` | Wire | Wire delete buttons → confirm → `DELETE` API → refresh |
+| `_wireGicaRoleCellClicks(wrap)` | Wire | Click Dept/Level/Position cell → `_gicaOpenEditRoleModal(td.dataset)` — gated ด้วย `deletable` (gica_admin/admin) เท่านั้น |
+| `_renderGicaBuBadges()` | Render | 6 BU pill badges อยู่แถวเดียวกับ Employee List title; นับ `emps.filter(bu===X).length`, sync กับ `filters.bu` (click toggle: clicked→set, active→clear); BU-scoped user เห็น badge เดียว + click no-op |
+| `_gicaOpenEditRoleModal(ds)` / `_gicaCloseEditRoleModal()` / `_gicaSaveEditRole()` | Modal | Edit Role modal — cascading dropdowns (dept→level→position) จาก `_gicaData.freqTable`; PATCH `/api/gica/<bu>/employees/<empid>` → refresh summary + table + schedule; skip API call if unchanged |
+| `_gicaPopulateEditRoleDropdowns` / `_gicaFilterEditRoleLevel` / `_gicaFilterEditRolePosition` | Modal helpers | Cascading dropdown populate ตาม pattern เดียวกับ Create modal (`_gicaPopulateCreateDropdowns` etc.) |
 | `_gicaEmpTableMonthDots(e)` | Table | Monthly assessment dots — แบ่ง 2 แถว ×6 ถ้า > 6 dots |
 | `_gicaShowAttemptDotsModal(empid)` | Modal | Assessment History: 3 Chart.js trend charts + stats panel |
 | `_gicaAttemptStats(e)` | Pure | คำนวณ stats (total, pass/fail, streak, last/prev, avg, min/max) |
 | `_gicaCompareTableHtml(s)` | Pure | div+grid Previous/Last/Diff comparison table |
-| `_gicaOpenResultModal()` | Modal | Add Assessment Result (+ side-by-side Assessment History for QE) |
+| `_gicaOpenResultModal(bu, empid)` | Modal | Add Assessment Result (+ side-by-side Assessment History for QE); populate `#gica-result-empinfo` info panel (dept/level/position/expectation/freq จาก `emp`) เหนือช่อง score inputs — ถ้า `emp` ไม่เจอ → ซ่อน panel |
 | `_gicaKpiListHtml(bu)` | Pure | KPI slider list per BU tab |
 | `_computeGicaKpiSummary(emps)` | Pure | KPI Summary viewModel — org (denom=total) + per-BU (denom=tested) stats |
 | `_gicaKpiSummaryHtml(vm)` | Pure | KPI Summary modal HTML: hero card + 6-col BU grid with donut rings |
@@ -545,13 +554,21 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 ### GICA Employee List Table
 
 ใช้ `class="emp-table gica-emp-table"` — shared design system เดียวกับ New Operator
+
+**14 คอลัม + Action** (`min-width:1200px`): `BU | Emp ID | Name | Dept | Level | Position | 📏 | 👁️ | Attempt | Last Date | History | Next Date | Days Left | Status | [Action]`
+- Dept/Level/Position เป็น col-group เดียว (col-group-end อยู่ที่ Position ไม่ใช่ Level)
+- Measurement/Inspection ใช้ **Tabler icon header** (`ti-ruler-measure` / `ti-eye-check`) + `.gica-score-th/td` (width 68px + narrow padding); text label อยู่ใน `title` tooltip
+
+**พฤติกรรม**
 - **ไม่มี** row-number column (`showNum = false` hardcoded)
 - Header ทุกคอลัมกึ่งกลาง (`.gica-emp-table thead th { text-align: center !important; }`)
 - Count badge `#gica-count-badge` อยู่ใน `<h3>` header — อัปเดตตามกรองทุกครั้ง
 - Sortable: `onclick="_gicaSort(key)"` บน TH, `.gica-th-sort` cursor pointer
-- Editable (qe_edit/admin): ชื่อพนักงานคลิกได้ → `class="gica-emp-name-cell" data-empid data-bu`
+- **Name cell editable** (qe_edit/gica_admin/admin): `class="gica-emp-name-cell"` → click เปิด Add Assessment Result modal
+- **Dept/Level/Position cells editable** (gica_admin/admin only): `class="gica-emp-role-cell"` → click เปิด Edit Role modal (dropdowns จาก `_gicaData.freqTable` — เลือก dept → level → position แบบ cascade; save = `PATCH /api/gica/<bu>/employees/<empid>`)
 - Deletable (admin only): icon trash `.gica-delete-emp-btn`
-- `_gicaEmpTableHtml(rows, opts)` ใช้ร่วมกัน main table + drill-down modal (`sortable: false`)
+- **BU badge row** เหนือ filter bar — อยู่แถวเดียวกับ `#gica-count-badge` ในหัวเรื่อง; แสดง 6 pills (1 ต่อ BU) พร้อม count + สี BU + active state; click = shortcut ตั้ง `filters.bu`, click ซ้ำที่ active = clear filter (sync กับ dropdown `#gica-filterBu` สองทาง); BU-scoped user เห็น badge เดียว (own BU, click = no-op)
+- `_gicaEmpTableHtml(rows, opts)` ใช้ร่วมกัน main table + drill-down modal (`sortable: false`); drill-down modal ไม่ render dept/level/position edit hover (opts.deletable=false → roleEditable=false)
 
 ### Assessment Schedule — Row 1 Cards (โครง 3 การ์ด)
 

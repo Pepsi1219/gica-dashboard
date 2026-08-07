@@ -1171,6 +1171,52 @@ def api_gica_delete_results(bu, empid):
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route("/api/gica/<bu>/employees/<empid>", methods=["PATCH"])
+def api_gica_update_employee(bu, empid):
+    """Update department / level / position for one employee. Admin-tier only.
+    All three must form a valid (department, level, role) triple in gica_freq —
+    same case-insensitive match the payload builder uses when looking up
+    expectations. Any mismatch → 400. Prevents orphaning employees to a
+    combination that has no freq entry (which would blank freqMonths/exp1/exp2)."""
+    deny = require_writable(("gica_admin", "admin"))
+    if deny: return deny
+    bu    = str(bu or "").strip().upper()
+    deny = require_bu_scope(bu)
+    if deny: return deny
+    empid = str(empid or "").strip()
+    if not bu or not empid:
+        return jsonify({"error": "bu and empid are required"}), 400
+
+    payload  = request.json or {}
+    dept     = str(payload.get("deptname", "")).strip()
+    level    = str(payload.get("level", "")).strip()
+    position = str(payload.get("position", "")).strip()
+    if not dept or not level or not position:
+        return jsonify({"error": "deptname, level, position ต้องระบุครบทั้ง 3 ค่า"}), 400
+
+    try:
+        rows = sb_select("gica_employees", filters={"bu": bu, "empid": empid})
+        if not rows:
+            return jsonify({"error": "Employee not found"}), 404
+
+        freq_rows = sb_select("gica_freq")
+        valid = any(
+            str(r.get("department", "") or "").strip().lower() == dept.lower()
+            and str(r.get("level", "") or "").strip().lower() == level.lower()
+            and str(r.get("role", "") or "").strip().lower() == position.lower()
+            for r in freq_rows
+        )
+        if not valid:
+            return jsonify({"error": f"({dept} / {level} / {position}) ไม่มีอยู่ใน gica_freq"}), 400
+
+        sb_update("gica_employees", {"bu": bu, "empid": empid},
+                  {"deptname": dept, "level": level, "position": position})
+        return jsonify({"message": "Updated"})
+    except Exception as exc:
+        app.logger.error("api_gica_update_employee(%s/%s): %s", bu, empid, exc)
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @app.route("/api/gica/<bu>/employees/<empid>", methods=["DELETE"])
 def api_gica_delete_employee(bu, empid):
     deny = require_writable(("gica_admin", "admin"))
