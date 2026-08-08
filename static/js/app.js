@@ -5740,6 +5740,8 @@ async function initGicaTab() {
     if (loadingEl) loadingEl.classList.add('hidden');
     if (dashEl)    dashEl.classList.remove('hidden');
     requestAnimationFrame(syncGicaSubtabTop);
+    $('gica-perf-export-png')?.addEventListener('click', _gicaExportPerfPng);
+
     // Wire sub-tabs (Performance / Assessment Schedule / Employee List)
     dashEl.querySelectorAll('.gica-subtab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -5751,6 +5753,8 @@ async function initGicaTab() {
         if (perfPanel)  perfPanel.classList.toggle('hidden',  subtab !== 'performance');
         if (schedPanel) schedPanel.classList.toggle('hidden', subtab !== 'assessment-schedule');
         if (empPanel)   empPanel.classList.toggle('hidden',   subtab !== 'employee-list');
+        // PNG button lives in the shared subtab bar — hide on non-Performance subtabs
+        $('gica-perf-export-png')?.classList.toggle('hidden', subtab !== 'performance');
         if (subtab === 'assessment-schedule') {
           // Schedule canvas needs DOM visibility for Chart.js to size correctly.
           if (!_gicaScheduleRendered) { renderGicaSchedule(); _gicaScheduleRendered = true; }
@@ -6422,6 +6426,85 @@ function _gicaOpenKpiBuDetailModal(bu) {
   modal.classList.remove('hidden');
 }
 
+// Capture the entire GICA Performance panel (#gica-summary — KPI cards, BU flip
+// cards, trend charts, matrix, quadrant, etc.) as a PNG.
+//
+// ⚠️ Flip-card unmirroring: html2canvas 1.4 flattens 3D transforms to 2D — so
+// `rotateY(180deg)` on `.flip-card-back` / `.quad-card--back` collapses to
+// `scaleX(-1)`, mirroring every back-face card the user has flipped. The
+// `onclone` step strips the 3D setup and swaps to a flat show/hide of whichever
+// face is currently visible so the export matches on-screen orientation.
+async function _gicaExportPerfPng() {
+  const btn = $('gica-perf-export-png');
+  const target = $('gica-summary');
+  if (!target) return;
+  if (typeof html2canvas !== 'function') { showToast('html2canvas not loaded'); return; }
+  if (btn) { btn.disabled = true; btn.dataset.origLabel = btn.innerHTML; btn.innerHTML = '<i class="ti ti-loader-2"></i> Saving…'; }
+  try {
+    const bg = getComputedStyle(document.body).backgroundColor || '#ffffff';
+    const SCALE = 2;
+    const PAD = 32; // CSS-px margin around the capture on all sides
+    const inner = await html2canvas(target, {
+      backgroundColor: bg,
+      scale: SCALE,
+      useCORS: true,
+      logging: false,
+      windowWidth: document.documentElement.scrollWidth,
+      onclone: (clonedDoc) => {
+        // Flatten any 3D-flip container: strip perspective + rotateY, then
+        // display only the currently-facing side as an in-flow block.
+        const flatten = (wrapSel, innerSel, frontSel, backSel) => {
+          clonedDoc.querySelectorAll(wrapSel).forEach(wrap => {
+            const inner = wrap.querySelector(innerSel);
+            const front = wrap.querySelector(frontSel);
+            const back  = wrap.querySelector(backSel);
+            const flipped = wrap.classList.contains('is-flipped');
+            wrap.style.perspective = 'none';
+            if (inner) {
+              inner.style.transform = 'none';
+              inner.style.transformStyle = 'flat';
+              inner.style.transition  = 'none';
+            }
+            if (front && back) {
+              const active = flipped ? back  : front;
+              const hidden = flipped ? front : back;
+              hidden.style.display = 'none';
+              active.style.position = 'static';
+              active.style.inset    = 'auto';
+              active.style.transform = 'none';
+              active.style.backfaceVisibility = 'visible';
+              active.style.width  = '100%';
+            }
+          });
+        };
+        flatten('.flip-card-wrap', '.flip-card-inner', '.flip-card-front', '.flip-card-back');
+        flatten('.quad-card-wrap', '.quad-flip-inner', '.quad-card--front', '.quad-card--back');
+      },
+    });
+    // Wrap the tight capture in a padded canvas so the final PNG has breathing
+    // room on all sides (PAD is in CSS px; multiply by SCALE for device px).
+    const padPx = PAD * SCALE;
+    const canvas = document.createElement('canvas');
+    canvas.width  = inner.width  + padPx * 2;
+    canvas.height = inner.height + padPx * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(inner, padPx, padPx);
+    const link = document.createElement('a');
+    link.download = `GICA-Performance_${exportTimestamp()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error('[GICA ExportPNG]', err);
+    showToast('PNG export failed: ' + (err.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; if (btn.dataset.origLabel) btn.innerHTML = btn.dataset.origLabel; }
+  }
+}
+
 function _gicaExportKpiBuDetailPng() {
   const body = $('gica-kpi-bu-detail-body');
   const modal = $('gica-kpi-bu-detail-modal');
@@ -6483,12 +6566,16 @@ function _gicaSummaryHtml(vm) {
       </div>`;
   };
   // Donut with callout leader lines — grade count + pct labeled outside the ring + avg gauge
+  // Small/adjacent slices' labels are pushed apart vertically (rightLabels top→bottom,
+  // leftLabels bottom→top) so 2-line "Grade X: n / (p%)" text never overlaps.
   const donutLabeled = (counts, tot, avgPct) => {
-    const CX = 145, CY = 102, R = 50, sw = 20; 
+    const CX = 145, CY = 102, R = 50, sw = 20;
     const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
     const gap = tot ? 1.2 : 0;
+    const MIN_Y_GAP = 20; // 2-line label ~18px tall; 20 gives visual breathing room
     let acc = 0;
-    const segs = [], lines = [];
+    const segs = [];
+    const rightLabels = [], leftLabels = [];
     GICA_GRADES.forEach(g => {
       const v = counts[g] || 0;
       if (!tot || !v) return;
@@ -6499,16 +6586,37 @@ function _gicaSummaryHtml(vm) {
       const mx = CX + outerR * Math.cos(mid),        my = CY + outerR * Math.sin(mid);
       const ex = CX + (outerR + 12) * Math.cos(mid), ey = CY + (outerR + 12) * Math.sin(mid);
       const isRight = ex >= CX;
-      const hx = ex + (isRight ? 18 : -18), hy = ey;
-      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
       const pct = Math.round(v / tot * 100);
-      lines.push(`
-        <line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="1.2" stroke-linecap="round"></line>
-        <line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="1.2" stroke-linecap="round"></line>
-        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${GICA_GRADE_COLORS[g]}"></circle>
-        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="600" fill="var(--text)">Grade ${g}: ${v}</text>
-        <text x="${tx.toFixed(1)}" y="${(hy + 9.5).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${pct}%)</text>`);
+      const item = { g, mx, my, ex, ey, originalEy: ey, v, pct };
+      if (isRight) rightLabels.push(item); else leftLabels.push(item);
       acc += len;
+    });
+    // Right side accumulates top→bottom (natural angle order): push next down if too close
+    for (let i = 1; i < rightLabels.length; i++) {
+      if (rightLabels[i].ey - rightLabels[i-1].ey < MIN_Y_GAP) {
+        rightLabels[i].ey = rightLabels[i-1].ey + MIN_Y_GAP;
+      }
+    }
+    // Left side accumulates bottom→top: push next up if too close (direction-aware)
+    for (let i = 1; i < leftLabels.length; i++) {
+      if (Math.abs(leftLabels[i].ey - leftLabels[i-1].ey) < MIN_Y_GAP) {
+        leftLabels[i].ey = leftLabels[i].originalEy < leftLabels[i-1].originalEy
+          ? leftLabels[i-1].ey - MIN_Y_GAP
+          : leftLabels[i-1].ey + MIN_Y_GAP;
+      }
+    }
+    const lines = [];
+    [...rightLabels, ...leftLabels].forEach(d => {
+      const isRight = d.ex >= CX;
+      const hy = d.ey;
+      const hx = d.ex + (isRight ? 18 : -18);
+      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
+      lines.push(`
+        <line x1="${d.mx.toFixed(1)}" y1="${d.my.toFixed(1)}" x2="${d.ex.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${GICA_GRADE_COLORS[d.g]}" stroke-width="1.2" stroke-linecap="round"></line>
+        <line x1="${d.ex.toFixed(1)}" y1="${hy.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${GICA_GRADE_COLORS[d.g]}" stroke-width="1.2" stroke-linecap="round"></line>
+        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${GICA_GRADE_COLORS[d.g]}"></circle>
+        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9.5" font-weight="600" fill="var(--text)">Grade ${d.g}: ${d.v}</text>
+        <text x="${tx.toFixed(1)}" y="${(hy + 9.5).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${d.pct}%)</text>`);
     });
     const ap = avgPct || 0;
     const gc = GICA_GRADE_COLORS[_gicaScoreToGrade(ap / 100)] || '#6b7280';
@@ -6531,12 +6639,16 @@ function _gicaSummaryHtml(vm) {
         </div>`).join('')}
     </div>`;
 
+  // Small variant of donutLabeled used in BU flip cards — same collision-avoidance
+  // logic so tiny slices (e.g. G1's Grade C=3% + Grade D=1%) don't overlap on top.
   const donutLabeledSm = (counts, tot, avgPct) => {
     const CX = 125, CY = 88, R = 43, sw = 20;
     const CIRC = 2 * Math.PI * R, outerR = R + sw / 2;
     const gap = tot ? 1.0 : 0;
+    const MIN_Y_GAP = 20;
     let acc = 0;
-    const segs = [], lines = [];
+    const segs = [];
+    const rightLabels = [], leftLabels = [];
     GICA_GRADES.forEach(g => {
       const v = counts[g] || 0;
       if (!tot || !v) return;
@@ -6547,16 +6659,35 @@ function _gicaSummaryHtml(vm) {
       const mx = CX + outerR * Math.cos(mid),       my = CY + outerR * Math.sin(mid);
       const ex = CX + (outerR + 7.5) * Math.cos(mid), ey = CY + (outerR + 7.5) * Math.sin(mid);
       const isRight = ex >= CX;
-      const hx = ex + (isRight ? 13 : -13), hy = ey;
-      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
       const pct = Math.round(v / tot * 100);
-      lines.push(`
-        <line x1="${mx.toFixed(1)}" y1="${my.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="1.2" stroke-linecap="round"></line>
-        <line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${GICA_GRADE_COLORS[g]}" stroke-width="1.2" stroke-linecap="round"></line>
-        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${GICA_GRADE_COLORS[g]}"></circle>
-        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9" font-weight="600" fill="var(--text)">Grade ${g}: ${v}</text>
-        <text x="${tx.toFixed(1)}" y="${(hy + 12).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${pct}%)</text>`);
+      const item = { g, mx, my, ex, ey, originalEy: ey, v, pct };
+      if (isRight) rightLabels.push(item); else leftLabels.push(item);
       acc += len;
+    });
+    for (let i = 1; i < rightLabels.length; i++) {
+      if (rightLabels[i].ey - rightLabels[i-1].ey < MIN_Y_GAP) {
+        rightLabels[i].ey = rightLabels[i-1].ey + MIN_Y_GAP;
+      }
+    }
+    for (let i = 1; i < leftLabels.length; i++) {
+      if (Math.abs(leftLabels[i].ey - leftLabels[i-1].ey) < MIN_Y_GAP) {
+        leftLabels[i].ey = leftLabels[i].originalEy < leftLabels[i-1].originalEy
+          ? leftLabels[i-1].ey - MIN_Y_GAP
+          : leftLabels[i-1].ey + MIN_Y_GAP;
+      }
+    }
+    const lines = [];
+    [...rightLabels, ...leftLabels].forEach(d => {
+      const isRight = d.ex >= CX;
+      const hy = d.ey;
+      const hx = d.ex + (isRight ? 13 : -13);
+      const tx = hx + (isRight ? 2 : -2), anchor = isRight ? 'start' : 'end';
+      lines.push(`
+        <line x1="${d.mx.toFixed(1)}" y1="${d.my.toFixed(1)}" x2="${d.ex.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${GICA_GRADE_COLORS[d.g]}" stroke-width="1.2" stroke-linecap="round"></line>
+        <line x1="${d.ex.toFixed(1)}" y1="${hy.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${GICA_GRADE_COLORS[d.g]}" stroke-width="1.2" stroke-linecap="round"></line>
+        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.5" fill="${GICA_GRADE_COLORS[d.g]}"></circle>
+        <text x="${tx.toFixed(1)}" y="${(hy + 1).toFixed(1)}" text-anchor="${anchor}" font-size="9" font-weight="600" fill="var(--text)">Grade ${d.g}: ${d.v}</text>
+        <text x="${tx.toFixed(1)}" y="${(hy + 12).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="var(--text-muted)">(${d.pct}%)</text>`);
     });
     const ap = avgPct || 0;
     const gc = GICA_GRADE_COLORS[_gicaScoreToGrade(ap / 100)] || '#6b7280';
@@ -6614,7 +6745,7 @@ function _gicaSummaryHtml(vm) {
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
       </g>`;
     }).join('');
-    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH + 4}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
       <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
       ${bars}
     </svg>`;
@@ -8210,7 +8341,7 @@ function _gicaScheduleHtml(vm) {
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
       </g>`;
     }).join('');
-    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH + 4}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
       <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
       ${bars}
     </svg>`;
@@ -8477,7 +8608,7 @@ function _gicaScheduleHtml(vm) {
     // Y-alignment is "Max" (bottom) so when the body is taller than the chart's
     // natural aspect ratio, the empty space collects ABOVE the chart — the
     // baseline + BU labels sit near the bottom edge instead of centered.
-    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" preserveAspectRatio="xMidYMax meet"
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH + 4}" preserveAspectRatio="xMidYMax meet"
       style="display:block;width:100%;height:100%;">
       <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
       ${bars}
@@ -9386,8 +9517,8 @@ function _gicaFailStreakBarChartSvg(cards, opts = {}) {
     </g>`;
   }).join('');
   const svgOpen = useIntrinsic
-    ? `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="${svgStyle}">`
-    : `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" preserveAspectRatio="xMidYMid meet" style="${svgStyle}">`;
+    ? `<svg viewBox="0 0 ${W} ${TPAD + CH + LH + 4}" width="100%" style="${svgStyle}">`
+    : `<svg viewBox="0 0 ${W} ${TPAD + CH + LH + 4}" preserveAspectRatio="xMidYMid meet" style="${svgStyle}">`;
   return `${svgOpen}
     <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
     ${bars}
@@ -11476,7 +11607,7 @@ function _auditDashboardHtml(vm) {
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="7.5" style="fill:var(--text-muted);">${bu}</text>
       </g>`;
     }).join('');
-    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
+    return `<svg viewBox="0 0 ${W} ${TPAD + CH + LH + 4}" width="100%" style="display:block;margin-top:10px;overflow:visible;">
       <line x1="${PAD}" y1="${TPAD + CH}" x2="${W - PAD}" y2="${TPAD + CH}" stroke="var(--border-light)" stroke-width="1"></line>
       ${bars}
     </svg>`;

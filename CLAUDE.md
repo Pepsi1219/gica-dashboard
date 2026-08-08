@@ -34,8 +34,8 @@ New Operator Monitoring/
 ├── templates/
 │   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab)
 ├── static/
-│   ├── css/styles.css      # Styles ทั้งหมด (~3100+ บรรทัด)  [?v=216]
-│   └── js/app.js           # Frontend logic ทั้งหมด (~11200+ บรรทัด)  [?v=499]
+│   ├── css/styles.css      # Styles ทั้งหมด (~3100+ บรรทัด)  [?v=218]
+│   └── js/app.js           # Frontend logic ทั้งหมด (~11200+ บรรทัด)  [?v=504]
 └── docs/                   # เอกสาร guide สำหรับ CSA Manager
 ```
 
@@ -486,6 +486,7 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 | `_computeGicaKpiSummary(emps)` | Pure | KPI Summary viewModel — org (denom=total) + per-BU (denom=tested) stats |
 | `_gicaKpiSummaryHtml(vm)` | Pure | KPI Summary modal HTML: hero card + 6-col BU grid with donut rings |
 | `kpiPctFor(level, bu)` | Pure | Resolve KPI: BU-specific → all fallback → null |
+| `_gicaExportPerfPng()` | Export | Save whole Performance panel (`#gica-summary`) as PNG (html2canvas @ scale 2x + 32px margin wrapped via padded destination canvas + filename `GICA-Performance_YYYYMMDD_HHMM.png`); button `#gica-perf-export-png` lives inside `.gica-subtab-bar` right side (auto-hide on other subtabs) — see [Performance PNG Export](#performance-png-export) |
 
 ### BU Flip Cards (Row 2)
 - Front: **Score (Measurement)** — donut SVG + avg% ตรงกลาง + leader lines ต่อ grade
@@ -498,6 +499,29 @@ GICA_LEVEL_ORDER  = ['QEDM','AQEDM','DVM','ADVM','DPM','ADPM','Department Head',
 - แสดงทั้ง Measurement + Inspection เป็น 2 เส้นใน Chart.js line chart เดียว
 - X-axis: attempt #1–maxLen (capped at BU's actual max attempt count), Y-axis: 0–100% (stepSize 20)
 - Carry-forward: ค่าสุดท้ายลากต่อถึง maxLen (ไม่เกิน 12, ไม่เกินจำนวนครั้งสูงสุดจริงของ BU)
+
+### Donut Label Collision Avoidance ⚠️
+
+`donutSVG` / `donutLabeled` (row 1 Overall Score) / `donutLabeledSm` (row 2 BU flip front) แชร์ pattern เดียวกัน — คำนวณตำแหน่ง label ที่มุมองศาตามธรรมชาติ แล้วแบ่งเป็น `rightLabels` / `leftLabels` (ตาม `ex >= CX`) และดัน `ey` หลบกันด้วย `MIN_Y_GAP` (14 สำหรับ small; 20 สำหรับ labeled) เพื่อไม่ให้ label 2 บรรทัด ("Grade X: n" + "(p%)") ทับกันเมื่อ slice เล็กติดกัน (เช่น G1 มี Grade C=3% + D=1% ที่ด้านบน)
+
+- **ฝั่งขวา** (angles top→bottom natural): ถ้า `ey[i] - ey[i-1] < MIN_Y_GAP` → ดันตัวถัดไปลง
+- **ฝั่งซ้าย** (angles bottom→top): ตรวจ `Math.abs` แล้วดันตามทิศทาง `originalEy` (up หรือ down)
+
+### Performance PNG Export ⚠️
+
+ปุ่ม `#gica-perf-export-png` อยู่ใน `.gica-subtab-bar` ชิดขวา (`margin-left:auto` + `align-self:center`) — JS toggle `.hidden` ตาม active subtab ให้เห็นเฉพาะ Performance
+
+**Pitfall 1: 3D flip mirror** — html2canvas 1.4 flatten `transform: rotateY(180deg)` (บน `.flip-card-back` / `.quad-card--back`) เป็น 2D matrix `scaleX(-1)` → หน้าหลังของการ์ดที่ผู้ใช้พลิกอยู่ทุกใบจะถูก capture เป็นภาพกระจก
+
+**Fix (onclone):** ก่อน rasterize ใน cloned DOM — ล้าง `perspective`/`transform-style: preserve-3d`/`rotateY` ทั้งหมด แล้ว show เฉพาะหน้าที่ `active` (front หรือ back ตาม `.is-flipped`) เป็น `position:static + transform:none`, hide อีกหน้า — ทำทั้ง `.flip-card-wrap` และ `.quad-card-wrap`
+
+**Pitfall 2: SVG label clipping** — bar chart SVG (Total employees, Failure Status streak, Due-week) ใช้ `overflow:visible` ให้ BU labels ที่ `y = TPAD+CH+LH-2` (=98) โผล่ออกจาก viewBox height 100 บนหน้าจอได้ แต่ html2canvas rasterize ตาม viewBox เป๊ะๆ → descenders โดนตัด
+
+**Fix:** viewBox height += 4 (`TPAD + CH + LH + 4`) ทุก bar chart 5 ตำแหน่งที่มี BU label ล่าง — label position ไม่ขยับ, buffer 4px รองรับ descender
+
+**Pitfall 3: Edge-to-edge crop** — capture `#gica-summary` โดยตรงจะได้ภาพชิดขอบทุกด้าน
+
+**Fix:** วาด captured canvas ลงบน canvas ที่ใหญ่กว่าอีก `PAD*SCALE` px ทุกด้าน (PAD=32 CSS-px, SCALE=2) แล้ว fill background สีธีมปัจจุบัน — margin อยู่ใน export file เท่านั้น ไม่แตะ layout จริง
 
 ### Expectation Matrix
 - หน้า Level × BU: แสดง % ผ่านต่อ level+BU

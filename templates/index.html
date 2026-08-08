@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=216" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=218" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -627,6 +627,7 @@
           <button class="gica-subtab-btn gica-subtab-btn--active" data-subtab="performance" data-i18n="gicaSubPerf">Performance</button>
           <button class="gica-subtab-btn" data-subtab="assessment-schedule" data-i18n="gicaSubSched">Assessment Schedule</button>
           <button class="gica-subtab-btn" data-subtab="employee-list" data-i18n="gicaSubEmp">Employee List</button>
+          <button id="gica-perf-export-png" class="export-btn" title="Save Performance as PNG"><i class="ti ti-photo-down"></i> PNG</button>
         </div>
 
         <div id="gica-perf-panel">
@@ -1092,6 +1093,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=499"></script>
+  <script src="/static/js/app.js?v=504"></script>
 </body>
 </html>

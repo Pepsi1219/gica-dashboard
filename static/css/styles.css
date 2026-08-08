@@ -2820,6 +2820,12 @@ tbody tr:hover { filter: brightness(.97); }
 .gica-bu-cohort-card { transition: box-shadow .15s, transform .15s; }
 .gica-bu-cohort-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.12); transform: translateY(-1px); }
 
+/* GICA Performance PNG export button — lives inside .gica-subtab-bar, pushed to
+   the far right with margin-left:auto. Vertically centered so it doesn't stretch
+   with the tab buttons' baseline-alignment. */
+#gica-perf-export-png { margin-left:auto; align-self:center; display:inline-flex; align-items:center; gap:6px; padding:6px 14px; font-size:12px; }
+#gica-perf-export-png i { font-size:14px; line-height:1; }
+
 /* — GICA "Under development" placeholder — */
 .gica-under-dev { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; gap:14px; color:var(--text-muted); }
 .gica-under-dev__icon { font-size:3rem; line-height:1; }
