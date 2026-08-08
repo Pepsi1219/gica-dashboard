@@ -167,6 +167,9 @@ const TRANSLATIONS = {
     gicaEmpListTitle:       'รายชื่อพนักงาน',
     gicaCreateOp:           '+ เพิ่มพนักงานใหม่',
     gicaPrint:              '🖨 พิมพ์',
+    gicaBackup:             '💾 สำรองข้อมูล',
+    gicaBackupDone:         'สำรองข้อมูลสำเร็จ ({n} คน) — ได้ไฟล์ CSV + JSON',
+    gicaBackupFail:         'สำรองข้อมูลไม่สำเร็จ',
     gicaAllBu:              'ทุก BU',
     gicaAllGrades:          'ทุกเกรด',
     gicaAllDepts:           'ทุกแผนก',
@@ -256,6 +259,7 @@ const TRANSLATIONS = {
     gicaResultCancelPrompt: 'ยกเลิกการกรอกครั้งนี้?',
     gicaResultSavePrompt:   'บันทึกข้อมูลนี้?',
     gicaFormFillAll:        'กรุณากรอกข้อมูลให้ครบทุกช่อง',
+    gicaFormRange:          'คะแนน Measurement/Inspection ต้องอยู่ระหว่าง 0–100',
     gicaSaving:             'กำลังบันทึกข้อมูล...',
     gicaSaved:              'บันทึกข้อมูลแล้ว',
     gicaSaveFail:           'บันทึกไม่สำเร็จ',
@@ -530,6 +534,9 @@ const TRANSLATIONS = {
     gicaEmpListTitle:       'Employee List',
     gicaCreateOp:           '+ Create new operator',
     gicaPrint:              '🖨 Print',
+    gicaBackup:             '💾 Backup',
+    gicaBackupDone:         'Backup saved ({n} employees) — CSV + JSON downloaded',
+    gicaBackupFail:         'Backup failed',
     gicaAllBu:              'All BU',
     gicaAllGrades:          'All Grades',
     gicaAllDepts:           'All Departments',
@@ -618,6 +625,7 @@ const TRANSLATIONS = {
     gicaResultCancelPrompt: 'Cancel this entry?',
     gicaResultSavePrompt:   'Save this record?',
     gicaFormFillAll:        'Please complete all required fields',
+    gicaFormRange:          'Measurement/Inspection score must be between 0–100',
     gicaSaving:             'Saving...',
     gicaSaved:              'Saved',
     gicaSaveFail:           'Save failed',
@@ -893,6 +901,9 @@ const TRANSLATIONS = {
     gicaEmpListTitle:       'ລາຍຊື່ພະນັກງານ',
     gicaCreateOp:           '+ ເພີ່ມພະນັກງານໃໝ່',
     gicaPrint:              '🖨 ພິມ',
+    gicaBackup:             '💾 ສຳຮອງຂໍ້ມູນ',
+    gicaBackupDone:         'ສຳຮອງຂໍ້ມູນສຳເລັດ ({n} ຄົນ) — ໄດ້ໄຟລ໌ CSV + JSON',
+    gicaBackupFail:         'ສຳຮອງຂໍ້ມູນບໍ່ສຳເລັດ',
     gicaAllBu:              'ທຸກ BU',
     gicaAllGrades:          'ທຸກເກຣດ',
     gicaAllDepts:           'ທຸກພະແນກ',
@@ -955,6 +966,7 @@ const TRANSLATIONS = {
     gicaResultCancelPrompt: 'ຍົກເລີກການປ້ອນຄັ້ງນີ້?',
     gicaResultSavePrompt:   'ບັນທຶກຂໍ້ມູນນີ້?',
     gicaFormFillAll:        'ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບທຸກຊ່ອງ',
+    gicaFormRange:          'ຄະແນນ Measurement/Inspection ຕ້ອງຢູ່ລະຫວ່າງ 0–100',
     gicaSaving:             'ກຳລັງບັນທຶກ...',
     gicaSaved:              'ບັນທຶກແລ້ວ',
     gicaSaveFail:           'ບັນທຶກບໍ່ສຳເລັດ',
@@ -1230,6 +1242,9 @@ const TRANSLATIONS = {
     gicaEmpListTitle:       'Danh sách nhân viên',
     gicaCreateOp:           '+ Thêm nhân viên mới',
     gicaPrint:              '🖨 In',
+    gicaBackup:             '💾 Sao lưu',
+    gicaBackupDone:         'Đã sao lưu ({n} nhân viên) — tải xuống CSV + JSON',
+    gicaBackupFail:         'Sao lưu thất bại',
     gicaAllBu:              'Tất cả BU',
     gicaAllGrades:          'Tất cả cấp bậc',
     gicaAllDepts:           'Tất cả phòng ban',
@@ -1292,6 +1307,7 @@ const TRANSLATIONS = {
     gicaResultCancelPrompt: 'Hủy nhập lần này?',
     gicaResultSavePrompt:   'Lưu bản ghi này?',
     gicaFormFillAll:        'Vui lòng điền đầy đủ các trường',
+    gicaFormRange:          'Điểm Measurement/Inspection phải từ 0–100',
     gicaSaving:             'Đang lưu...',
     gicaSaved:              'Đã lưu',
     gicaSaveFail:           'Lưu thất bại',
@@ -5791,6 +5807,9 @@ async function initGicaTab() {
     }
     if (['gica_admin', 'admin'].includes(currentRole)) {
       _wireGicaEditRoleModal();
+      // Backup button: full-access admins only (a BU-scoped gica_admin can't pull
+      // every BU, so hide it — backend also enforces this with a 403).
+      if (!_currentUserBu) $('gica-backup-btn')?.classList.remove('hidden');
     }
     // Score History delete is admin-only, but wiring the modal is harmless for others
     // (the button that opens it is hidden unless admin).
@@ -6503,6 +6522,72 @@ async function _gicaExportPerfPng() {
   } finally {
     if (btn) { btn.disabled = false; if (btn.dataset.origLabel) btn.innerHTML = btn.dataset.origLabel; }
   }
+}
+
+// Download a point-in-time backup of ALL GICA data (every BU) as TWO files from
+// one click: a flat CSV (one row per assessment attempt, for audit/Excel) and a
+// JSON file (exact table snapshot, for lossless restore). Both derive from the
+// same /api/gica/backup response so they never disagree. Admin / full gica_admin
+// only — button hidden otherwise and the backend also returns 403.
+async function _gicaBackup() {
+  const btn = $('gica-backup-btn');
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.dataset.orig = btn.innerHTML; btn.textContent = '⏳ …'; }
+  try {
+    const data  = await api('/api/gica/backup');
+    const rows  = data.employees || [];
+    const stamp = exportTimestamp();
+    // JSON — exact rows as the DB returned them (the restore source of truth)
+    _gicaDownloadFile(
+      JSON.stringify({ generated_at: data.generated_at, count: data.count, employees: rows }, null, 2),
+      `gica_backup_${stamp}.json`, 'application/json');
+    // CSV — flattened; staggered slightly so the browser doesn't drop the second
+    // programmatic download from the same click.
+    setTimeout(() => {
+      _gicaDownloadFile(_gicaBackupCsv(rows), `gica_backup_${stamp}.csv`, 'text/csv');
+    }, 300);
+    showToast((t('gicaBackupDone') || 'Backup saved ({n} employees)').replace('{n}', data.count));
+  } catch (err) {
+    showToast((t('gicaBackupFail') || 'Backup failed') + ': ' + (err.message || err));
+  } finally {
+    if (btn) { btn.disabled = false; if (btn.dataset.orig) btn.innerHTML = btn.dataset.orig; }
+  }
+}
+
+// Flat CSV: header + one row per test attempt. Employees with no tests still get
+// one row (blank attempt columns) so nobody is missing from the backup. Uses a
+// UTF-8 BOM so Excel renders Thai correctly, and RFC-4180 quoting for commas.
+function _gicaBackupCsv(rows) {
+  const cols = ['bu','empid','name','deptname','level','position','start_date',
+                'next_date_override','attempt','result1','result2','grade1','grade2','date'];
+  const esc = v => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const BOM = String.fromCharCode(0xFEFF); // Excel needs this to read Thai as UTF-8
+  const lines = [cols.join(',')];
+  (rows || []).forEach(r => {
+    const base  = [r.bu, r.empid, r.name, r.deptname, r.level, r.position, r.start_date, r.next_date_override];
+    const tests = Array.isArray(r.tests) ? r.tests : [];
+    if (!tests.length) {
+      lines.push([...base, '', '', '', '', '', ''].map(esc).join(','));
+      return;
+    }
+    tests.slice().sort((a, b) => (a.n || 0) - (b.n || 0)).forEach(tt => {
+      lines.push([...base, tt.n, tt.result1, tt.result2, tt.grade1, tt.grade2, tt.date].map(esc).join(','));
+    });
+  });
+  return BOM + lines.join('\r\n');
+}
+
+// Trigger a browser download from an in-memory string (blob + object URL).
+function _gicaDownloadFile(content, filename, mime) {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+  const url  = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function _gicaExportKpiBuDetailPng() {
@@ -8034,9 +8119,13 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
   const timeline = buckets.map(b => ({
     label: b.label, isFuture: b.isFuture, start: b.start, end: b.end,
     onTimePassed: 0, onTimeFailed: 0, upcoming: 0, overdue: 0,
+    // earlyN = tests taken in this bucket ahead of their scheduled bucket. Kept
+    // OUT of the on-time/Total counts (they aren't part of this bucket's due load)
+    // and surfaced as a "+N" tag on the on-time bar instead.
+    earlyN: 0,
     // Parallel employee lists collected at each count increment below — powers the
     // click-to-drill list (click a bar → see the people behind that number).
-    passEmps: [], failEmps: [], upcomingEmps: [], overdueEmps: [],
+    passEmps: [], failEmps: [], upcomingEmps: [], overdueEmps: [], earlyEmps: [],
   }));
   schedable.forEach(e => {
     // Track buckets where this person already has an actual test recorded (from history).
@@ -8051,11 +8140,25 @@ function _computeGicaSchedule(emps, today, timelineMode, schedMode = 'all', buFi
       const schedDate  = h.scheduledDate ? _gicaParseDate(h.scheduledDate) : null;
       if (actualIdx >= 0) {
         testedBuckets.add(actualIdx);
-        const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
-          (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
-          (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
-        if (attemptPassed) { timeline[actualIdx].onTimePassed++; timeline[actualIdx].passEmps.push(e); }
-        else               { timeline[actualIdx].onTimeFailed++; timeline[actualIdx].failEmps.push(e); }
+        // Early assessment: this test landed in an EARLIER bucket than the one it
+        // was scheduled for (schedIdx > actualIdx) → the person tested ahead of
+        // their due date, so they aren't part of THIS bucket's scheduled load.
+        // Keep them out of on-time/Total (which would otherwise read due+early,
+        // e.g. the current week's 271 instead of 233) and tally them as earlyN so
+        // the chart can annotate the on-time bar with "+N". Applies to every
+        // bucket, not just the current week. They still appear as "upcoming" in
+        // their next-appointment bucket via the scheduledNext path below.
+        const isEarly = schedIdx > actualIdx;
+        if (isEarly) {
+          timeline[actualIdx].earlyN++;
+          timeline[actualIdx].earlyEmps.push(e);
+        } else {
+          const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
+            (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
+            (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
+          if (attemptPassed) { timeline[actualIdx].onTimePassed++; timeline[actualIdx].passEmps.push(e); }
+          else               { timeline[actualIdx].onTimeFailed++; timeline[actualIdx].failEmps.push(e); }
+        }
       }
       // Late test → past is immutable: mark every missed bucket as overdue.
       // GUARD: only cascade when person actually tested LATE (actualDate > schedDate).
@@ -8486,61 +8589,34 @@ function _gicaScheduleHtml(vm) {
   const weekTotal    = weekCards.reduce((s, c) => s + c.total, 0);
   const weekAttended = weekCards.reduce((s, c) => s + c.attended, 0);
   const earlyTotal   = vm.weeklyBuCards.reduce((s, c) => s + (c.earlyN || 0), 0);
-  const dueWeekRows = vm.weeklyBuCards.map(c => {
+  // Back-face rows mirror the front bar's calculation: the bar/count cover ONLY
+  // the "due this week" cohort (c.total = attended pass/fail + awaiting), and
+  // early arrivals are shown as a separate blue "+N" tag rather than folded into
+  // the count — so G4 reads "0/69 +1", not "1/70". pass=green / fail=red /
+  // awaiting=light gives the extra breakdown the flip side is for.
+  const combinedBuRows = vm.weeklyBuCards.map(c => {
     const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
-    if (c.empty) {
+    const total   = c.total  || 0;
+    const early    = c.earlyN || 0;
+    if (c.empty && !total && !early) {
       return `<div class="mini-bar__row mini-bar__row--lg">
         <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
         <span class="u-muted" style="font-size:0.68rem;">${escapeHtml(t('gicaNoData'))}</span>
       </div>`;
     }
-    const passPct  = c.total ? Math.round(c.attendedPass  / c.total * 100) : 0;
-    const failPct  = c.total ? Math.round(c.attendedFail  / c.total * 100) : 0;
-    const awaitPct = Math.max(100 - passPct - failPct, 0);
-    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Pass: ${c.attendedPass}, Fail: ${c.attendedFail}, Awaiting: ${c.overdue} (Total ${c.total})">
+    const passPct  = total ? Math.round(c.attendedPass / total * 100) : 0;
+    const failPct  = total ? Math.round(c.attendedFail / total * 100) : 0;
+    const awaitPct = total ? Math.max(100 - passPct - failPct, 0) : 0;
+    const earlyTag = early > 0 ? ` <span style="color:#2563eb;font-weight:700;">+${early}</span>` : '';
+    const countLabel = total > 0 ? `${c.attended}/${total}${earlyTag}` : `0${earlyTag}`;
+    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Pass: ${c.attendedPass}, Fail: ${c.attendedFail}, Awaiting: ${c.overdue}${early ? `, Early: ${early}` : ''} (Due ${total})">
       <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
       <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
         ${passPct  > 0 ? `<div style="width:${passPct}%;background:#16a34a;height:100%;"></div>`  : ''}
         ${failPct  > 0 ? `<div style="width:${failPct}%;background:#dc2626;height:100%;"></div>`  : ''}
         ${awaitPct > 0 ? `<div style="width:${awaitPct}%;background:var(--border-light);height:100%;"></div>` : ''}
       </div>
-      <span class="mini-bar__count mini-bar__count--lg">${c.attended}/${c.total}</span>
-    </div>`;
-  }).join('');
-  const earlyBuRows = vm.weeklyBuCards.map(c => {
-    if (!c.earlyN) return '';
-    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
-    return `<div class="u-between" style="font-size:0.74rem;line-height:1.6;">
-      <span style="color:${buColor};font-weight:600;">${escapeHtml(c.bu)}</span>
-      <strong>${c.earlyN}</strong>
-    </div>`;
-  }).filter(Boolean).join('');
-
-  // Combined gauge (Due + Early): green=passed, light green=failed, gray=not yet attended
-  const combinedBuRows = vm.weeklyBuCards.map(c => {
-    const buColor = GICA_BU_COLORS[c.bu] || '#6b7280';
-    if (c.empty && !c.earlyN) {
-      return `<div class="mini-bar__row mini-bar__row--lg">
-        <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
-        <span class="u-muted" style="font-size:0.68rem;">${escapeHtml(t('gicaNoData'))}</span>
-      </div>`;
-    }
-    const totalPass  = (c.attendedPass || 0) + (c.earlyPass || 0);
-    const totalFail  = (c.attendedFail || 0) + (c.earlyFail || 0);
-    const totalDone  = (c.attended || 0) + (c.earlyN || 0);
-    const notYet     = c.overdue || 0;
-    const grandTotal = totalDone + notYet;
-    const passPct  = grandTotal ? Math.round(totalPass / grandTotal * 100) : 0;
-    const failPct  = grandTotal ? Math.round(totalFail / grandTotal * 100) : 0;
-    const awaitPct = Math.max(100 - passPct - failPct, 0);
-    return `<div class="mini-bar__row mini-bar__row--lg" title="${escapeHtml(c.bu)} — Pass: ${totalPass}, Fail: ${totalFail}, Awaiting: ${notYet} (Total ${grandTotal})">
-      <span class="mini-bar__bu mini-bar__bu--lg" style="color:${buColor};">${escapeHtml(c.bu)}</span>
-      <div class="mini-bar__track mini-bar__track--lg" style="display:flex;">
-        ${passPct  > 0 ? `<div style="width:${passPct}%;background:#16a34a;height:100%;"></div>`  : ''}
-        ${failPct  > 0 ? `<div style="width:${failPct}%;background:#86efac;height:100%;"></div>`  : ''}
-        ${awaitPct > 0 ? `<div style="width:${awaitPct}%;background:var(--border-light);height:100%;"></div>` : ''}
-      </div>
-      <span class="mini-bar__count mini-bar__count--lg">${totalDone}/${grandTotal}</span>
+      <span class="mini-bar__count mini-bar__count--lg mini-bar__count--due">${countLabel}</span>
     </div>`;
   }).join('');
 
@@ -8559,11 +8635,16 @@ function _gicaScheduleHtml(vm) {
         </div>
       </div>`;
 
-  // Vertical bar per BU — total height = grandTotal, dark segment (bottom) = attended
-  // (attendedPass + attendedFail + earlyN), light segment (top) = overdue. Mirrors the
-  // Performance-tab "Total employees" SVG bar style (see buBarChart at ~line 6488).
+  // Vertical bar per BU — the bar represents ONLY the "due this week" cohort
+  // (c.total = attended on-plan + still-awaiting). Dark segment (bottom) =
+  // attended, light segment (top) = awaiting. Early arrivals (tested ahead of a
+  // future due date) are NOT part of this cohort, so they're excluded from the
+  // bar height and denominator and surfaced as a separate blue "+N" tag —
+  // otherwise the "0/69" due count wrongly reads "1/70". Mirrors the header
+  // (weekAttended/weekTotal) and the Assessment Load matrix, which already split
+  // early out. See buBarChart at ~line 6488 for the shared bar style.
   const dueWeekBarChart = cards => {
-    const totals = cards.map(c => (c.attended || 0) + (c.earlyN || 0) + (c.overdue || 0));
+    const totals = cards.map(c => c.total || 0);
     const maxN = Math.max(...totals, 1);
     // Wider viewBox (300 vs 220) → aspect 3:1 which is closer to the actual body
     // aspect on wide cards, so preserveAspectRatio="meet" leaves less empty side
@@ -8577,29 +8658,41 @@ function _gicaScheduleHtml(vm) {
     const bars = cards.map((c, i) => {
       const x  = Math.round(PAD + i * slot + bo);
       const cx = Math.round(x + bw / 2);
-      const total = (c.attended || 0) + (c.earlyN || 0) + (c.overdue || 0);
-      if (!total) {
+      const total = c.total || 0;
+      const early = c.earlyN || 0;
+      // No one due AND no early arrival → genuinely nothing to show
+      if (!total && !early) {
         return `<text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="5" fill="var(--text-muted)">${escapeHtml(t('gicaNoData'))}</text>
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="5.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>`;
       }
+      const color    = GICA_BU_COLORS[c.bu] || '#6b7280';
+      const earlyTag = early > 0 ? ` <tspan fill="#2563eb" font-weight="700">+${early}</tspan>` : '';
+      // BU with only early arrivals (nothing actually due) → show just the "+N"
+      // tag and BU label, no bar.
+      if (!total) {
+        return `<g>
+          <title>${escapeHtml(c.bu)} — Nothing due, Early: ${early}</title>
+          <text x="${cx}" y="${TPAD + CH - 4}" text-anchor="middle" font-size="6" font-weight="700" fill="${color}">0${earlyTag}</text>
+          <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="5.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
+        </g>`;
+      }
       const totalH = Math.max(Math.round(total / maxN * CH), 3);
       const scale  = totalH / total;
-      const done   = (c.attended || 0) + (c.earlyN || 0);
+      const done   = c.attended || 0;
       const doneH  = done > 0 ? Math.max(Math.round(done * scale), 2) : 0;
       const waitH  = Math.max(totalH - doneH, 0);
-      const color  = GICA_BU_COLORS[c.bu] || '#6b7280';
       const topY   = TPAD + CH - totalH;
       const doneY  = TPAD + CH - doneH;
       const waitY  = doneY - waitH;
       const clipId = `gica-dueweek-bar-clip-${c.bu}`;
       return `<g>
-        <title>${escapeHtml(c.bu)} — Attended: ${done}, Awaiting: ${c.overdue || 0} (Total ${total})</title>
+        <title>${escapeHtml(c.bu)} — Attended: ${done}, Awaiting: ${c.overdue || 0} (Due ${total})${early ? `, Early: ${early}` : ''}</title>
         <defs><clipPath id="${clipId}"><rect x="${x}" y="${topY}" width="${bw}" height="${totalH}" rx="3"></rect></clipPath></defs>
         <g clip-path="url(#${clipId})">
           ${waitH > 0 ? `<rect x="${x}" y="${waitY}" width="${bw}" height="${waitH}" fill="${color}" opacity="0.25"></rect>` : ''}
           ${doneH > 0 ? `<rect x="${x}" y="${doneY}" width="${bw}" height="${doneH}" fill="${color}"></rect>` : ''}
         </g>
-        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="6" font-weight="700" fill="${color}">${done}/${total}</text>
+        <text x="${cx}" y="${topY - 4}" text-anchor="middle" font-size="6" font-weight="700" fill="${color}">${done}/${total}${earlyTag}</text>
         <text x="${cx}" y="${TPAD + CH + LH - 2}" text-anchor="middle" font-size="5.5" style="fill:var(--text-muted);">${escapeHtml(c.bu)}</text>
       </g>`;
     }).join('');
@@ -8809,11 +8902,26 @@ function _mountGicaSchedule(html, vm) {
   if (cvs && typeof Chart !== 'undefined') {
     // Captured here because inside the tooltip callback `t` is shadowed by the bucket object.
     const _clickHint = t('gicaClickBuCohort');
+    // On-time bar carries TWO stacked labels: the green on-time count (pass+fail)
+    // and, above it, a blue "+N" early tag (people who tested here ahead of their
+    // due date — excluded from the count/Total, same blue as the Due-week card).
+    // The value hides itself (formatter → null) when the bar is early-only so just
+    // the "+N" shows.
     const _dlOntime = (showWhen) => ({
-      anchor: 'end', align: 'top',
-      font: { size: 10, weight: '600' }, color: '#15803d',
-      display: ctx => showWhen(vm.timeline[ctx.dataIndex]),
-      formatter: (v, ctx) => { const t = vm.timeline[ctx.dataIndex]; return t.onTimePassed + t.onTimeFailed; },
+      labels: {
+        value: {
+          anchor: 'end', align: 'top', offset: 2,
+          font: { size: 10, weight: '600' }, color: '#15803d',
+          display: ctx => showWhen(vm.timeline[ctx.dataIndex]),
+          formatter: (v, ctx) => { const b = vm.timeline[ctx.dataIndex]; const n = b.onTimePassed + b.onTimeFailed; return n > 0 ? n : null; },
+        },
+        early: {
+          anchor: 'end', align: 'top', offset: 13,
+          font: { size: 9, weight: '700' }, color: '#2563eb',
+          display: ctx => showWhen(vm.timeline[ctx.dataIndex]) && vm.timeline[ctx.dataIndex].earlyN > 0,
+          formatter: (v, ctx) => `+${vm.timeline[ctx.dataIndex].earlyN}`,
+        },
+      },
     });
     const _currentBucketHighlight = {
       id: 'gicaCurrentBucketHighlight',
@@ -8845,7 +8953,7 @@ function _mountGicaSchedule(html, vm) {
             label: t('gicaLegendOnTimePass'), stack: 'ontime',
             data: vm.timeline.map(t => t.onTimePassed),
             backgroundColor: '#16a34a', borderRadius: 4,
-            datalabels: _dlOntime(t => t.onTimeFailed === 0 && t.onTimePassed > 0),
+            datalabels: _dlOntime(t => t.onTimeFailed === 0 && (t.onTimePassed > 0 || t.earlyN > 0)),
           },
           {
             label: t('gicaLegendOnTimeFail'), stack: 'ontime',
@@ -8877,8 +8985,11 @@ function _mountGicaSchedule(html, vm) {
             callbacks: {
               title: ctx => vm.timeline[ctx[0].dataIndex].label,
               afterBody: ctx => {
-                const t = vm.timeline[ctx[0].dataIndex];
-                return [`รวมทั้งหมด: ${t.totalUnique} คน`, _clickHint];
+                const b = vm.timeline[ctx[0].dataIndex];
+                const lines = [`รวมทั้งหมด: ${b.totalUnique} คน`];
+                if (b.earlyN > 0) lines.push(`มาก่อนกำหนด (Early): +${b.earlyN} คน`);
+                lines.push(_clickHint);
+                return lines;
               },
             },
           },
@@ -10185,6 +10296,16 @@ function _gicaValidateResultForm() {
   const date = $('gica-result-date').value;
   if (meas === '' || insp === '' || !date) {
     errEl.textContent = t('gicaFormFillAll');
+    errEl.classList.remove('hidden');
+    return null;
+  }
+  // Range guard: scores are percentages 0–100. The input's min/max attrs aren't
+  // enforced on manual typing (no form submit), so check here — otherwise a typo
+  // like 850 or -5 sails through to the backend and skews every stored grade.
+  const mNum = Number(meas), iNum = Number(insp);
+  if (!Number.isFinite(mNum) || !Number.isFinite(iNum) ||
+      mNum < 0 || mNum > 100 || iNum < 0 || iNum > 100) {
+    errEl.textContent = t('gicaFormRange');
     errEl.classList.remove('hidden');
     return null;
   }

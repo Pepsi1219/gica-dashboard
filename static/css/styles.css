@@ -2366,6 +2366,12 @@ tbody tr:hover { filter: brightness(.97); }
 .mini-bar__bu--lg { min-width:32px; font-size:0.8rem; font-weight:700; }
 .mini-bar__track--lg { height:10px; }
 .mini-bar__count--lg { min-width:34px; }
+/* Due-this-week rows: fixed count column so the "N/M +K" label (variable width
+   because of the early "+K" tag) never eats into the track — every bar then ends
+   at the same x and the tracks read as one length. flex-shrink:0 keeps it from
+   collapsing when the label is short. text-align:left hugs the label to the end
+   of the (equal-length) bar instead of pushing it to the far right edge. */
+.mini-bar__count--due { width:80px; flex-shrink:0; text-align:left; }
 /* — GICA Schedule row-1 cards — header + body split for cross-card alignment — */
 .row1-card { display:flex; flex-direction:column; }
 .row1-head { min-height:10px; display:flex; flex-direction:column; }

@@ -15,7 +15,7 @@ New Operator Monitoring/
 ├── business_rules.py       # Logic คำนวณ training status (due date, remaining days, etc.)
 ├── graph_excel.py          # Wrappers สำหรับ Microsoft Graph API (CRUD Excel table)
 ├── kv_store.py             # L2 shared cache — REST wrapper สำหรับ Vercel KV / Upstash Redis
-├── supabase_client.py      # REST wrapper สำหรับ Supabase PostgREST (sb_select/insert/update/delete/auth_sign_in)
+├── supabase_client.py      # REST wrapper สำหรับ Supabase PostgREST (sb_select/insert/update/delete/rpc/auth_sign_in)
 ├── supabase_auth.py        # JWT verify (ES256/HS256 via JWKS), role cache, extract_bearer
 ├── requirements.txt        # Flask, PyJWT, cryptography, python-dotenv, requests
 ├── vercel.json             # Vercel deployment config
@@ -27,15 +27,16 @@ New Operator Monitoring/
 │   ├── 003_csa.sql                          # csa_employees (6 BU + bu column)
 │   ├── 004_gica.sql                         # gica_employees / gica_freq / gica_kpi
 │   ├── 005_gica_next_date_override.sql      # add next_date_override column for manual pin
-│   └── 006_profiles_bu.sql                  # add nullable profiles.bu (BU scope) — see BU-Scoped Users
+│   ├── 006_profiles_bu.sql                  # add nullable profiles.bu (BU scope) — see BU-Scoped Users
+│   └── 007_gica_atomic_tests.sql            # RPC gica_append_test/gica_delete_tests — atomic tests JSONB write
 ├── migrate_audit.py        # One-time migration: Audit_Monitoring.xlsx → Supabase (รันครั้งเดียว)
 ├── migrate_csa.py          # One-time migration: 6 CSA workbooks → Supabase (รันครั้งเดียว)
 ├── migrate_gica.py         # One-time migration: GICA.xlsx → Supabase (รันครั้งเดียว, done)
 ├── templates/
 │   └── index.html          # SPA หน้าเดียว — HTML ทั้งหมด (multi-tab)
 ├── static/
-│   ├── css/styles.css      # Styles ทั้งหมด (~3100+ บรรทัด)  [?v=218]
-│   └── js/app.js           # Frontend logic ทั้งหมด (~11200+ บรรทัด)  [?v=504]
+│   ├── css/styles.css      # Styles ทั้งหมด (~3100+ บรรทัด)  [?v=220]
+│   └── js/app.js           # Frontend logic ทั้งหมด (~11200+ บรรทัด)  [?v=511]
 └── docs/                   # เอกสาร guide สำหรับ CSA Manager
 ```
 
@@ -357,10 +358,11 @@ User กรอกค่าเดียว (raw)
 | GET | `/api/jumper-excel` | — | Jumper data จาก Excel (cached 5 นาที) |
 | GET | `/api/trainer-excel` | — | Trainer data จาก Excel (cached 5 นาที) |
 | GET | `/api/gica-excel` | — | GICA assessment data จาก **Supabase** (`gica_employees`/`gica_freq`/`gica_kpi`) |
-| POST | `/api/gica/<bu>/employees` | ✓ writable | เพิ่มพนักงาน GICA ใหม่ |
-| PATCH | `/api/gica/<bu>/employees/<empid>/result` | ✓ writable | เพิ่ม/แก้ผลสอบ GICA |
+| **GET** | **`/api/gica/backup`** | ✓ `gica_admin`/`admin` (full access, NULL bu เท่านั้น) | Return raw `gica_employees` ทั้ง table (JSON) — frontend ต่อยอดเป็น CSV + JSON download; BU-scoped user 403 |
+| POST | `/api/gica/<bu>/employees` | ✓ writable | เพิ่มพนักงาน GICA ใหม่ — validate `bu ∈ DEPARTMENTS` + `(dept,level,position)` triple ใน `gica_freq` (ถ้าระบุครบ) + `start_date` format |
+| PATCH | `/api/gica/<bu>/employees/<empid>/result` | ✓ writable | เพิ่มผลสอบ GICA — validate score 0–100 + date format; **เขียนผ่าน RPC `gica_append_test`** (atomic, row lock) `n` assign ฝั่ง DB |
 | **PATCH** | **`/api/gica/<bu>/employees/<empid>`** | ✓ `gica_admin`/`admin` | Update dept/level/position — validate `(dept, level, position)` triple ต้องมีอยู่ใน `gica_freq` (case-insensitive) ก่อนบันทึก ไม่งั้น 400 |
-| **DELETE** | **`/api/gica/<bu>/employees/<empid>/results`** | ✓ `gica_admin`/`admin` | ลบผลสอบ (ทั้งหมดหรือเลือก attempts) |
+| **DELETE** | **`/api/gica/<bu>/employees/<empid>/results`** | ✓ `gica_admin`/`admin` | ลบผลสอบ (ทั้งหมดหรือเลือก attempts) — **ผ่าน RPC `gica_delete_tests`** (atomic: filter + renumber + clear override) |
 | **DELETE** | **`/api/gica/<bu>/employees/<empid>`** | ✓ `gica_admin`/`admin` | ลบพนักงาน GICA |
 | GET | `/api/audit-excel` | — | Audit data จาก **Supabase** (cached in-process 60s) |
 | POST | `/api/audit/templates/forms` | ✓ writable | สร้าง Form ใหม่ หรือ version ใหม่ (ถ้า `Code` ตรงกัน) |
@@ -400,6 +402,15 @@ Supabase PostgreSQL (gica_employees / gica_freq / gica_kpi)
   → initGicaTab()                  — lazy-load ครั้งเดียว
   → renderGicaSummary() + charts + table
 ```
+
+### Write Path — Atomic tests JSONB (migration 007) ⚠️
+Add/Delete result **ไม่** อ่าน-แก้-เขียน (`sb_select → mutate → sb_update`) แล้ว — เป็น lost-update race ถ้ามี 2 คนเขียนพร้อมกัน ย้ายมาเป็น RPC ฝั่ง Postgres ที่ล็อกแถวด้วย `SELECT … FOR UPDATE`:
+- `sb_rpc('gica_append_test', {p_bu, p_empid, p_test, p_max})` — assign `n` = max(n)+1 ฝั่ง DB, enforce max, append, clear `next_date_override`; raise `not_found`/`max_reached` → map เป็น 404/400
+- `sb_rpc('gica_delete_tests', {p_bu, p_empid, p_attempts[], p_all})` — filter + renumber 1..k + clear override ในทรานแซคชันเดียว
+- **Validation**: score 0–100 (frontend `_gicaValidateResultForm` + backend), date format, `(dept,level,position)` triple ใน `gica_freq` (create + update), `bu ∈ DEPARTMENTS`
+
+### Backup (admin-only)
+ปุ่ม `💾 Backup` (`#gica-backup-btn`) ใน Employee List header — เห็นเฉพาะ `admin`/`gica_admin` ที่ full access (`!_currentUserBu`) → `GET /api/gica/backup` (gate 403 ถ้า BU-scoped) คืน raw `gica_employees` → `_gicaBackup()` ดาวน์โหลด **2 ไฟล์**: JSON (restore 1:1) + CSV flat 1-แถว/1-attempt (UTF-8 BOM, RFC-4180); helper `_gicaBackupCsv` / `_gicaDownloadFile`
 
 ### Config
 กำหนดใน `config.py`:
@@ -658,6 +669,9 @@ const attemptPassed = h.grade1 && h.grade2 && e.exp1 && e.exp2 &&
   (GICA_GRADE_RANK[h.grade1] || 0) >= (GICA_GRADE_RANK[e.exp1] || 0) &&
   (GICA_GRADE_RANK[h.grade2] || 0) >= (GICA_GRADE_RANK[e.exp2] || 0);
 ```
+
+#### Early assessment — แยกออกจาก Total/On-time ⚠️
+คนที่สอบ **ก่อนกำหนด** (test ตกใน bucket ที่เร็วกว่า bucket ที่นัดไว้: `schedIdx > actualIdx`) **ไม่นับ** ใน on-time/Total ของ bucket ที่สอบ — เก็บใน `timeline[i].earlyN` / `earlyEmps` แทน (ใช้ทุก bucket ไม่ใช่แค่สัปดาห์ปัจจุบัน) เพื่อให้ Total = ยอด "ต้องสอบจริง" ตรงกับการ์ด Due this week (เช่นสัปดาห์นี้ 233 ไม่ใช่ 271). คน early ยังโผล่เป็น `upcoming` ที่ bucket ตามนัดถัดไปผ่าน `scheduledNext` path. `totalUnique` คำนวณจาก union ของ pass/fail/overdue/upcoming emps เท่านั้น (earlyEmps แยก → ไม่ถูกนับ). กราฟโชว์ `+N` สีน้ำเงิน (`#2563eb`) เหนือแท่ง On-time ผ่าน multi-label datalabels (`_dlOntime` → `labels.value` เขียว + `labels.early` น้ำเงิน); การ์ด **Due this week** (front + back) ก็แยก early เป็น `+N` เหมือนกัน (`_computeGicaWeeklyBuCards.earlyN`, `dueWeekBarChart`, `combinedBuRows`)
 
 #### ฟังก์ชันหลัก (app.js)
 | ฟังก์ชัน | หน้าที่ |
@@ -985,6 +999,7 @@ python app.py
 -- 4. migrations/004_gica.sql
 -- 5. migrations/005_gica_next_date_override.sql
 -- 6. migrations/006_profiles_bu.sql
+-- 7. migrations/007_gica_atomic_tests.sql  (RPC — ต้องรันก่อน deploy โค้ดที่เรียก sb_rpc ไม่งั้น add/delete result 500)
 
 -- Grant service_role access (ถ้ายังไม่ได้ทำ):
 GRANT ALL ON public.profiles TO service_role;

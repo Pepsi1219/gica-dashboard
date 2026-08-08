@@ -103,6 +103,20 @@ def sb_delete(table, filters):
     return r.json()
 
 
+def sb_rpc(fn: str, params: dict | None = None):
+    """Call a Postgres function (RPC) via PostgREST. Returns the JSON body.
+    Used for operations that must be atomic server-side (e.g. read-modify-write
+    on a JSONB column) — PostgREST runs the function in a single transaction, so
+    a row-level lock inside it prevents concurrent writers from clobbering. On a
+    function RAISE, PostgREST returns 4xx with the message in the body; the
+    message text is surfaced in SupabaseError so callers can branch on it."""
+    url = f"{SUPABASE_URL}/rest/v1/rpc/{fn}"
+    r = _requests.post(url, headers=_headers(), json=(params or {}), timeout=15)
+    if not r.ok:
+        raise SupabaseError(f"sb_rpc({fn}): {r.status_code} {r.text[:300]}")
+    return r.json()
+
+
 def sb_auth_sign_in(email: str, password: str) -> dict:
     """Sign in via Supabase Auth (password flow).
     Returns {access_token, refresh_token, expires_in, ...} or raises SupabaseError."""

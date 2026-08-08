@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
-  <link rel="stylesheet" href="/static/css/styles.css?v=218" />
+  <link rel="stylesheet" href="/static/css/styles.css?v=220" />
   <!-- Export libraries (used by Overall Dashboard PNG/PDF buttons) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -648,6 +648,7 @@
               </div>
               <div style="display:flex;gap:8px;">
                 <button id="gica-create-operator-btn" class="hidden" data-i18n="gicaCreateOp" style="font-size:0.72rem;padding:4px 12px;background:#16a34a;color:#fff;border:none;border-radius:4px;cursor:pointer;">+ Create new operator</button>
+                <button id="gica-backup-btn" class="hidden" onclick="_gicaBackup();" data-i18n="gicaBackup" title="Download CSV + JSON snapshot of all GICA data" style="font-size:0.72rem;padding:4px 12px;background:#0f766e;color:#fff;border:none;border-radius:4px;cursor:pointer;">💾 Backup</button>
                 <button onclick="_gicaEmpListPrint();" data-i18n="gicaPrint" style="font-size:0.72rem;padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">🖨 Print</button>
               </div>
             </div>
@@ -1093,6 +1094,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js?v=504"></script>
+  <script src="/static/js/app.js?v=511"></script>
 </body>
 </html>

@@ -42,7 +42,7 @@ from graph_excel import (
     encode_sharing_url,
     graph_request,
 )
-from supabase_client import SupabaseError, sb_insert, sb_select, sb_update, sb_delete, sb_auth_sign_in
+from supabase_client import SupabaseError, sb_insert, sb_select, sb_update, sb_delete, sb_rpc, sb_auth_sign_in
 from supabase_auth import extract_bearer, get_user_bu, get_user_role, invalidate_role_cache, verify_jwt
 
 # ---------------------------------------------------------------------------
@@ -797,6 +797,20 @@ def _build_gica_freq_lookup(freq_rows: list) -> dict:
     return lookup
 
 
+def _gica_valid_triple(freq_rows: list, dept: str, level: str, position: str) -> bool:
+    """True if (dept, level, position) exists in gica_freq (case-insensitive) —
+    the same match the payload builder uses to resolve expectations. Shared by the
+    create + update employee routes so both refuse combinations that would orphan
+    an employee to blank exp1/exp2/freqMonths."""
+    d, l, p = dept.strip().lower(), level.strip().lower(), position.strip().lower()
+    return any(
+        str(r.get("department", "") or "").strip().lower() == d
+        and str(r.get("level", "") or "").strip().lower() == l
+        and str(r.get("role", "") or "").strip().lower() == p
+        for r in freq_rows
+    )
+
+
 def _fetch_gica_supabase_data() -> tuple:
     """Read all GICA data from Supabase in parallel.
     Returns (emp_rows, freq_rows, kpi_by_bu) matching the shape _build_gica_payload expects."""
@@ -1001,11 +1015,39 @@ def api_gica_excel():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route("/api/gica/backup")
+def api_gica_backup():
+    """Return the raw gica_employees table (every column, every BU) as JSON so an
+    admin can save a point-in-time snapshot. The frontend derives both a flat CSV
+    (one row per attempt, for audit/Excel) and a JSON file (lossless, for restore)
+    from this single response — the data here IS the source of truth, unprocessed."""
+    deny = require_writable(("gica_admin", "admin"))
+    if deny: return deny
+    # A full-table backup crosses every BU, so a BU-scoped gica_admin must not be
+    # able to pull other BUs' data — restrict to full-access accounts (NULL bu).
+    token_str = extract_bearer(request)
+    jwt_payload = verify_jwt(token_str) if token_str else None
+    if jwt_payload and get_user_bu(jwt_payload.get("sub", "")):
+        return jsonify({"error": "Forbidden — backup requires full (non-BU-scoped) access"}), 403
+    try:
+        rows = sb_select("gica_employees")
+        return jsonify({
+            "employees":    rows,
+            "count":        len(rows),
+            "generated_at": _datetime.utcnow().isoformat() + "Z",
+        })
+    except Exception as exc:
+        app.logger.error("[GICA] /api/gica/backup error: %s", exc)
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @app.route("/api/gica/<bu>/employees", methods=["POST"])
 def api_gica_create_employee(bu):
     deny = require_writable(("qe_edit", "gica_admin", "admin"))
     if deny: return deny
     bu      = str(bu or "").strip().upper()
+    if bu not in DEPARTMENTS:
+        return jsonify({"error": "Invalid BU"}), 400
     deny = require_bu_scope(bu)
     if deny: return deny
     payload = request.json or {}
@@ -1016,17 +1058,36 @@ def api_gica_create_employee(bu):
     if not name:
         return jsonify({"error": "Employee Name is required"}), 400
 
+    dept     = str(payload.get("deptname", "")).strip()
+    level    = str(payload.get("level", "")).strip()
+    position = str(payload.get("position", "")).strip()
+    start_date = str(payload.get("start_date", "")).strip()
+    if start_date and not _gica_parse_date(start_date):
+        return jsonify({"error": "start_date ต้องเป็น YYYY-MM-DD"}), 400
+
     record = {
         "bu":         bu,
         "empid":      empid,
         "name":       name,
-        "deptname":   str(payload.get("deptname", "")).strip() or None,
-        "level":      str(payload.get("level", "")).strip() or None,
-        "position":   str(payload.get("position", "")).strip() or None,
-        "start_date": str(payload.get("start_date", "")).strip() or None,
+        "deptname":   dept or None,
+        "level":      level or None,
+        "position":   position or None,
+        "start_date": start_date or None,
         "tests":      [],
     }
     try:
+        # Validate the (dept, level, position) triple against gica_freq — same
+        # guard as api_gica_update_employee, so a new hire can't be created into a
+        # combination with no freq entry (which would blank exp1/exp2/freqMonths
+        # and leave them stuck 'pending' forever). Only enforced when all three
+        # are supplied; a bare row (name only) stays allowed.
+        if dept or level or position:
+            if not (dept and level and position):
+                return jsonify({"error": "deptname, level, position ต้องระบุครบทั้ง 3 ค่า"}), 400
+            freq_rows = sb_select("gica_freq")
+            if not _gica_valid_triple(freq_rows, dept, level, position):
+                return jsonify({"error": f"({dept} / {level} / {position}) ไม่มีอยู่ใน gica_freq"}), 400
+
         existing = sb_select("gica_employees", filters={"bu": bu, "empid": empid})
         if existing:
             return jsonify({"error": f"Employee {empid} ใน BU {bu} มีอยู่แล้ว"}), 409
@@ -1050,40 +1111,48 @@ def api_gica_add_result(bu, empid):
         insp_pct = float(payload.get("inspectionResult"))
     except (TypeError, ValueError):
         return jsonify({"error": "Measurement/Inspection Result ต้องเป็นตัวเลข"}), 400
+    # Range guard: scores are percentages 0–100. Without this a typo (e.g. 850 or
+    # -5) flows straight into the grade calc and gets stored, permanently skewing
+    # every donut / quadrant / avg that reads it back.
+    if not (0 <= meas_pct <= 100) or not (0 <= insp_pct <= 100):
+        return jsonify({"error": "Measurement/Inspection Result ต้องอยู่ระหว่าง 0–100"}), 400
     assess_date = str(payload.get("assessmentDate", "")).strip()
     if not assess_date:
         return jsonify({"error": "Assessment Date is required"}), 400
+    if not _gica_parse_date(assess_date):
+        return jsonify({"error": "Assessment Date ต้องเป็น YYYY-MM-DD"}), 400
 
+    def _grade(score):
+        if score >= 0.85: return "A"
+        if score >= 0.65: return "B"
+        if score >= 0.50: return "C"
+        return "D"
+
+    meas = meas_pct / 100
+    insp = insp_pct / 100
+    # `n` is assigned atomically inside gica_append_test (max existing n + 1) — do
+    # NOT set it here. The RPC holds a row lock so concurrent add_result calls
+    # serialize; the old sb_select → append → sb_update path lost the second write.
+    test_obj = {
+        "result1": round(meas, 6),
+        "result2": round(insp, 6),
+        "grade1":  _grade(meas),
+        "grade2":  _grade(insp),
+        "date":    assess_date,
+    }
     try:
-        rows = sb_select("gica_employees", filters={"bu": bu, "empid": empid})
-        if not rows:
-            return jsonify({"error": "Employee not found"}), 404
-        row   = rows[0]
-        tests = list(row.get("tests") or [])
-        if len(tests) >= GICA_MAX_TESTS:
-            return jsonify({"error": f"{empid} ทำครบ {GICA_MAX_TESTS} ครั้งแล้ว"}), 400
-
-        def _grade(score):
-            if score >= 0.85: return "A"
-            if score >= 0.65: return "B"
-            if score >= 0.50: return "C"
-            return "D"
-
-        meas = meas_pct / 100
-        insp = insp_pct / 100
-        tests.append({
-            "n":       len(tests) + 1,
-            "result1": round(meas, 6),
-            "result2": round(insp, 6),
-            "grade1":  _grade(meas),
-            "grade2":  _grade(insp),
-            "date":    assess_date,
+        sb_rpc("gica_append_test", {
+            "p_bu": bu, "p_empid": empid, "p_test": test_obj, "p_max": GICA_MAX_TESTS,
         })
-        # Clear any manual next-date override — new attempt means the auto-computed
-        # next date (based on freq_months from the new prev_actual) takes over.
-        sb_update("gica_employees", {"bu": bu, "empid": empid},
-                  {"tests": tests, "next_date_override": None})
         return jsonify({"message": "Saved"})
+    except SupabaseError as exc:
+        msg = str(exc)
+        if "not_found" in msg:
+            return jsonify({"error": "Employee not found"}), 404
+        if "max_reached" in msg:
+            return jsonify({"error": f"{empid} ทำครบ {GICA_MAX_TESTS} ครั้งแล้ว"}), 400
+        app.logger.error("api_gica_add_result(%s/%s): %s", bu, empid, exc)
+        return jsonify({"error": "Internal server error"}), 500
     except Exception as exc:
         app.logger.error("api_gica_add_result(%s/%s): %s", bu, empid, exc)
         return jsonify({"error": "Internal server error"}), 500
@@ -1143,29 +1212,27 @@ def api_gica_delete_results(bu, empid):
     payload    = request.json or {}
     delete_all = bool(payload.get("all"))
     try:
-        attempts = {int(n) for n in (payload.get("attempts") or [])}
+        attempts = sorted({int(n) for n in (payload.get("attempts") or [])})
     except (TypeError, ValueError):
         return jsonify({"error": "attempts must be a list of numbers"}), 400
     if not delete_all and not attempts:
         return jsonify({"error": "Nothing to delete"}), 400
 
+    # Delete + renumber + clear next_date_override happen atomically inside
+    # gica_delete_tests (row-locked) — the old sb_select → mutate → sb_update path
+    # could lose a concurrent add_result, and left a stale next_date_override
+    # pinned after clearing every score.
     try:
-        rows = sb_select("gica_employees", filters={"bu": bu, "empid": empid})
-        if not rows:
+        remaining = sb_rpc("gica_delete_tests", {
+            "p_bu": bu, "p_empid": empid,
+            "p_attempts": attempts, "p_all": delete_all,
+        })
+        return jsonify({"message": "Deleted", "remaining": remaining})
+    except SupabaseError as exc:
+        if "not_found" in str(exc):
             return jsonify({"error": "Employee not found"}), 404
-        tests = list(rows[0].get("tests") or [])
-
-        kept = [] if delete_all else [t for t in tests if int(t.get("n", 0)) not in attempts]
-
-        # Renumber remaining attempts contiguously (1..k) in original order — the
-        # read-time scheduler keys the first attempt on n==1, so a gap would shift
-        # scheduling. Sort by the old n to preserve chronological attempt order.
-        kept.sort(key=lambda t: int(t.get("n", 0)))
-        for i, t in enumerate(kept, start=1):
-            t["n"] = i
-
-        sb_update("gica_employees", {"bu": bu, "empid": empid}, {"tests": kept})
-        return jsonify({"message": "Deleted", "remaining": len(kept)})
+        app.logger.error("api_gica_delete_results(%s/%s): %s", bu, empid, exc)
+        return jsonify({"error": "Internal server error"}), 500
     except Exception as exc:
         app.logger.error("api_gica_delete_results(%s/%s): %s", bu, empid, exc)
         return jsonify({"error": "Internal server error"}), 500
@@ -1200,13 +1267,7 @@ def api_gica_update_employee(bu, empid):
             return jsonify({"error": "Employee not found"}), 404
 
         freq_rows = sb_select("gica_freq")
-        valid = any(
-            str(r.get("department", "") or "").strip().lower() == dept.lower()
-            and str(r.get("level", "") or "").strip().lower() == level.lower()
-            and str(r.get("role", "") or "").strip().lower() == position.lower()
-            for r in freq_rows
-        )
-        if not valid:
+        if not _gica_valid_triple(freq_rows, dept, level, position):
             return jsonify({"error": f"({dept} / {level} / {position}) ไม่มีอยู่ใน gica_freq"}), 400
 
         sb_update("gica_employees", {"bu": bu, "empid": empid},
